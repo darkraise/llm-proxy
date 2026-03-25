@@ -184,7 +184,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
                   <input
                     id="edit-enabled"
                     type="checkbox"
-                    className="rounded border-border bg-surface"
+                    className="checkbox"
                     checked={form.enabled}
                     onChange={(e) => set('enabled', e.target.checked)}
                   />
@@ -465,7 +465,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                 <input
                   id="free-only"
                   type="checkbox"
-                  className="rounded border-border bg-surface"
+                  className="checkbox"
                   checked={freeOnly}
                   onChange={(e) => setFreeOnly(e.target.checked)}
                 />
@@ -569,7 +569,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                 <input
                   id="wizard-enabled"
                   type="checkbox"
-                  className="rounded border-border bg-surface"
+                  className="checkbox"
                   checked={enabled}
                   onChange={(e) => setEnabled(e.target.checked)}
                 />

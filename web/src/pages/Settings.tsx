@@ -199,7 +199,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
               <input
                 id="proxy-auth"
                 type="checkbox"
-                className="rounded border-border bg-surface"
+                className="checkbox"
                 checked={proxyAuth}
                 onChange={(e) => setProxyAuth(e.target.checked)}
               />
@@ -308,7 +308,7 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
             <input
               id="ollama-enabled"
               type="checkbox"
-              className="rounded border-border bg-surface"
+              className="checkbox"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />

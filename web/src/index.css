@@ -65,6 +65,21 @@
     @apply block text-xs font-medium text-text-secondary uppercase tracking-wide mb-1;
   }
 
+  .checkbox {
+    @apply appearance-none w-4 h-4 rounded border border-border bg-surface cursor-pointer
+      transition-colors shrink-0
+      checked:bg-accent checked:border-accent
+      focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-0;
+    background-image: none;
+  }
+
+  .checkbox:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2.5-2.5a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
