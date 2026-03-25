@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	llmproxy "github.com/darkraise/llm-proxy"
 	"github.com/darkraise/llm-proxy/internal/admin"
 	"github.com/darkraise/llm-proxy/internal/config"
 	cryptopkg "github.com/darkraise/llm-proxy/internal/crypto"
@@ -182,11 +184,50 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /admin/api/config/import", protected(s.admin.HandleConfigImport))
 	s.mux.Handle("GET /admin/api/config/export", protected(s.admin.HandleConfigExport))
 
-	// Admin UI (dev proxy or embedded SPA — Task 21)
+	// Admin UI: dev proxy or embedded SPA
 	if s.cfg.Dev && s.cfg.UIProxy != "" {
 		target, _ := url.Parse(s.cfg.UIProxy)
 		s.mux.Handle("/admin/", httputil.NewSingleHostReverseProxy(target))
+	} else {
+		subFS, err := fs.Sub(llmproxy.WebAssets, "web/dist")
+		if err != nil {
+			slog.Error("failed to sub web assets FS", "error", err)
+		} else {
+			fileServer := http.FileServer(http.FS(subFS))
+			s.mux.Handle("/admin/", http.StripPrefix("/admin", &spaHandler{
+				fileServer: fileServer,
+				root:       subFS,
+			}))
+		}
 	}
+}
+
+// spaHandler serves static files from the embedded FS, falling back to
+// index.html for any path that does not match a real file (SPA client routing).
+type spaHandler struct {
+	fileServer http.Handler
+	root       fs.FS
+}
+
+func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Check whether the requested path exists as a real file.
+	if _, err := h.root.Open(r.URL.Path); err == nil {
+		h.fileServer.ServeHTTP(w, r)
+		return
+	}
+	// Also try with a leading slash stripped (http.FS wraps with "." prefix).
+	clean := r.URL.Path
+	if len(clean) > 0 && clean[0] == '/' {
+		clean = clean[1:]
+	}
+	if _, err := h.root.Open(clean); err == nil {
+		h.fileServer.ServeHTTP(w, r)
+		return
+	}
+	// Fall back to index.html for SPA client-side routing.
+	r2 := r.Clone(r.Context())
+	r2.URL.Path = "/"
+	h.fileServer.ServeHTTP(w, r2)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
