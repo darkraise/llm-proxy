@@ -185,7 +185,7 @@ export function RateLimitTable({
       `}</style>
 
       <div className="overflow-auto" style={{ maxHeight: '400px' }}>
-        <table className="rlt-table w-full border-collapse">
+        <table className="rlt-table w-full border-collapse" style={{ tableLayout: 'fixed' }}>
           {/* Sticky header */}
           <thead>
             <tr>
@@ -197,6 +197,7 @@ export function RateLimitTable({
                   key={m.key}
                   title={m.label}
                   className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay text-center whitespace-nowrap"
+                  style={{ width: '80px' }}
                 >
                   {m.short}
                 </th>
