@@ -12,18 +12,28 @@ import (
 	"github.com/darkraise/llm-proxy/internal/adapter"
 	"github.com/darkraise/llm-proxy/internal/crypto"
 	"github.com/darkraise/llm-proxy/internal/provider"
+	"github.com/darkraise/llm-proxy/internal/ratelimit"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
 type LogFunc func(entry store.RequestLog)
 
+// RateLimitUpdate carries parsed rate limit definitions from a provider
+// response, keyed by provider type and the model used in the request.
+type RateLimitUpdate struct {
+	Provider string
+	Model    string
+	Defs     []store.RateLimitDef
+}
+
 type Handler struct {
-	pool       *provider.Pool
-	logFunc    LogFunc
-	client     *http.Client
-	maxRetries int
-	timeout    time.Duration
-	fallback   *FallbackConfig
+	pool          *provider.Pool
+	logFunc       LogFunc
+	client        *http.Client
+	maxRetries    int
+	timeout       time.Duration
+	fallback      *FallbackConfig
+	rateLimitChan chan RateLimitUpdate
 }
 
 type FallbackConfig struct {
@@ -41,6 +51,12 @@ func NewHandler(pool *provider.Pool, logFunc LogFunc) *Handler {
 		maxRetries: 3,
 		timeout:    15 * time.Second,
 	}
+}
+
+// SetRateLimitChan configures the channel used to deliver parsed rate limit
+// header updates to the server's background writer goroutine.
+func (h *Handler) SetRateLimitChan(ch chan RateLimitUpdate) {
+	h.rateLimitChan = ch
 }
 
 func (h *Handler) SetFallback(cfg FallbackConfig) {
@@ -156,12 +172,13 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 
 		var resp *adapter.ChatCompletionResponse
 		var statusCode int
+		var respHeaders http.Header
 
 		switch prov.Type {
 		case "google":
 			resp, statusCode, err = h.callGoogle(prov, req)
 		default:
-			resp, statusCode, err = h.callOpenAI(prov, req)
+			resp, statusCode, respHeaders, err = h.callOpenAI(prov, req)
 		}
 
 		latency := time.Since(t0)
@@ -196,6 +213,17 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 		h.pool.RecordSuccess(prov.Name, tokens)
 		logEntry.Status = "success"
 		logEntry.Model = resp.Model
+
+		// Parse rate limit capacity headers and forward to async writer.
+		if h.rateLimitChan != nil && respHeaders != nil {
+			if defs := ratelimit.ParseRateLimitHeaders(prov.Type, respHeaders, resp.Model); len(defs) > 0 {
+				select {
+				case h.rateLimitChan <- RateLimitUpdate{Provider: prov.Type, Model: resp.Model, Defs: defs}:
+				default:
+					slog.Warn("rate limit chan full, dropping header update")
+				}
+			}
+		}
 
 		slog.Info("request ok", "provider", prov.Name, "model", resp.Model, "latency", latency)
 		return resp, logEntry
@@ -237,37 +265,37 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 	return nil, logEntry
 }
 
-func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
+func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, http.Header, error) {
 	req.Model = firstModel(prov, req.Model)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	httpReq, err := http.NewRequest("POST", prov.BaseURL+"/chat/completions", bytes.NewReader(data))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
 
 	resp, err := h.client.Do(httpReq)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, resp.Header, err
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, resp.StatusCode, nil
+		return nil, resp.StatusCode, resp.Header, nil
 	}
 
 	parsed, err := adapter.ParseOpenAIResponse(body)
-	return &parsed, 200, err
+	return &parsed, 200, resp.Header, err
 }
 
 func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {

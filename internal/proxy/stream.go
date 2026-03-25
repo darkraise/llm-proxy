@@ -13,6 +13,7 @@ import (
 
 	"github.com/darkraise/llm-proxy/internal/adapter"
 	"github.com/darkraise/llm-proxy/internal/provider"
+	"github.com/darkraise/llm-proxy/internal/ratelimit"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
@@ -62,7 +63,19 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 			continue
 		}
 
-		// Connected — stream to client
+		// Connected — parse rate limit headers before consuming the body.
+		if h.rateLimitChan != nil {
+			model := firstModel(prov, req.Model)
+			if defs := ratelimit.ParseRateLimitHeaders(prov.Type, streamResp.Header, model); len(defs) > 0 {
+				select {
+				case h.rateLimitChan <- RateLimitUpdate{Provider: prov.Type, Model: model, Defs: defs}:
+				default:
+					slog.Warn("rate limit chan full, dropping header update")
+				}
+			}
+		}
+
+		// Stream to client
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")

@@ -31,15 +31,16 @@ type Config struct {
 }
 
 type Server struct {
-	cfg     Config
-	http    *http.Server
-	mux     *http.ServeMux
-	db      *store.DB
-	pool    *provider.Pool
-	proxy   *proxy.Handler
-	admin   *admin.AdminHandler
-	auth    *admin.Auth
-	logChan chan store.RequestLog
+	cfg           Config
+	http          *http.Server
+	mux           *http.ServeMux
+	db            *store.DB
+	pool          *provider.Pool
+	proxy         *proxy.Handler
+	admin         *admin.AdminHandler
+	auth          *admin.Auth
+	logChan       chan store.RequestLog
+	rateLimitChan chan proxy.RateLimitUpdate
 }
 
 func New(cfg Config) (*Server, error) {
@@ -112,6 +113,10 @@ func New(cfg Config) (*Server, error) {
 	proxyHandler := proxy.NewHandler(pool, logFunc)
 	adminHandler := admin.NewAdminHandler(db, auth, pool, encryptionKey)
 
+	// Async rate limit header writer
+	rateLimitChan := make(chan proxy.RateLimitUpdate, 500)
+	proxyHandler.SetRateLimitChan(rateLimitChan)
+
 	// Load fallback config from settings
 	fallbackEnabled, _ := db.GetSetting("fallback_enabled")
 	if fallbackEnabled == "true" {
@@ -130,14 +135,15 @@ func New(cfg Config) (*Server, error) {
 
 	mux := http.NewServeMux()
 	s := &Server{
-		cfg:     cfg,
-		mux:     mux,
-		db:      db,
-		pool:    pool,
-		proxy:   proxyHandler,
-		admin:   adminHandler,
-		auth:    auth,
-		logChan: logChan,
+		cfg:           cfg,
+		mux:           mux,
+		db:            db,
+		pool:          pool,
+		proxy:         proxyHandler,
+		admin:         adminHandler,
+		auth:          auth,
+		logChan:       logChan,
+		rateLimitChan: rateLimitChan,
 		http: &http.Server{
 			Addr:    fmt.Sprintf(":%d", cfg.Port),
 			Handler: mux,
@@ -184,9 +190,10 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /admin/api/config/import", protected(s.admin.HandleConfigImport))
 	s.mux.Handle("GET /admin/api/config/export", protected(s.admin.HandleConfigExport))
 
-	// Rate limit definitions — /defaults must be registered before /{provider}
-	// so the more-specific pattern wins.
+	// Rate limit definitions — more-specific sub-paths must be registered before
+	// /{provider} so the exact patterns win over the wildcard.
 	s.mux.Handle("GET /admin/api/ratelimits/{provider}/defaults", protected(s.admin.HandleGetDefaultLimits))
+	s.mux.Handle("POST /admin/api/ratelimits/{provider}/fetch-docs", protected(s.admin.HandleFetchProviderDocs))
 	s.mux.Handle("GET /admin/api/ratelimits/{provider}", protected(s.admin.HandleListRateLimitDefs))
 	s.mux.Handle("PUT /admin/api/ratelimits", protected(s.admin.HandleSetRateLimitDef))
 	s.mux.Handle("DELETE /admin/api/ratelimits/{id}", protected(s.admin.HandleDeleteRateLimitDef))
@@ -280,17 +287,18 @@ func (s *Server) Handler() http.Handler {
 	return s.mux
 }
 
-// StartBackgroundWorkers launches the async log writer and log pruner goroutines.
-// Called automatically by Start; exposed for tests that use httptest.NewServer.
+// StartBackgroundWorkers launches the async log writer, rate limit writer, and
+// log pruner goroutines. Called automatically by Start; exposed for tests that
+// use httptest.NewServer.
 func (s *Server) StartBackgroundWorkers() {
 	go s.logWriter()
+	go s.rateLimitWriter()
 	go s.logPruner()
 }
 
 func (s *Server) Start() error {
-	// Start async log writer
 	go s.logWriter()
-	// Start daily log pruner
+	go s.rateLimitWriter()
 	go s.logPruner()
 
 	slog.Info("server started",
@@ -303,6 +311,7 @@ func (s *Server) Start() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.logChan)
+	close(s.rateLimitChan)
 	s.db.Close()
 	return s.http.Shutdown(ctx)
 }
@@ -335,6 +344,24 @@ func (s *Server) logWriter() {
 		case <-ticker.C:
 			if len(batch) > 0 {
 				flush()
+			}
+		}
+	}
+}
+
+// rateLimitWriter drains the rateLimitChan and upserts each definition into
+// the database. It mirrors the logWriter pattern: async and non-blocking to
+// the proxy request path.
+func (s *Server) rateLimitWriter() {
+	for update := range s.rateLimitChan {
+		for _, def := range update.Defs {
+			if err := s.db.SetRateLimitDef(def); err != nil {
+				slog.Error("rate limit upsert failed",
+					"provider", def.Provider,
+					"model", def.Model,
+					"metric", def.Metric,
+					"error", err,
+				)
 			}
 		}
 	}
