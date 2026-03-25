@@ -107,7 +107,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-          <h2 className="text-base font-semibold text-text-primary">Edit Account</h2>
+          <h2 className="text-sm font-semibold text-text-primary">Edit Account</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z" />
@@ -368,7 +368,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
-            <h2 className="text-base font-semibold text-text-primary">Add Account</h2>
+            <h2 className="text-sm font-semibold text-text-primary">Add Account</h2>
             <p className="text-xs text-text-muted mt-0.5">
               Step {step} of 3 — {step === 1 ? 'Credentials' : step === 2 ? 'Discover Models' : 'Rate Limits & Confirm'}
             </p>
@@ -646,7 +646,7 @@ function ModelsAccordion({ models, defaultModel }: { models: string[]; defaultMo
           {models.map((m) => (
             <span
               key={m}
-              className={`badge-accent font-mono text-[10px] ${defaultModel === m ? 'ring-1 ring-accent' : ''}`}
+              className={`badge-accent font-mono text-xs ${defaultModel === m ? 'ring-1 ring-accent' : ''}`}
               title={defaultModel === m ? 'Default model' : undefined}
             >
               {m}
@@ -835,9 +835,9 @@ export default function Accounts() {
                   {/* Header: name + badges + icon actions */}
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm font-semibold text-text-primary truncate">{p.name}</span>
-                    <span className="badge-neutral text-[10px] flex-shrink-0">{p.type}</span>
-                    {!p.enabled && <span className="badge-warning text-[10px] flex-shrink-0">disabled</span>}
-                    {rateLimited && <span className="badge-warning text-[10px] flex-shrink-0">rate limited</span>}
+                    <span className="badge-neutral text-xs flex-shrink-0">{p.type}</span>
+                    {!p.enabled && <span className="badge-warning text-xs flex-shrink-0">disabled</span>}
+                    {rateLimited && <span className="badge-warning text-xs flex-shrink-0">rate limited</span>}
                     <span className="flex-1" />
                     <div className="flex gap-0.5 flex-shrink-0">
                       <button
@@ -887,22 +887,22 @@ export default function Accounts() {
                   {/* Stats bar */}
                   <div className="flex gap-3 px-2.5 py-1.5 bg-surface/50 rounded-md mb-2 text-center">
                     <div className="flex-1">
-                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Requests</div>
+                      <div className="text-xs text-text-muted uppercase tracking-wide">Requests</div>
                       <div className="text-sm font-bold text-text-primary">{formatCompact(p.total_requests)}</div>
                     </div>
                     <div className="w-px bg-border" />
                     <div className="flex-1">
-                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Tokens</div>
+                      <div className="text-xs text-text-muted uppercase tracking-wide">Tokens</div>
                       <div className="text-sm font-bold text-text-primary">{formatCompact(p.total_tokens)}</div>
                     </div>
                     <div className="w-px bg-border" />
                     <div className="flex-1">
-                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Default</div>
-                      <div className="text-[10px] font-mono text-accent truncate">{p.default_model || '—'}</div>
+                      <div className="text-xs text-text-muted uppercase tracking-wide">Default</div>
+                      <div className="text-xs font-mono text-accent truncate">{p.default_model || '—'}</div>
                     </div>
                     <div className="w-px bg-border" />
                     <div className="flex-shrink-0 w-10">
-                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Pri</div>
+                      <div className="text-xs text-text-muted uppercase tracking-wide">Pri</div>
                       <div className="text-sm font-bold text-text-primary">{p.priority}</div>
                     </div>
                   </div>

@@ -37,7 +37,7 @@ export default function Login() {
             </svg>
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-text-primary">LLM Proxy</h1>
+            <h1 className="text-xl font-semibold text-text-primary">LLM Proxy</h1>
             <p className="text-xs text-text-muted">Admin Dashboard</p>
           </div>
         </div>
