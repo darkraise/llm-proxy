@@ -189,7 +189,7 @@ export function RateLimitTable({
           {/* Sticky header */}
           <thead>
             <tr>
-              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay w-40">
+              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay" style={{ width: '180px', maxWidth: '180px' }}>
                 Model
               </th>
               {METRIC_DEFS.map((m) => (
@@ -214,7 +214,7 @@ export function RateLimitTable({
                   className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
                 >
                   {/* Model name cell */}
-                  <td className="px-3 py-2 border-b border-border font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[12rem]">
+                  <td className="px-3 py-2 border-b border-border font-mono text-text-primary overflow-hidden" style={{ maxWidth: '180px' }}>
                     {isDefault ? (
                       <span className="text-text-secondary italic">{defaultRowLabel}</span>
                     ) : (
