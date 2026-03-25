@@ -1,0 +1,428 @@
+package admin
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/darkraise/llm-proxy/internal/config"
+	"github.com/darkraise/llm-proxy/internal/crypto"
+	"github.com/darkraise/llm-proxy/internal/provider"
+	"github.com/darkraise/llm-proxy/internal/store"
+)
+
+type AdminHandler struct {
+	db            *store.DB
+	auth          *Auth
+	pool          *provider.Pool
+	encryptionKey []byte
+}
+
+func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKey []byte) *AdminHandler {
+	return &AdminHandler{db: db, auth: auth, pool: pool, encryptionKey: encryptionKey}
+}
+
+type providerRequest struct {
+	Name     string               `json:"name"`
+	Type     string               `json:"type"`
+	BaseURL  string               `json:"base_url"`
+	APIKey   string               `json:"api_key"`
+	Models   []string             `json:"models"`
+	Priority int                  `json:"priority"`
+	Enabled  *bool                `json:"enabled"`
+	Limits   []store.ProviderLimit `json:"limits"`
+}
+
+func (h *AdminHandler) HandleListProviders(w http.ResponseWriter, r *http.Request) {
+	providers, err := h.db.ListProviders()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Enrich with live rate limit status
+	status := h.pool.Status()
+	type enriched struct {
+		store.Provider
+		Status *provider.ProviderStatus `json:"status,omitempty"`
+	}
+
+	result := make([]enriched, len(providers))
+	for i, p := range providers {
+		p.APIKey = nil // never expose encrypted key
+		result[i] = enriched{Provider: p}
+		if s, ok := status[p.Name]; ok {
+			result[i].Status = &s
+		}
+	}
+
+	writeJSON(w, 200, result)
+}
+
+func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Request) {
+	var req providerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	modelsJSON, _ := json.Marshal(req.Models)
+	apiKeyEnc := []byte(req.APIKey) // encrypt when encryption key is available
+	if h.encryptionKey != nil {
+		enc, err := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "encryption failed"})
+			return
+		}
+		apiKeyEnc = enc
+	}
+
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
+	p := store.Provider{
+		Name:     req.Name,
+		Type:     req.Type,
+		BaseURL:  req.BaseURL,
+		APIKey:   apiKeyEnc,
+		Models:   string(modelsJSON),
+		Priority: req.Priority,
+		Enabled:  enabled,
+		Limits:   req.Limits,
+	}
+
+	id, err := h.db.CreateProvider(p)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.reloadPool()
+
+	writeJSON(w, 201, map[string]any{"id": id, "name": req.Name})
+}
+
+func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var req providerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	modelsJSON, _ := json.Marshal(req.Models)
+	apiKeyEnc := []byte(req.APIKey)
+	if h.encryptionKey != nil {
+		enc, _ := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
+		apiKeyEnc = enc
+	}
+
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
+	p := store.Provider{
+		Name:     req.Name,
+		Type:     req.Type,
+		BaseURL:  req.BaseURL,
+		APIKey:   apiKeyEnc,
+		Models:   string(modelsJSON),
+		Priority: req.Priority,
+		Enabled:  enabled,
+		Limits:   req.Limits,
+	}
+
+	if err := h.db.UpdateProvider(id, p); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.reloadPool()
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
+func (h *AdminHandler) HandleDeleteProvider(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+
+	if err := h.db.DeleteProvider(id); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.reloadPool()
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
+func (h *AdminHandler) HandleTestProvider(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+
+	p, err := h.db.GetProvider(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "provider not found"})
+		return
+	}
+
+	// Send a minimal chat completion request to test connectivity
+	client := &http.Client{Timeout: 10 * time.Second}
+	testBody := []byte(`{"model":"` + adminFirstModel(p.Models) + `","messages":[{"role":"user","content":"Hi"}],"max_tokens":1}`)
+
+	var testURL string
+	var testReq *http.Request
+
+	switch p.Type {
+	case "google":
+		model := adminFirstModel(p.Models)
+		apiKey := string(p.APIKey) // TODO: decrypt when encryption is active
+		testURL = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+		googleBody := []byte(`{"contents":[{"role":"user","parts":[{"text":"Hi"}]}],"generationConfig":{"maxOutputTokens":1}}`)
+		testReq, _ = http.NewRequest("POST", testURL, bytes.NewReader(googleBody))
+	default:
+		testURL = p.BaseURL + "/chat/completions"
+		testReq, _ = http.NewRequest("POST", testURL, bytes.NewReader(testBody))
+		testReq.Header.Set("Authorization", "Bearer "+string(p.APIKey))
+	}
+	testReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(testReq)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"success": false, "error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		errMsg := string(body)
+		if len(errMsg) > 500 {
+			errMsg = errMsg[:500]
+		}
+		writeJSON(w, 200, map[string]any{"success": false, "status_code": resp.StatusCode, "error": errMsg})
+		return
+	}
+
+	writeJSON(w, 200, map[string]any{"success": true, "status_code": resp.StatusCode})
+}
+
+func adminFirstModel(modelsJSON string) string {
+	var models []string
+	json.Unmarshal([]byte(modelsJSON), &models)
+	if len(models) > 0 {
+		return models[0]
+	}
+	return "test"
+}
+
+func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	stats, err := h.db.GetOverviewStats(startOfDay, now)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Add provider count
+	status := h.pool.Status()
+	active := 0
+	for _, s := range status {
+		if s.Available {
+			active++
+		}
+	}
+
+	writeJSON(w, 200, map[string]any{
+		"total_requests":   stats.TotalRequests,
+		"success_count":    stats.SuccessCount,
+		"error_count":      stats.ErrorCount,
+		"avg_latency_ms":   stats.AvgLatencyMs,
+		"total_tokens":     stats.TotalTokens,
+		"active_providers": active,
+		"total_providers":  len(status),
+	})
+}
+
+func (h *AdminHandler) HandleStatsRequests(w http.ResponseWriter, r *http.Request) {
+	filter := store.RequestLogFilter{
+		ProviderName: r.URL.Query().Get("provider"),
+		Status:       r.URL.Query().Get("status"),
+		Model:        r.URL.Query().Get("model"),
+		Limit:        50,
+	}
+
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {
+		filter.Limit = l
+	}
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		filter.Offset = o
+	}
+
+	logs, total, err := h.db.QueryRequestLogs(filter)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, 200, map[string]any{"data": logs, "total": total})
+}
+
+func (h *AdminHandler) HandleStatsProviders(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	stats, err := h.db.GetProviderStats(startOfDay, now)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, 200, stats)
+}
+
+func (h *AdminHandler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
+	all, err := h.db.GetAllSettings()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Filter out sensitive keys
+	safe := make(map[string]string)
+	for k, v := range all {
+		switch k {
+		case "admin_password_hash", "encryption_key_salt":
+			continue
+		default:
+			safe[k] = v
+		}
+	}
+	writeJSON(w, 200, safe)
+}
+
+func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var settings map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	for k, v := range settings {
+		// Block sensitive keys from being set via this endpoint
+		switch k {
+		case "admin_password_hash", "encryption_key_salt":
+			continue
+		}
+		if err := h.db.SetSetting(k, v); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
+func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	cfg, err := config.ParseYAML(body)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err.Error()})
+		return
+	}
+
+	imported := 0
+	for _, p := range cfg.ToProviders() {
+		apiKeyEnc := p.APIKey
+		if h.encryptionKey != nil {
+			enc, err := crypto.Encrypt(h.encryptionKey, p.APIKey)
+			if err == nil {
+				apiKeyEnc = enc
+			}
+		}
+		p.APIKey = apiKeyEnc
+		if _, err := h.db.CreateProvider(p); err != nil {
+			slog.Warn("import provider failed", "name", p.Name, "error", err)
+		} else {
+			imported++
+		}
+	}
+
+	// Import proxy settings
+	if cfg.Proxy.RequestTimeout > 0 {
+		h.db.SetSetting("request_timeout", fmt.Sprintf("%d", cfg.Proxy.RequestTimeout))
+	}
+	if cfg.Proxy.MaxRetries > 0 {
+		h.db.SetSetting("max_retries", fmt.Sprintf("%d", cfg.Proxy.MaxRetries))
+	}
+
+	h.reloadPool()
+	writeJSON(w, 200, map[string]any{"imported": imported})
+}
+
+func (h *AdminHandler) HandleConfigExport(w http.ResponseWriter, r *http.Request) {
+	providers, err := h.db.ListProviders()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Decrypt API keys for export
+	for i := range providers {
+		if h.encryptionKey != nil {
+			if plain, err := crypto.Decrypt(h.encryptionKey, providers[i].APIKey); err == nil {
+				providers[i].APIKey = plain
+			}
+		}
+	}
+
+	settings, _ := h.db.GetAllSettings()
+	data, err := config.ExportYAML(providers, settings)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-yaml")
+	w.Header().Set("Content-Disposition", "attachment; filename=llm-proxy-config.yml")
+	w.Write(data)
+}
+
+func (h *AdminHandler) reloadPool() {
+	providers, err := h.db.ListProviders()
+	if err != nil {
+		slog.Error("failed to reload providers", "error", err)
+		return
+	}
+	h.pool.Reload(providers)
+}
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(v)
+}
