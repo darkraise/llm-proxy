@@ -109,7 +109,7 @@ export function RateLimitTable({
         .rlt-input { -moz-appearance: textfield; }
       `}</style>
 
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full border-collapse">
         {/* Header */}
         <thead>
           <tr className="bg-surface-overlay">
@@ -137,7 +137,7 @@ export function RateLimitTable({
                 className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
               >
                 {/* Model name cell */}
-                <td className="px-3 py-1.5 border-b border-border text-xs font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[10rem]">
+                <td className="px-3 py-2 border-b border-border text-sm font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[12rem]">
                   {isDefault ? (
                     <span className="text-text-secondary italic">{defaultRowLabel}</span>
                   ) : (
@@ -153,14 +153,14 @@ export function RateLimitTable({
                   const placeholder = defaultVal !== null ? String(defaultVal) : '—'
 
                   return (
-                    <td key={m.key} className="px-1 py-1 border-b border-border">
+                    <td key={m.key} className="px-1 py-1.5 border-b border-border">
                       <input
                         type="number"
                         min={1}
                         className={[
                           'rlt-input',
-                          'w-full bg-transparent border border-transparent rounded px-1.5 py-0.5',
-                          'text-center text-xs focus:outline-none focus:border-accent focus:bg-surface',
+                          'w-full bg-transparent border border-transparent rounded px-2 py-1',
+                          'text-center text-sm focus:outline-none focus:border-accent focus:bg-surface',
                           'transition-colors placeholder-text-muted',
                           isOverride ? 'text-warning' : 'text-text-primary',
                         ].join(' ')}
