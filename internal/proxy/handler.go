@@ -6,9 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/darkraise/llm-proxy/internal/adapter"
+	"github.com/darkraise/llm-proxy/internal/crypto"
 	"github.com/darkraise/llm-proxy/internal/provider"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
@@ -320,5 +322,38 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 			"type":    "server_error",
 		},
 	})
+}
+
+// ProxyAuthMiddleware returns middleware that checks for Bearer token on proxy endpoints when enabled.
+func ProxyAuthMiddleware(db *store.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			enabled, _ := db.GetSetting("proxy_auth_enabled")
+			if enabled != "true" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			expectedHash, _ := db.GetSetting("proxy_api_key_hash")
+			if expectedHash == "" {
+				next.ServeHTTP(w, r) // no key configured, allow through
+				return
+			}
+
+			auth := r.Header.Get("Authorization")
+			if !strings.HasPrefix(auth, "Bearer ") {
+				writeError(w, 401, "missing API key")
+				return
+			}
+			token := strings.TrimPrefix(auth, "Bearer ")
+
+			if !crypto.VerifyPassword(expectedHash, token) {
+				writeError(w, 401, "invalid API key")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
