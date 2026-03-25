@@ -3,6 +3,16 @@ import { api, Provider, ProviderInput, ProviderLimit, TestResult } from '../lib/
 
 const PROVIDER_TYPES = ['openai', 'anthropic', 'google', 'ollama', 'openai-compatible']
 
+const PROVIDER_NAME_PRESETS: Record<string, { type: string; base_url: string }> = {
+  groq: { type: 'openai', base_url: 'https://api.groq.com/openai/v1' },
+  openrouter: { type: 'openai', base_url: 'https://openrouter.ai/api/v1' },
+  cerebras: { type: 'openai', base_url: 'https://api.cerebras.ai/v1' },
+  mistral: { type: 'openai', base_url: 'https://api.mistral.ai/v1' },
+  github: { type: 'openai', base_url: 'https://models.inference.ai.azure.com' },
+  google: { type: 'google', base_url: '' },
+  ollama: { type: 'openai', base_url: 'http://localhost:11434/v1' },
+}
+
 const DEFAULT_INPUT: ProviderInput = {
   name: '',
   type: 'openai',
@@ -64,7 +74,24 @@ function ProviderModal({ initial, onClose, onSave }: ProviderModalProps) {
   const [error, setError] = useState('')
 
   function set<K extends keyof ProviderInput>(k: K, v: ProviderInput[K]) {
-    setForm((f) => ({ ...f, [k]: v }))
+    setForm((f) => {
+      const next = { ...f, [k]: v }
+
+      // Auto-populate type + base_url when name matches a known provider (only for new providers)
+      if (k === 'name' && !initial) {
+        const normalized = (v as string).toLowerCase().replace(/[-_\s]*\d+$/, '').trim()
+        const preset = PROVIDER_NAME_PRESETS[normalized]
+        if (preset) {
+          const allDefaults = Object.values(PROVIDER_NAME_PRESETS).map((p) => p.base_url)
+          if (!next.base_url || allDefaults.includes(next.base_url)) {
+            next.base_url = preset.base_url
+          }
+          next.type = preset.type
+        }
+      }
+
+      return next
+    })
   }
 
   function addLimit() {
@@ -132,7 +159,7 @@ function ProviderModal({ initial, onClose, onSave }: ProviderModalProps) {
               className="input"
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
-              placeholder="my-openai"
+              placeholder="groq, google-1, cerebras..."
               required
             />
           </div>
