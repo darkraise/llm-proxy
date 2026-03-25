@@ -161,7 +161,7 @@ export function RateLimitTable({
                           min={1}
                           className={[
                             'rlt-input',
-                            'w-full bg-transparent border border-transparent rounded px-2 py-1',
+                            'w-full bg-transparent border border-border/40 rounded px-2 py-1',
                             'text-center text-sm focus:outline-none focus:border-accent focus:bg-surface',
                             'transition-colors placeholder-text-muted',
                             isOverride ? 'text-warning' : 'text-text-primary',
