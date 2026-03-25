@@ -98,6 +98,15 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
+	// Decrypt API keys before passing to pool
+	for i := range accounts {
+		if encryptionKey != nil {
+			if plain, err := cryptopkg.Decrypt(encryptionKey, accounts[i].APIKey); err == nil {
+				accounts[i].APIKey = plain
+			}
+		}
+	}
+
 	pool := provider.NewPool(accounts)
 
 	// Async request logger

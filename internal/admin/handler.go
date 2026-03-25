@@ -440,6 +440,14 @@ func (h *AdminHandler) reloadPool() {
 		slog.Error("failed to reload accounts", "error", err)
 		return
 	}
+	// Decrypt API keys before reloading the pool
+	for i := range accounts {
+		if h.encryptionKey != nil {
+			if plain, err := crypto.Decrypt(h.encryptionKey, accounts[i].APIKey); err == nil {
+				accounts[i].APIKey = plain
+			}
+		}
+	}
 	h.pool.Reload(accounts)
 }
 
