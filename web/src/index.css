@@ -11,6 +11,7 @@
 
   body {
     @apply bg-surface text-text-primary font-sans antialiased;
+    color-scheme: dark;
   }
 
   * {
