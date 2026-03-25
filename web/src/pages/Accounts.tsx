@@ -684,7 +684,7 @@ function RateLimitPopover({ limits, models }: { limits: AccountLimit[]; models: 
         Rate Limits ({limits.length})
       </button>
       {open && (
-        <div className="absolute z-50 left-0 top-full mt-1 w-max max-w-[600px] shadow-lg rounded-lg border border-border bg-surface-raised">
+        <div className="absolute z-50 left-0 top-full mt-1 w-max shadow-lg rounded-lg border border-border bg-surface-raised">
           <RateLimitTable
             models={models}
             limits={limits}
