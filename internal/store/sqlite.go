@@ -28,6 +28,18 @@ func NewDB(path string) (*DB, error) {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
+	// modernc.org/sqlite ignores DSN pragma parameters; set them explicitly.
+	for _, pragma := range []string{
+		"PRAGMA journal_mode = WAL",
+		"PRAGMA busy_timeout = 5000",
+		"PRAGMA foreign_keys = ON",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
+		}
+	}
+
 	d := &DB{db}
 	if err := d.migrate(); err != nil {
 		db.Close()
