@@ -18,7 +18,7 @@ fallback:
   model: llama3.1:8b
   timeout: 30
 
-providers:
+accounts:
   - name: groq
     type: groq
     base_url: https://api.groq.com/openai/v1
@@ -51,22 +51,22 @@ providers:
 	if !cfg.Fallback.Enabled {
 		t.Error("fallback should be enabled")
 	}
-	if len(cfg.Providers) != 2 {
-		t.Fatalf("providers: %d", len(cfg.Providers))
+	if len(cfg.Accounts) != 2 {
+		t.Fatalf("accounts: %d", len(cfg.Accounts))
 	}
-	if cfg.Providers[0].Name != "groq" {
-		t.Errorf("first provider: %s", cfg.Providers[0].Name)
+	if cfg.Accounts[0].Name != "groq" {
+		t.Errorf("first account: %s", cfg.Accounts[0].Name)
 	}
-	if len(cfg.Providers[0].Limits) != 2 {
-		t.Errorf("groq limits: %d", len(cfg.Providers[0].Limits))
+	if len(cfg.Accounts[0].Limits) != 2 {
+		t.Errorf("groq limits: %d", len(cfg.Accounts[0].Limits))
 	}
 }
 
 func TestExportYAML(t *testing.T) {
-	providers := []store.Provider{
+	accounts := []store.Account{
 		{Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("gsk_test"),
 			Models: `["llama-3.3-70b"]`, Enabled: true,
-			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 	}
 	settings := map[string]string{
 		"request_timeout":  "15",
@@ -77,7 +77,7 @@ func TestExportYAML(t *testing.T) {
 		"fallback_timeout": "30",
 	}
 
-	data, err := ExportYAML(providers, settings)
+	data, err := ExportYAML(accounts, settings)
 	if err != nil {
 		t.Fatalf("ExportYAML: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestExportYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-parse: %v", err)
 	}
-	if len(cfg.Providers) != 1 {
-		t.Errorf("providers: %d", len(cfg.Providers))
+	if len(cfg.Accounts) != 1 {
+		t.Errorf("accounts: %d", len(cfg.Accounts))
 	}
 }

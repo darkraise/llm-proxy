@@ -9,9 +9,9 @@ import (
 )
 
 type Config struct {
-	Proxy     ProxyConfig    `yaml:"proxy"`
-	Fallback  FallbackConfig `yaml:"fallback"`
-	Providers []ProviderYAML `yaml:"providers"`
+	Proxy    ProxyConfig    `yaml:"proxy"`
+	Fallback FallbackConfig `yaml:"fallback"`
+	Accounts []AccountYAML  `yaml:"accounts"`
 }
 
 type ProxyConfig struct {
@@ -26,7 +26,7 @@ type FallbackConfig struct {
 	Timeout int    `yaml:"timeout"`
 }
 
-type ProviderYAML struct {
+type AccountYAML struct {
 	Name    string      `yaml:"name"`
 	Type    string      `yaml:"type"`
 	BaseURL string      `yaml:"base_url,omitempty"`
@@ -49,18 +49,18 @@ func ParseYAML(data []byte) (*Config, error) {
 	return &cfg, nil
 }
 
-func (c *Config) ToProviders() []store.Provider {
-	providers := make([]store.Provider, len(c.Providers))
-	for i, p := range c.Providers {
+func (c *Config) ToAccounts() []store.Account {
+	accounts := make([]store.Account, len(c.Accounts))
+	for i, p := range c.Accounts {
 		modelsJSON, _ := json.Marshal(p.Models)
-		var limits []store.ProviderLimit
+		var limits []store.AccountLimit
 		for _, l := range p.Limits {
 			windowSecs := metricToWindow(l.Metric)
-			limits = append(limits, store.ProviderLimit{
+			limits = append(limits, store.AccountLimit{
 				Metric: l.Metric, MaxValue: l.MaxValue, WindowSecs: windowSecs,
 			})
 		}
-		providers[i] = store.Provider{
+		accounts[i] = store.Account{
 			Name:    p.Name,
 			Type:    p.Type,
 			BaseURL: p.BaseURL,
@@ -70,10 +70,10 @@ func (c *Config) ToProviders() []store.Provider {
 			Limits:  limits,
 		}
 	}
-	return providers
+	return accounts
 }
 
-func ExportYAML(providers []store.Provider, settings map[string]string) ([]byte, error) {
+func ExportYAML(accounts []store.Account, settings map[string]string) ([]byte, error) {
 	cfg := Config{
 		Proxy: ProxyConfig{
 			RequestTimeout: atoi(settings["request_timeout"], 15),
@@ -87,7 +87,7 @@ func ExportYAML(providers []store.Provider, settings map[string]string) ([]byte,
 		},
 	}
 
-	for _, p := range providers {
+	for _, p := range accounts {
 		var models []string
 		json.Unmarshal([]byte(p.Models), &models)
 
@@ -96,7 +96,7 @@ func ExportYAML(providers []store.Provider, settings map[string]string) ([]byte,
 			limits = append(limits, LimitYAML{Metric: l.Metric, MaxValue: l.MaxValue})
 		}
 
-		cfg.Providers = append(cfg.Providers, ProviderYAML{
+		cfg.Accounts = append(cfg.Accounts, AccountYAML{
 			Name:    p.Name,
 			Type:    p.Type,
 			BaseURL: p.BaseURL,
@@ -116,6 +116,8 @@ func metricToWindow(metric string) int {
 		return 60
 	case "rpd", "tpd":
 		return 86400
+	case "rpmo", "tpmo":
+		return 2592000
 	case "rps":
 		return 1
 	default:

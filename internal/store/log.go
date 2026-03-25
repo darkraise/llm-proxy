@@ -16,8 +16,8 @@ func sqliteTime(t time.Time) string {
 type RequestLog struct {
 	ID               int64     `json:"id"`
 	Timestamp        time.Time `json:"timestamp"`
-	ProviderID       *int64    `json:"provider_id,omitempty"`
-	ProviderName     string    `json:"provider_name"`
+	AccountID        *int64    `json:"account_id,omitempty"`
+	AccountName      string    `json:"account_name"`
 	Model            string    `json:"model"`
 	Endpoint         string    `json:"endpoint"`
 	Status           string    `json:"status"`
@@ -29,13 +29,13 @@ type RequestLog struct {
 }
 
 type RequestLogFilter struct {
-	ProviderName string
-	Status       string
-	Model        string
-	From         *time.Time
-	To           *time.Time
-	Limit        int
-	Offset       int
+	AccountName string
+	Status      string
+	Model       string
+	From        *time.Time
+	To          *time.Time
+	Limit       int
+	Offset      int
 }
 
 type OverviewStats struct {
@@ -49,9 +49,9 @@ type OverviewStats struct {
 
 func (d *DB) InsertRequestLog(l RequestLog) error {
 	_, err := d.Exec(
-		`INSERT INTO request_logs (provider_id, provider_name, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message)
+		`INSERT INTO request_logs (account_id, account_name, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		l.ProviderID, l.ProviderName, l.Model, l.Endpoint, l.Status, l.LatencyMs, l.PromptTokens, l.CompletionTokens, l.StatusCode, l.ErrorMessage,
+		l.AccountID, l.AccountName, l.Model, l.Endpoint, l.Status, l.LatencyMs, l.PromptTokens, l.CompletionTokens, l.StatusCode, l.ErrorMessage,
 	)
 	return err
 }
@@ -60,9 +60,9 @@ func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 	where := []string{"1=1"}
 	args := []any{}
 
-	if f.ProviderName != "" {
-		where = append(where, "provider_name = ?")
-		args = append(args, f.ProviderName)
+	if f.AccountName != "" {
+		where = append(where, "account_name = ?")
+		args = append(args, f.AccountName)
 	}
 	if f.Status != "" {
 		where = append(where, "status = ?")
@@ -95,7 +95,7 @@ func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 		limit = 50
 	}
 	query := fmt.Sprintf(
-		"SELECT id, timestamp, provider_id, provider_name, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message FROM request_logs WHERE %s ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+		"SELECT id, timestamp, account_id, account_name, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message FROM request_logs WHERE %s ORDER BY timestamp DESC LIMIT ? OFFSET ?",
 		whereClause,
 	)
 	args = append(args, limit, f.Offset)
@@ -109,7 +109,7 @@ func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 	var logs []RequestLog
 	for rows.Next() {
 		var l RequestLog
-		if err := rows.Scan(&l.ID, &l.Timestamp, &l.ProviderID, &l.ProviderName, &l.Model, &l.Endpoint, &l.Status, &l.LatencyMs, &l.PromptTokens, &l.CompletionTokens, &l.StatusCode, &l.ErrorMessage); err != nil {
+		if err := rows.Scan(&l.ID, &l.Timestamp, &l.AccountID, &l.AccountName, &l.Model, &l.Endpoint, &l.Status, &l.LatencyMs, &l.PromptTokens, &l.CompletionTokens, &l.StatusCode, &l.ErrorMessage); err != nil {
 			return nil, 0, err
 		}
 		logs = append(logs, l)
@@ -132,10 +132,10 @@ func (d *DB) GetOverviewStats(from, to time.Time) (OverviewStats, error) {
 	return s, err
 }
 
-func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
+func (d *DB) GetAccountStats(from, to time.Time) ([]AccountStats, error) {
 	rows, err := d.Query(`
 		SELECT
-			provider_name,
+			account_name,
 			count(*) as total,
 			count(CASE WHEN status = 'success' THEN 1 END) as successes,
 			count(CASE WHEN status != 'success' THEN 1 END) as errors,
@@ -143,7 +143,7 @@ func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
 			coalesce(sum(prompt_tokens), 0) as prompt_tok,
 			coalesce(sum(completion_tokens), 0) as comp_tok
 		FROM request_logs WHERE datetime(timestamp) BETWEEN datetime(?) AND datetime(?)
-		GROUP BY provider_name ORDER BY total DESC`,
+		GROUP BY account_name ORDER BY total DESC`,
 		sqliteTime(from), sqliteTime(to),
 	)
 	if err != nil {
@@ -151,10 +151,10 @@ func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
 	}
 	defer rows.Close()
 
-	var stats []ProviderStats
+	var stats []AccountStats
 	for rows.Next() {
-		var s ProviderStats
-		if err := rows.Scan(&s.ProviderName, &s.TotalRequests, &s.SuccessCount, &s.ErrorCount, &s.AvgLatencyMs, &s.PromptTokens, &s.CompletionTokens); err != nil {
+		var s AccountStats
+		if err := rows.Scan(&s.AccountName, &s.TotalRequests, &s.SuccessCount, &s.ErrorCount, &s.AvgLatencyMs, &s.PromptTokens, &s.CompletionTokens); err != nil {
 			return nil, err
 		}
 		stats = append(stats, s)
@@ -162,8 +162,8 @@ func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
 	return stats, rows.Err()
 }
 
-type ProviderStats struct {
-	ProviderName     string  `json:"provider_name"`
+type AccountStats struct {
+	AccountName      string  `json:"account_name"`
 	TotalRequests    int     `json:"total_requests"`
 	SuccessCount     int     `json:"success_count"`
 	ErrorCount       int     `json:"error_count"`
@@ -175,11 +175,11 @@ type ProviderStats struct {
 func (d *DB) RollupDailyStats(retentionDays int) error {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 	_, err := d.Exec(`
-		INSERT OR REPLACE INTO daily_stats (date, provider_id, provider_name, total_requests, success_count, error_count, total_prompt_tokens, total_completion_tokens, avg_latency_ms)
+		INSERT OR REPLACE INTO daily_stats (date, account_id, account_name, total_requests, success_count, error_count, total_prompt_tokens, total_completion_tokens, avg_latency_ms)
 		SELECT
 			date(timestamp) as d,
-			provider_id,
-			provider_name,
+			account_id,
+			account_name,
 			count(*),
 			count(CASE WHEN status = 'success' THEN 1 END),
 			count(CASE WHEN status != 'success' THEN 1 END),
@@ -188,7 +188,7 @@ func (d *DB) RollupDailyStats(retentionDays int) error {
 			coalesce(avg(CASE WHEN status = 'success' THEN latency_ms END), 0)
 		FROM request_logs
 		WHERE datetime(timestamp) < datetime(?)
-		GROUP BY d, provider_id, provider_name`,
+		GROUP BY d, account_id, account_name`,
 		sqliteTime(cutoff),
 	)
 	return err

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, Provider, RequestLog } from '../lib/api'
+import { api, Account, RequestLog } from '../lib/api'
 
 const PAGE_SIZES = [25, 50, 100]
 
@@ -27,8 +27,8 @@ export default function UsageLogs() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const [providers, setProviders] = useState<Provider[]>([])
-  const [filterProvider, setFilterProvider] = useState('')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [filterAccount, setFilterAccount] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(0)
@@ -39,7 +39,7 @@ export default function UsageLogs() {
     setLoading(true)
     try {
       const res = await api.stats.requests({
-        provider: filterProvider || undefined,
+        account: filterAccount || undefined,
         status: filterStatus || undefined,
         limit: pageSize,
         offset: page * pageSize,
@@ -52,10 +52,10 @@ export default function UsageLogs() {
     } finally {
       setLoading(false)
     }
-  }, [filterProvider, filterStatus, pageSize, page])
+  }, [filterAccount, filterStatus, pageSize, page])
 
   useEffect(() => {
-    api.providers.list().then((data) => setProviders(data ?? [])).catch(() => {})
+    api.accounts.list().then((data) => setAccounts(data ?? [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -78,17 +78,17 @@ export default function UsageLogs() {
       {/* Filter bar */}
       <div className="card p-3 flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-32">
-          <label className="label">Provider</label>
+          <label className="label">Account</label>
           <select
             className="input"
-            value={filterProvider}
+            value={filterAccount}
             onChange={(e) => {
-              setFilterProvider(e.target.value)
+              setFilterAccount(e.target.value)
               setPage(0)
             }}
           >
-            <option value="">All providers</option>
-            {providers.map((p) => (
+            <option value="">All accounts</option>
+            {accounts.map((p) => (
               <option key={p.id} value={p.name}>
                 {p.name}
               </option>
@@ -151,7 +151,7 @@ export default function UsageLogs() {
                   Timestamp
                 </th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
-                  Provider
+                  Account
                 </th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
                   Model
@@ -193,7 +193,7 @@ export default function UsageLogs() {
                       {formatTs(log.timestamp)}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-primary">
-                      {log.provider_name || '—'}
+                      {log.account_name || '—'}
                     </td>
                     <td className="px-4 py-2.5 text-xs font-mono text-text-secondary max-w-32 truncate">
                       {log.model || '—'}

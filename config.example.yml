@@ -1,6 +1,6 @@
 proxy:
   request_timeout: 30   # seconds per upstream request
-  max_retries: 3        # attempts before failing to next provider
+  max_retries: 3        # attempts before failing to next account
 
 fallback:
   enabled: false
@@ -8,7 +8,7 @@ fallback:
   model: ""
   timeout: 30
 
-providers:
+accounts:
   # OpenAI — type: openai (no base_url needed; defaults to api.openai.com)
   - name: openai
     type: openai

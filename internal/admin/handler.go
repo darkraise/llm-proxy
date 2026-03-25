@@ -27,19 +27,19 @@ func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKe
 	return &AdminHandler{db: db, auth: auth, pool: pool, encryptionKey: encryptionKey}
 }
 
-type providerRequest struct {
-	Name     string               `json:"name"`
-	Type     string               `json:"type"`
-	BaseURL  string               `json:"base_url"`
-	APIKey   string               `json:"api_key"`
-	Models   []string             `json:"models"`
-	Priority int                  `json:"priority"`
-	Enabled  *bool                `json:"enabled"`
-	Limits   []store.ProviderLimit `json:"limits"`
+type accountRequest struct {
+	Name     string              `json:"name"`
+	Type     string              `json:"type"`
+	BaseURL  string              `json:"base_url"`
+	APIKey   string              `json:"api_key"`
+	Models   []string            `json:"models"`
+	Priority int                 `json:"priority"`
+	Enabled  *bool               `json:"enabled"`
+	Limits   []store.AccountLimit `json:"limits"`
 }
 
-func (h *AdminHandler) HandleListProviders(w http.ResponseWriter, r *http.Request) {
-	providers, err := h.db.ListProviders()
+func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request) {
+	accounts, err := h.db.ListAccounts()
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -48,14 +48,14 @@ func (h *AdminHandler) HandleListProviders(w http.ResponseWriter, r *http.Reques
 	// Enrich with live rate limit status
 	status := h.pool.Status()
 	type enriched struct {
-		store.Provider
-		Status *provider.ProviderStatus `json:"status,omitempty"`
+		store.Account
+		Status *provider.AccountStatus `json:"status,omitempty"`
 	}
 
-	result := make([]enriched, len(providers))
-	for i, p := range providers {
+	result := make([]enriched, len(accounts))
+	for i, p := range accounts {
 		p.APIKey = nil // never expose encrypted key
-		result[i] = enriched{Provider: p}
+		result[i] = enriched{Account: p}
 		if s, ok := status[p.Name]; ok {
 			result[i].Status = &s
 		}
@@ -64,8 +64,8 @@ func (h *AdminHandler) HandleListProviders(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, 200, result)
 }
 
-func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Request) {
-	var req providerRequest
+func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Request) {
+	var req accountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid request"})
 		return
@@ -87,7 +87,7 @@ func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Reque
 		enabled = *req.Enabled
 	}
 
-	p := store.Provider{
+	p := store.Account{
 		Name:     req.Name,
 		Type:     req.Type,
 		BaseURL:  req.BaseURL,
@@ -98,7 +98,7 @@ func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Reque
 		Limits:   req.Limits,
 	}
 
-	id, err := h.db.CreateProvider(p)
+	id, err := h.db.CreateAccount(p)
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
@@ -109,14 +109,14 @@ func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, 201, map[string]any{"id": id, "name": req.Name})
 }
 
-func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Request) {
+func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
 
-	var req providerRequest
+	var req accountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid request"})
 		return
@@ -134,7 +134,7 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 		enabled = *req.Enabled
 	}
 
-	p := store.Provider{
+	p := store.Account{
 		Name:     req.Name,
 		Type:     req.Type,
 		BaseURL:  req.BaseURL,
@@ -145,7 +145,7 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 		Limits:   req.Limits,
 	}
 
-	if err := h.db.UpdateProvider(id, p); err != nil {
+	if err := h.db.UpdateAccount(id, p); err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
@@ -154,14 +154,14 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
-func (h *AdminHandler) HandleDeleteProvider(w http.ResponseWriter, r *http.Request) {
+func (h *AdminHandler) HandleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
 
-	if err := h.db.DeleteProvider(id); err != nil {
+	if err := h.db.DeleteAccount(id); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
@@ -170,16 +170,16 @@ func (h *AdminHandler) HandleDeleteProvider(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
-func (h *AdminHandler) HandleTestProvider(w http.ResponseWriter, r *http.Request) {
+func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
 
-	p, err := h.db.GetProvider(id)
+	p, err := h.db.GetAccount(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "provider not found"})
+		writeJSON(w, 404, map[string]string{"error": "account not found"})
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Add provider count
+	// Add account count
 	status := h.pool.Status()
 	active := 0
 	for _, s := range status {
@@ -253,22 +253,22 @@ func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, 200, map[string]any{
-		"total_requests":   stats.TotalRequests,
-		"success_count":    stats.SuccessCount,
-		"error_count":      stats.ErrorCount,
-		"avg_latency_ms":   stats.AvgLatencyMs,
-		"total_tokens":     stats.TotalTokens,
-		"active_providers": active,
-		"total_providers":  len(status),
+		"total_requests":  stats.TotalRequests,
+		"success_count":   stats.SuccessCount,
+		"error_count":     stats.ErrorCount,
+		"avg_latency_ms":  stats.AvgLatencyMs,
+		"total_tokens":    stats.TotalTokens,
+		"active_accounts": active,
+		"total_accounts":  len(status),
 	})
 }
 
 func (h *AdminHandler) HandleStatsRequests(w http.ResponseWriter, r *http.Request) {
 	filter := store.RequestLogFilter{
-		ProviderName: r.URL.Query().Get("provider"),
-		Status:       r.URL.Query().Get("status"),
-		Model:        r.URL.Query().Get("model"),
-		Limit:        50,
+		AccountName: r.URL.Query().Get("account"),
+		Status:      r.URL.Query().Get("status"),
+		Model:       r.URL.Query().Get("model"),
+		Limit:       50,
 	}
 
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {
@@ -287,11 +287,11 @@ func (h *AdminHandler) HandleStatsRequests(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, 200, map[string]any{"data": logs, "total": total})
 }
 
-func (h *AdminHandler) HandleStatsProviders(w http.ResponseWriter, r *http.Request) {
+func (h *AdminHandler) HandleStatsAccounts(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-	stats, err := h.db.GetProviderStats(startOfDay, now)
+	stats, err := h.db.GetAccountStats(startOfDay, now)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -356,7 +356,7 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 	}
 
 	imported := 0
-	for _, p := range cfg.ToProviders() {
+	for _, p := range cfg.ToAccounts() {
 		apiKeyEnc := p.APIKey
 		if h.encryptionKey != nil {
 			enc, err := crypto.Encrypt(h.encryptionKey, p.APIKey)
@@ -365,8 +365,8 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 			}
 		}
 		p.APIKey = apiKeyEnc
-		if _, err := h.db.CreateProvider(p); err != nil {
-			slog.Warn("import provider failed", "name", p.Name, "error", err)
+		if _, err := h.db.CreateAccount(p); err != nil {
+			slog.Warn("import account failed", "name", p.Name, "error", err)
 		} else {
 			imported++
 		}
@@ -385,23 +385,23 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 }
 
 func (h *AdminHandler) HandleConfigExport(w http.ResponseWriter, r *http.Request) {
-	providers, err := h.db.ListProviders()
+	accounts, err := h.db.ListAccounts()
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
 
 	// Decrypt API keys for export
-	for i := range providers {
+	for i := range accounts {
 		if h.encryptionKey != nil {
-			if plain, err := crypto.Decrypt(h.encryptionKey, providers[i].APIKey); err == nil {
-				providers[i].APIKey = plain
+			if plain, err := crypto.Decrypt(h.encryptionKey, accounts[i].APIKey); err == nil {
+				accounts[i].APIKey = plain
 			}
 		}
 	}
 
 	settings, _ := h.db.GetAllSettings()
-	data, err := config.ExportYAML(providers, settings)
+	data, err := config.ExportYAML(accounts, settings)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -413,12 +413,12 @@ func (h *AdminHandler) HandleConfigExport(w http.ResponseWriter, r *http.Request
 }
 
 func (h *AdminHandler) reloadPool() {
-	providers, err := h.db.ListProviders()
+	accounts, err := h.db.ListAccounts()
 	if err != nil {
-		slog.Error("failed to reload providers", "error", err)
+		slog.Error("failed to reload accounts", "error", err)
 		return
 	}
-	h.pool.Reload(providers)
+	h.pool.Reload(accounts)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

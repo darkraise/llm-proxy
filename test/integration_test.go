@@ -109,52 +109,52 @@ func TestIntegration_FullFlow(t *testing.T) {
 		}
 	})
 
-	// ── b. Create provider ────────────────────────────────────────────────────
-	var providerID float64
-	t.Run("create_provider", func(t *testing.T) {
+	// ── b. Create account ─────────────────────────────────────────────────────
+	var accountID float64
+	t.Run("create_account", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]any{
-			"name":     "mock-provider",
+			"name":     "mock-account",
 			"type":     "openai-compatible",
 			"base_url": mockProvider.URL,
 			"api_key":  "test-key",
 			"models":   []string{"test-model"},
 			"priority": 1,
 		})
-		resp := mustPost(t, client, base+"/admin/api/providers", string(payload))
+		resp := mustPost(t, client, base+"/admin/api/accounts", string(payload))
 		defer resp.Body.Close()
 		if resp.StatusCode != 201 {
 			raw, _ := io.ReadAll(resp.Body)
-			t.Fatalf("create provider: got %d: %s", resp.StatusCode, raw)
+			t.Fatalf("create account: got %d: %s", resp.StatusCode, raw)
 		}
 		var result map[string]any
 		json.NewDecoder(resp.Body).Decode(&result)
 		id, ok := result["id"].(float64)
 		if !ok || id == 0 {
-			t.Fatalf("create provider: unexpected id: %v", result)
+			t.Fatalf("create account: unexpected id: %v", result)
 		}
-		providerID = id
+		accountID = id
 	})
 
-	// ── c. List providers ─────────────────────────────────────────────────────
-	t.Run("list_providers", func(t *testing.T) {
-		resp := mustGet(t, client, base+"/admin/api/providers")
+	// ── c. List accounts ──────────────────────────────────────────────────────
+	t.Run("list_accounts", func(t *testing.T) {
+		resp := mustGet(t, client, base+"/admin/api/accounts")
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
-			t.Fatalf("list providers: got %d", resp.StatusCode)
+			t.Fatalf("list accounts: got %d", resp.StatusCode)
 		}
-		var providers []map[string]any
-		json.NewDecoder(resp.Body).Decode(&providers)
-		if len(providers) == 0 {
-			t.Fatal("list providers: expected at least 1 provider")
+		var accounts []map[string]any
+		json.NewDecoder(resp.Body).Decode(&accounts)
+		if len(accounts) == 0 {
+			t.Fatal("list accounts: expected at least 1 account")
 		}
 		found := false
-		for _, p := range providers {
-			if p["name"] == "mock-provider" {
+		for _, p := range accounts {
+			if p["name"] == "mock-account" {
 				found = true
 			}
 		}
 		if !found {
-			t.Fatalf("list providers: mock-provider not found, got: %v", providers)
+			t.Fatalf("list accounts: mock-account not found, got: %v", accounts)
 		}
 	})
 
@@ -268,7 +268,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 		}
 	})
 
-	_ = providerID
+	_ = accountID
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────

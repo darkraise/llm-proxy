@@ -14,16 +14,18 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   'openai-compatible': '',
 }
 
-// Window seconds for each metric
-const METRIC_WINDOW: Record<string, number> = {
-  rpm: 60,
-  rpd: 86400,
-  rps: 1,
-  tpm: 60,
-  tpd: 86400,
-}
-
-const METRICS = ['rpm', 'rpd', 'rps', 'tpm', 'tpd']
+// Metric definitions: key, label, window in seconds
+const METRIC_DEFS: { key: string; label: string; window: number }[] = [
+  { key: 'rpm', label: 'Requests per minute', window: 60 },
+  { key: 'rpd', label: 'Requests per day', window: 86400 },
+  { key: 'rpmo', label: 'Requests per month', window: 2592000 },
+  { key: 'rps', label: 'Requests per second', window: 1 },
+  { key: 'tpm', label: 'Tokens per minute', window: 60 },
+  { key: 'tpd', label: 'Tokens per day', window: 86400 },
+  { key: 'tpmo', label: 'Tokens per month', window: 2592000 },
+]
+const METRIC_WINDOW: Record<string, number> = Object.fromEntries(METRIC_DEFS.map((m) => [m.key, m.window]))
+const METRICS = METRIC_DEFS.map((m) => m.key)
 
 function parseModels(raw: string): string[] {
   return raw
@@ -669,7 +671,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                             updateLimit(i, { metric, window_secs: METRIC_WINDOW[metric] ?? 60 })
                           }}
                         >
-                          {METRICS.map((m) => <option key={m} value={m}>{m}</option>)}
+                          {METRIC_DEFS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
                         </select>
                         <span className="text-text-muted text-xs flex-shrink-0">max</span>
                         <input

@@ -7,7 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { api, OverviewStats, ProviderStats, Provider } from '../lib/api'
+import { api, OverviewStats, AccountStats, Account } from '../lib/api'
 import StatCard from '../components/StatCard'
 
 interface HourBucket {
@@ -41,8 +41,8 @@ const TICK_STYLE = { fill: '#8b949e', fontSize: 11 }
 
 export default function Dashboard() {
   const [overview, setOverview] = useState<OverviewStats | null>(null)
-  const [providerStats, setProviderStats] = useState<ProviderStats[]>([])
-  const [providers, setProviders] = useState<Provider[]>([])
+  const [accountStats, setAccountStats] = useState<AccountStats[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [hourlyData, setHourlyData] = useState<HourBucket[]>([])
   const [error, setError] = useState('')
 
@@ -50,13 +50,13 @@ export default function Dashboard() {
     try {
       const [ov, ps, pv, logs] = await Promise.all([
         api.stats.overview(),
-        api.stats.providers(),
-        api.providers.list(),
+        api.stats.accounts(),
+        api.accounts.list(),
         api.stats.requests({ limit: 200 }),
       ])
       setOverview(ov)
-      setProviderStats(ps ?? [])
-      setProviders(pv ?? [])
+      setAccountStats(ps ?? [])
+      setAccounts(pv ?? [])
       setHourlyData(buildHourlyBuckets(logs.data ?? []))
       setError('')
     } catch {
@@ -75,7 +75,7 @@ export default function Dashboard() {
       ? ((overview.error_count / overview.total_requests) * 100).toFixed(1) + '%'
       : '0%'
 
-  const maxRequests = Math.max(...providerStats.map((p) => p.total_requests), 1)
+  const maxRequests = Math.max(...accountStats.map((p) => p.total_requests), 1)
 
   return (
     <div className="p-6 space-y-6">
@@ -98,10 +98,10 @@ export default function Dashboard() {
           subtitle={`${overview?.success_count ?? 0} successful`}
         />
         <StatCard
-          label="Active Providers"
+          label="Active Accounts"
           value={
             overview
-              ? `${overview.active_providers}/${overview.total_providers}`
+              ? `${overview.active_accounts}/${overview.total_accounts}`
               : '—'
           }
           subtitle="available"
@@ -166,24 +166,24 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Per-provider breakdown */}
+        {/* Per-account breakdown */}
         <div className="card p-4">
           <p className="text-sm font-medium text-text-primary mb-3">
-            Provider Breakdown (Today)
+            Account Breakdown (Today)
           </p>
-          {providerStats.length === 0 ? (
+          {accountStats.length === 0 ? (
             <p className="text-sm text-text-muted text-center py-8">
               No requests yet
             </p>
           ) : (
             <div className="space-y-3">
-              {providerStats.slice(0, 6).map((ps) => {
+              {accountStats.slice(0, 6).map((ps) => {
                 const pct = Math.round((ps.total_requests / maxRequests) * 100)
                 return (
-                  <div key={ps.provider_name}>
+                  <div key={ps.account_name}>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-text-secondary truncate max-w-[70%]">
-                        {ps.provider_name}
+                        {ps.account_name}
                       </span>
                       <span className="text-text-muted">{ps.total_requests}</span>
                     </div>
@@ -201,14 +201,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Provider status strip */}
+      {/* Account status strip */}
       <div className="card p-4">
-        <p className="text-sm font-medium text-text-primary mb-3">Provider Status</p>
-        {providers.length === 0 ? (
-          <p className="text-sm text-text-muted">No providers configured.</p>
+        <p className="text-sm font-medium text-text-primary mb-3">Account Status</p>
+        {accounts.length === 0 ? (
+          <p className="text-sm text-text-muted">No accounts configured.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-            {providers.map((p) => {
+            {accounts.map((p) => {
               const available = p.status?.available ?? p.enabled
               const rateLimited = p.status?.rate_limited ?? false
               const models = (() => {
@@ -251,14 +251,14 @@ export default function Dashboard() {
       </div>
 
       {/* Token usage */}
-      {providerStats.length > 0 && (
+      {accountStats.length > 0 && (
         <div className="card p-4">
           <p className="text-sm font-medium text-text-primary mb-3">
-            Token Usage by Provider (Today)
+            Token Usage by Account (Today)
           </p>
           <ResponsiveContainer width="100%" height={120}>
             <BarChart
-              data={providerStats}
+              data={accountStats}
               layout="vertical"
               margin={{ left: 80, right: 20 }}
             >
@@ -271,7 +271,7 @@ export default function Dashboard() {
               />
               <YAxis
                 type="category"
-                dataKey="provider_name"
+                dataKey="account_name"
                 tick={TICK_STYLE}
                 tickLine={false}
                 axisLine={false}

@@ -9,7 +9,7 @@ func TestRequestLog_InsertAndQuery(t *testing.T) {
 	db := newTestDB(t)
 
 	entry := RequestLog{
-		ProviderName:     "groq",
+		AccountName:      "groq",
 		Model:            "llama-3.3-70b",
 		Endpoint:         "openai",
 		Status:           "success",
@@ -30,31 +30,31 @@ func TestRequestLog_InsertAndQuery(t *testing.T) {
 	if total != 1 {
 		t.Fatalf("total: got %d, want 1", total)
 	}
-	if logs[0].ProviderName != "groq" {
-		t.Errorf("provider: got %q", logs[0].ProviderName)
+	if logs[0].AccountName != "groq" {
+		t.Errorf("account: got %q", logs[0].AccountName)
 	}
 }
 
-func TestRequestLog_FilterByProvider(t *testing.T) {
+func TestRequestLog_FilterByAccount(t *testing.T) {
 	db := newTestDB(t)
 
-	db.InsertRequestLog(RequestLog{ProviderName: "groq", Model: "m", Endpoint: "openai", Status: "success"})
-	db.InsertRequestLog(RequestLog{ProviderName: "google", Model: "m", Endpoint: "openai", Status: "success"})
+	db.InsertRequestLog(RequestLog{AccountName: "groq", Model: "m", Endpoint: "openai", Status: "success"})
+	db.InsertRequestLog(RequestLog{AccountName: "google", Model: "m", Endpoint: "openai", Status: "success"})
 
-	logs, total, _ := db.QueryRequestLogs(RequestLogFilter{ProviderName: "groq", Limit: 10})
+	logs, total, _ := db.QueryRequestLogs(RequestLogFilter{AccountName: "groq", Limit: 10})
 	if total != 1 {
 		t.Errorf("total: got %d, want 1", total)
 	}
-	if logs[0].ProviderName != "groq" {
-		t.Errorf("provider: got %q", logs[0].ProviderName)
+	if logs[0].AccountName != "groq" {
+		t.Errorf("account: got %q", logs[0].AccountName)
 	}
 }
 
 func TestRequestLog_FilterByStatus(t *testing.T) {
 	db := newTestDB(t)
 
-	db.InsertRequestLog(RequestLog{ProviderName: "a", Model: "m", Endpoint: "openai", Status: "success"})
-	db.InsertRequestLog(RequestLog{ProviderName: "b", Model: "m", Endpoint: "openai", Status: "error"})
+	db.InsertRequestLog(RequestLog{AccountName: "a", Model: "m", Endpoint: "openai", Status: "success"})
+	db.InsertRequestLog(RequestLog{AccountName: "b", Model: "m", Endpoint: "openai", Status: "error"})
 
 	_, total, _ := db.QueryRequestLogs(RequestLogFilter{Status: "error", Limit: 10})
 	if total != 1 {
@@ -65,8 +65,8 @@ func TestRequestLog_FilterByStatus(t *testing.T) {
 func TestOverviewStats(t *testing.T) {
 	db := newTestDB(t)
 
-	db.InsertRequestLog(RequestLog{ProviderName: "a", Model: "m", Endpoint: "openai", Status: "success", LatencyMs: 100, PromptTokens: 50, CompletionTokens: 100})
-	db.InsertRequestLog(RequestLog{ProviderName: "b", Model: "m", Endpoint: "openai", Status: "error", LatencyMs: 200})
+	db.InsertRequestLog(RequestLog{AccountName: "a", Model: "m", Endpoint: "openai", Status: "success", LatencyMs: 100, PromptTokens: 50, CompletionTokens: 100})
+	db.InsertRequestLog(RequestLog{AccountName: "b", Model: "m", Endpoint: "openai", Status: "error", LatencyMs: 200})
 
 	stats, err := db.GetOverviewStats(time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour))
 	if err != nil {

@@ -12,15 +12,17 @@ const PROVIDER_TYPES = [
   'openai-compatible',
 ]
 
-const METRICS = ['rpm', 'rpd', 'rps', 'tpm', 'tpd']
-
-const METRIC_WINDOW: Record<string, number> = {
-  rpm: 60,
-  rpd: 86400,
-  rps: 1,
-  tpm: 60,
-  tpd: 86400,
-}
+const METRIC_DEFS: { key: string; label: string; window: number }[] = [
+  { key: 'rpm', label: 'Requests per minute', window: 60 },
+  { key: 'rpd', label: 'Requests per day', window: 86400 },
+  { key: 'rpmo', label: 'Requests per month', window: 2592000 },
+  { key: 'rps', label: 'Requests per second', window: 1 },
+  { key: 'tpm', label: 'Tokens per minute', window: 60 },
+  { key: 'tpd', label: 'Tokens per day', window: 86400 },
+  { key: 'tpmo', label: 'Tokens per month', window: 2592000 },
+]
+const METRIC_WINDOW: Record<string, number> = Object.fromEntries(METRIC_DEFS.map((m) => [m.key, m.window]))
+const METRIC_LABELS: Record<string, string> = Object.fromEntries(METRIC_DEFS.map((m) => [m.key, m.label]))
 
 // ─── Add/Edit Def Row ─────────────────────────────────────────────────────────
 
@@ -164,7 +166,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
           <div className="space-y-2 mb-4">
             {providerDefs.map((d) => (
               <div key={d.id} className="flex items-center gap-3 bg-surface border border-border rounded-md px-3 py-2">
-                <span className="badge-accent">{d.metric}</span>
+                <span className="badge-accent">{METRIC_LABELS[d.metric] ?? d.metric}</span>
                 <span className="text-sm text-text-primary flex-1">
                   max <strong>{d.max_value}</strong> / {d.window_secs}s
                 </span>
@@ -203,7 +205,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
                 setAddForm((f) => ({ ...f, metric, window_secs: METRIC_WINDOW[metric] ?? 60 }))
               }}
             >
-              {METRICS.map((m) => <option key={m} value={m}>{m}</option>)}
+              {METRIC_DEFS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
             <span className="text-text-muted text-xs">max</span>
             <input
@@ -245,7 +247,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
                 <div className="divide-y divide-border">
                   {mdefs.map((d) => (
                     <div key={d.id} className="flex items-center gap-3 px-3 py-2 bg-surface">
-                      <span className="badge-accent">{d.metric}</span>
+                      <span className="badge-accent">{METRIC_LABELS[d.metric] ?? d.metric}</span>
                       <span className="text-sm text-text-primary flex-1">
                         max <strong>{d.max_value}</strong> / {d.window_secs}s
                       </span>
@@ -296,7 +298,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
                 setAddForm((f) => ({ ...f, metric, window_secs: METRIC_WINDOW[metric] ?? 60 }))
               }}
             >
-              {METRICS.map((m) => <option key={m} value={m}>{m}</option>)}
+              {METRIC_DEFS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
             <span className="text-text-muted text-xs">max</span>
             <input

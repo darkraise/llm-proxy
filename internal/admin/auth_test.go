@@ -80,7 +80,7 @@ func TestAuth_MiddlewareBlocksUnauthenticated(t *testing.T) {
 		w.Write([]byte("ok"))
 	}))
 
-	req := httptest.NewRequest("GET", "/admin/api/providers", nil)
+	req := httptest.NewRequest("GET", "/admin/api/accounts", nil)
 	w := httptest.NewRecorder()
 	protected.ServeHTTP(w, req)
 
@@ -112,7 +112,7 @@ func TestAuth_MiddlewareAllowsAuthenticated(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}))
 
-	req := httptest.NewRequest("GET", "/admin/api/providers", nil)
+	req := httptest.NewRequest("GET", "/admin/api/accounts", nil)
 	req.AddCookie(sessionCookie)
 	w := httptest.NewRecorder()
 	protected.ServeHTTP(w, req)
