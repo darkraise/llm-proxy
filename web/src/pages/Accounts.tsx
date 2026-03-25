@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api'
+import { RateLimitTable } from '../components/RateLimitTable'
 
 const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
 
@@ -393,18 +394,6 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
     }
   }
 
-  function updateLimit(idx: number, partial: Partial<AccountLimit>) {
-    setLimits((prev) => prev.map((l, i) => (i === idx ? { ...l, ...partial } : l)))
-  }
-
-  function removeLimit(idx: number) {
-    setLimits((prev) => prev.filter((_, i) => i !== idx))
-  }
-
-  function addLimit() {
-    setLimits((prev) => [...prev, { model: '', metric: 'rpm', max_value: 100, window_secs: 60 }])
-  }
-
   async function handleSave() {
     setSaving(true)
     setSaveError('')
@@ -646,56 +635,12 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="label mb-0">Rate Limits</label>
-                  <button type="button" onClick={addLimit} className="btn-secondary text-xs px-2 py-1">+ Add limit</button>
-                </div>
-                {limits.length === 0 ? (
-                  <p className="text-sm text-text-muted text-center py-3 border border-border rounded-md">
-                    No limits defined. Add manually or configure in Rate Limit Definitions.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {limits.map((l, i) => (
-                      <div key={i} className="flex items-center gap-2 bg-surface p-2 rounded-md border border-border">
-                        {l.model && (
-                          <span className="text-xs text-text-muted font-mono bg-surface-overlay px-1.5 py-0.5 rounded flex-shrink-0 max-w-[140px] truncate" title={l.model}>
-                            {l.model}
-                          </span>
-                        )}
-                        <select
-                          className="input py-1 flex-1 min-w-0"
-                          value={l.metric}
-                          onChange={(e) => {
-                            const metric = e.target.value
-                            updateLimit(i, { metric, window_secs: METRIC_WINDOW[metric] ?? 60 })
-                          }}
-                        >
-                          {METRIC_DEFS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-                        </select>
-                        <span className="text-text-muted text-xs flex-shrink-0">max</span>
-                        <input
-                          type="number"
-                          className="input py-1 w-20 flex-shrink-0"
-                          value={l.max_value}
-                          min={1}
-                          onChange={(e) => updateLimit(i, { max_value: parseInt(e.target.value) || 1 })}
-                        />
-                        <span className="text-text-muted text-xs flex-shrink-0">/{l.window_secs}s</span>
-                        <button
-                          type="button"
-                          onClick={() => removeLimit(i)}
-                          className="text-error hover:text-error/70 flex-shrink-0"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-                            <path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <label className="label mb-2">Rate Limits</label>
+                <RateLimitTable
+                  models={selectedList}
+                  limits={limits}
+                  onChange={setLimits}
+                />
               </div>
 
               {/* Summary */}
