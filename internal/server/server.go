@@ -66,6 +66,11 @@ func New(cfg Config) (*Server, error) {
 		encryptionKey = cryptopkg.DeriveKey(adminPassword, salt)
 	}
 
+	// Seed rate limit defaults from provider documentation (if table is empty)
+	if err := db.SeedRateLimitDefaults(); err != nil {
+		slog.Warn("failed to seed rate limit defaults", "error", err)
+	}
+
 	// Load accounts from DB
 	accounts, err := db.ListAccounts()
 	if err != nil {

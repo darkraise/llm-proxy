@@ -1,6 +1,9 @@
 package store
 
-import "fmt"
+import (
+	"fmt"
+	"log/slog"
+)
 
 // RateLimitDef is a provider- or model-level rate limit template stored by an admin.
 // When Model is "", the definition applies to all models for the provider.
@@ -59,6 +62,81 @@ func (d *DB) SetRateLimitDef(def RateLimitDef) error {
 func (d *DB) DeleteRateLimitDef(id int64) error {
 	_, err := d.Exec("DELETE FROM rate_limit_definitions WHERE id = ?", id)
 	return err
+}
+
+// SeedRateLimitDefaults populates the rate_limit_definitions table with known
+// free-tier limits from provider documentation. Skips if any definitions already exist.
+func (d *DB) SeedRateLimitDefaults() error {
+	var count int
+	if err := d.QueryRow("SELECT count(*) FROM rate_limit_definitions").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil // admin has already configured
+	}
+
+	type def struct {
+		provider, model, metric string
+		maxValue, windowSecs    int
+	}
+
+	defaults := []def{
+		// ── Groq ─────────────────────────────────────────────────
+		// Provider-level defaults
+		{"groq", "", "rpm", 30, 60},
+		{"groq", "", "tpm", 6000, 60},
+		// Per-model overrides
+		{"groq", "llama-3.3-70b-versatile", "rpm", 30, 60},
+		{"groq", "llama-3.3-70b-versatile", "rpd", 1000, 86400},
+		{"groq", "llama-3.3-70b-versatile", "tpm", 12000, 60},
+		{"groq", "llama-3.1-8b-instant", "rpm", 30, 60},
+		{"groq", "llama-3.1-8b-instant", "rpd", 14400, 86400},
+		{"groq", "llama-3.1-8b-instant", "tpm", 6000, 60},
+		{"groq", "meta-llama/llama-4-scout-17b-16e-instruct", "rpm", 30, 60},
+		{"groq", "meta-llama/llama-4-scout-17b-16e-instruct", "rpd", 1000, 86400},
+		{"groq", "meta-llama/llama-4-scout-17b-16e-instruct", "tpm", 30000, 60},
+
+		// ── Google ───────────────────────────────────────────────
+		{"google", "", "rpm", 10, 60},
+		{"google", "", "rpd", 250, 86400},
+		{"google", "", "tpm", 1000000, 60},
+
+		// ── OpenRouter ───────────────────────────────────────────
+		{"openrouter", "", "rpm", 20, 60},
+		{"openrouter", "", "rpd", 200, 86400},
+
+		// ── Cerebras ─────────────────────────────────────────────
+		{"cerebras", "", "rpm", 30, 60},
+		{"cerebras", "", "tpm", 60000, 60},
+		{"cerebras", "llama-3.3-70b", "rpm", 30, 60},
+		{"cerebras", "llama-3.3-70b", "rpd", 14400, 86400},
+		{"cerebras", "llama-3.3-70b", "tpm", 64000, 60},
+		{"cerebras", "llama-3.1-8b", "rpm", 30, 60},
+		{"cerebras", "llama-3.1-8b", "rpd", 14400, 86400},
+		{"cerebras", "llama-3.1-8b", "tpm", 60000, 60},
+
+		// ── Mistral ──────────────────────────────────────────────
+		{"mistral", "", "rps", 1, 1},
+		{"mistral", "", "tpm", 500000, 60},
+
+		// ── GitHub Models ────────────────────────────────────────
+		{"github", "", "rpm", 10, 60},
+		{"github", "", "rpd", 50, 86400},
+	}
+
+	slog.Info("seeding rate limit definitions from provider documentation", "count", len(defaults))
+	for _, entry := range defaults {
+		if err := d.SetRateLimitDef(RateLimitDef{
+			Provider:   entry.provider,
+			Model:      entry.model,
+			Metric:     entry.metric,
+			MaxValue:   entry.maxValue,
+			WindowSecs: entry.windowSecs,
+		}); err != nil {
+			return fmt.Errorf("seed %s/%s/%s: %w", entry.provider, entry.model, entry.metric, err)
+		}
+	}
+	return nil
 }
 
 // GetDefaultLimits returns merged AccountLimit entries for the given provider and models.
