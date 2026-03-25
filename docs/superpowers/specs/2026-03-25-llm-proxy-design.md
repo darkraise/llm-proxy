@@ -135,10 +135,14 @@ A provider is available only if ALL configured limits have headroom. Adding new 
 
 ### Model Routing
 
-- `model="auto"` → round-robin across all available providers
+- `model="auto"` → round-robin across all available providers by priority order. Each provider's first configured model is used. The caller gets whichever model the selected provider serves — the intent is "give me any LLM response" without model preference.
 - `model="gemini-2.5-flash"` → route to provider(s) offering that model
 - `model="llama-3.3-70b"` → may match multiple providers (groq, cerebras), round-robin among them
 - `/v1/models` returns the union of all models from enabled providers
+
+### Google Provider Base URL
+
+`google`-type providers use a hardcoded base URL (`https://generativelanguage.googleapis.com/v1beta`). The `base_url` field in the `providers` table is optional for `google` type — if empty, the default is used. This avoids requiring users to know the internal Google API URL.
 
 ## Request Flow
 
@@ -325,8 +329,9 @@ CREATE TABLE settings (
 
 - Provider API keys encrypted with AES-256-GCM before writing to SQLite
 - Encryption key derived from admin password + salt via Argon2id
-- Keys decrypted in memory on startup
-- Re-encrypted on admin password change
+- Salt generated randomly on first run and stored in `settings` table under `encryption_key_salt`
+- Keys decrypted in memory on startup (admin password required — either from env var or cached from last login session)
+- On admin password change: derive new encryption key from new password + same salt, re-encrypt all provider API keys in a single transaction
 - YAML export includes plaintext keys (admin-only action, logged)
 
 ## Admin UI
