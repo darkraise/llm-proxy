@@ -35,26 +35,89 @@ func FetchProviderRateLimits(provider string) ([]store.RateLimitDef, error) {
 		}
 	}
 
-	var (
-		defs []store.RateLimitDef
-		err  error
-	)
+	var defs []store.RateLimitDef
 
+	// Try live fetch first (works when docs pages are server-rendered).
 	switch provider {
 	case "groq":
-		defs, err = fetchGroq()
+		if live, err := fetchGroq(); err == nil && len(live) > 0 {
+			defs = live
+		}
 	case "cerebras":
-		defs, err = fetchCerebras()
-	default:
-		return nil, nil
+		if live, err := fetchCerebras(); err == nil && len(live) > 0 {
+			defs = live
+		}
 	}
 
-	if err != nil {
-		return nil, err
+	// Fall back to known defaults when live fetch fails or returns empty
+	// (common for SPA docs pages that require JS rendering).
+	if len(defs) == 0 {
+		defs = knownDefaults(provider)
 	}
 
-	cache.Store(provider, cacheEntry{defs: defs, expiresAt: time.Now().Add(cacheTTL)})
+	if len(defs) > 0 {
+		cache.Store(provider, cacheEntry{defs: defs, expiresAt: time.Now().Add(cacheTTL)})
+	}
 	return defs, nil
+}
+
+// knownDefaults returns hardcoded free-tier rate limits from provider documentation.
+// These are maintained manually and serve as a fallback when live docs pages
+// cannot be parsed (e.g., SPA pages that require JS rendering).
+func knownDefaults(provider string) []store.RateLimitDef {
+	rl := func(p, m, metric string, max, win int) store.RateLimitDef {
+		return store.RateLimitDef{Provider: p, Model: m, Metric: metric, MaxValue: max, WindowSecs: win}
+	}
+	switch provider {
+	case "groq":
+		return []store.RateLimitDef{
+			rl("groq", "", "rpm", 30, 60),
+			rl("groq", "", "tpm", 6000, 60),
+			rl("groq", "llama-3.3-70b-versatile", "rpm", 30, 60),
+			rl("groq", "llama-3.3-70b-versatile", "rpd", 1000, 86400),
+			rl("groq", "llama-3.3-70b-versatile", "tpm", 12000, 60),
+			rl("groq", "llama-3.1-8b-instant", "rpm", 30, 60),
+			rl("groq", "llama-3.1-8b-instant", "rpd", 14400, 86400),
+			rl("groq", "llama-3.1-8b-instant", "tpm", 6000, 60),
+			rl("groq", "meta-llama/llama-4-scout-17b-16e-instruct", "rpm", 30, 60),
+			rl("groq", "meta-llama/llama-4-scout-17b-16e-instruct", "rpd", 1000, 86400),
+			rl("groq", "meta-llama/llama-4-scout-17b-16e-instruct", "tpm", 30000, 60),
+		}
+	case "google":
+		return []store.RateLimitDef{
+			rl("google", "", "rpm", 10, 60),
+			rl("google", "", "rpd", 250, 86400),
+			rl("google", "", "tpm", 1000000, 60),
+		}
+	case "openrouter":
+		return []store.RateLimitDef{
+			rl("openrouter", "", "rpm", 20, 60),
+			rl("openrouter", "", "rpd", 200, 86400),
+		}
+	case "cerebras":
+		return []store.RateLimitDef{
+			rl("cerebras", "", "rpm", 30, 60),
+			rl("cerebras", "", "tpm", 60000, 60),
+			rl("cerebras", "llama-3.3-70b", "rpm", 30, 60),
+			rl("cerebras", "llama-3.3-70b", "rpd", 14400, 86400),
+			rl("cerebras", "llama-3.3-70b", "tpm", 64000, 60),
+			rl("cerebras", "llama-3.1-8b", "rpm", 30, 60),
+			rl("cerebras", "llama-3.1-8b", "rpd", 14400, 86400),
+			rl("cerebras", "llama-3.1-8b", "tpm", 60000, 60),
+		}
+	case "mistral":
+		return []store.RateLimitDef{
+			rl("mistral", "", "rps", 1, 1),
+			rl("mistral", "", "tpm", 500000, 60),
+		}
+	case "github":
+		return []store.RateLimitDef{
+			rl("github", "", "rpm", 10, 60),
+			rl("github", "", "rpd", 50, 86400),
+		}
+	default:
+		return nil
+	}
 }
 
 func fetchGroq() ([]store.RateLimitDef, error) {
