@@ -422,7 +422,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="card w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
