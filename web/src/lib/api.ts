@@ -63,13 +63,14 @@ async function request<T>(
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
-export interface ProviderLimit {
+export interface AccountLimit {
+  model: string
   metric: string
   max_value: number
   window_secs: number
 }
 
-export interface ProviderStatus {
+export interface AccountStatus {
   available: boolean
   requests_today: number
   tokens_today: number
@@ -77,7 +78,7 @@ export interface ProviderStatus {
   rate_limited: boolean
 }
 
-export interface Provider {
+export interface Account {
   id: number
   name: string
   type: string
@@ -85,13 +86,14 @@ export interface Provider {
   models: string // JSON array string
   priority: number
   enabled: boolean
+  default_model: string
   created_at: string
   updated_at: string
-  limits: ProviderLimit[]
-  status?: ProviderStatus
+  limits: AccountLimit[]
+  status?: AccountStatus
 }
 
-export interface ProviderInput {
+export interface AccountInput {
   name: string
   type: string
   base_url: string
@@ -99,7 +101,26 @@ export interface ProviderInput {
   models: string[]
   priority: number
   enabled: boolean
-  limits: ProviderLimit[]
+  default_model: string
+  limits: AccountLimit[]
+}
+
+export interface DiscoverModel {
+  id: string
+  name: string
+}
+
+export interface DiscoverResult {
+  models: DiscoverModel[]
+}
+
+export interface RateLimitDef {
+  id: number
+  provider: string
+  model: string  // '' for provider-level
+  metric: string
+  max_value: number
+  window_secs: number
 }
 
 export interface OverviewStats {
@@ -108,15 +129,15 @@ export interface OverviewStats {
   error_count: number
   avg_latency_ms: number
   total_tokens: number
-  active_providers: number
-  total_providers: number
+  active_accounts: number
+  total_accounts: number
 }
 
 export interface RequestLog {
   id: number
   timestamp: string
-  provider_id?: number
-  provider_name: string
+  account_id?: number
+  account_name: string
   model: string
   endpoint: string
   status: string
@@ -132,8 +153,8 @@ export interface RequestLogsResponse {
   total: number
 }
 
-export interface ProviderStats {
-  provider_name: string
+export interface AccountStats {
+  account_name: string
   total_requests: number
   success_count: number
   error_count: number
@@ -157,18 +178,36 @@ export const api = {
     logout: () => request<void>('POST', '/auth/logout'),
   },
 
-  // ─── Providers ───────────────────────────────────────────────────────────
+  // ─── Accounts ────────────────────────────────────────────────────────────
 
-  providers: {
-    list: () => request<Provider[]>('GET', '/providers'),
-    create: (data: ProviderInput) =>
-      request<{ id: number; name: string }>('POST', '/providers', data),
-    update: (id: number, data: ProviderInput) =>
-      request<{ status: string }>('PUT', `/providers/${id}`, data),
+  accounts: {
+    list: () => request<Account[]>('GET', '/accounts'),
+    create: (data: AccountInput) =>
+      request<{ id: number; name: string }>('POST', '/accounts', data),
+    update: (id: number, data: AccountInput) =>
+      request<{ status: string }>('PUT', `/accounts/${id}`, data),
     delete: (id: number) =>
-      request<{ status: string }>('DELETE', `/providers/${id}`),
+      request<{ status: string }>('DELETE', `/accounts/${id}`),
     test: (id: number) =>
-      request<TestResult>('POST', `/providers/${id}/test`),
+      request<TestResult>('POST', `/accounts/${id}/test`),
+    discover: (data: { type: string; base_url: string; api_key: string; free_only: boolean }) =>
+      request<DiscoverResult>('POST', '/accounts/discover', data),
+  },
+
+  // ─── Rate Limit Definitions ──────────────────────────────────────────────
+
+  ratelimits: {
+    list: (provider: string) =>
+      request<RateLimitDef[]>('GET', `/ratelimits/${provider}`),
+    set: (def: Omit<RateLimitDef, 'id'>) =>
+      request<{ status: string }>('PUT', '/ratelimits', def),
+    delete: (id: number) =>
+      request<{ status: string }>('DELETE', `/ratelimits/${id}`),
+    defaults: (provider: string, models: string[]) =>
+      request<AccountLimit[]>(
+        'GET',
+        `/ratelimits/${provider}/defaults${models.length > 0 ? '?models=' + models.join(',') : ''}`,
+      ),
   },
 
   // ─── Stats ───────────────────────────────────────────────────────────────
@@ -176,13 +215,13 @@ export const api = {
   stats: {
     overview: () => request<OverviewStats>('GET', '/stats/overview'),
     requests: (params?: {
-      provider?: string
+      account?: string
       status?: string
       limit?: number
       offset?: number
     }) => {
       const qs = new URLSearchParams()
-      if (params?.provider) qs.set('provider', params.provider)
+      if (params?.account) qs.set('account', params.account)
       if (params?.status) qs.set('status', params.status)
       if (params?.limit != null) qs.set('limit', String(params.limit))
       if (params?.offset != null) qs.set('offset', String(params.offset))
@@ -192,7 +231,7 @@ export const api = {
         `/stats/requests${query ? '?' + query : ''}`,
       )
     },
-    providers: () => request<ProviderStats[]>('GET', '/stats/providers'),
+    accounts: () => request<AccountStats[]>('GET', '/stats/accounts'),
   },
 
   // ─── Settings ────────────────────────────────────────────────────────────
