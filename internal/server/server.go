@@ -157,7 +157,7 @@ func (s *Server) routes() {
 
 	// Health
 	s.mux.HandleFunc("GET /health", s.handleHealth)
-	s.mux.HandleFunc("GET /", s.handleRoot)
+	s.mux.HandleFunc("/", s.handleRoot)
 
 	// Admin auth (no session required)
 	s.mux.HandleFunc("POST /admin/api/auth/login", s.auth.HandleLogin)
@@ -263,6 +263,18 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		"version": s.cfg.Version,
 		"admin":   "/admin/",
 	})
+}
+
+// Handler returns the HTTP handler for the server (used in tests).
+func (s *Server) Handler() http.Handler {
+	return s.mux
+}
+
+// StartBackgroundWorkers launches the async log writer and log pruner goroutines.
+// Called automatically by Start; exposed for tests that use httptest.NewServer.
+func (s *Server) StartBackgroundWorkers() {
+	go s.logWriter()
+	go s.logPruner()
 }
 
 func (s *Server) Start() error {
