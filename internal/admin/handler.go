@@ -200,6 +200,14 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Decrypt API key
+	apiKey := string(p.APIKey)
+	if h.encryptionKey != nil {
+		if plain, err := crypto.Decrypt(h.encryptionKey, p.APIKey); err == nil {
+			apiKey = string(plain)
+		}
+	}
+
 	// Send a minimal chat completion request to test connectivity
 	client := &http.Client{Timeout: 10 * time.Second}
 	testBody := []byte(`{"model":"` + adminFirstModel(p.Models) + `","messages":[{"role":"user","content":"Hi"}],"max_tokens":1}`)
@@ -210,14 +218,13 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 	switch p.Type {
 	case "google":
 		model := adminFirstModel(p.Models)
-		apiKey := string(p.APIKey) // TODO: decrypt when encryption is active
 		testURL = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
 		googleBody := []byte(`{"contents":[{"role":"user","parts":[{"text":"Hi"}]}],"generationConfig":{"maxOutputTokens":1}}`)
 		testReq, _ = http.NewRequest("POST", testURL, bytes.NewReader(googleBody))
 	default:
 		testURL = p.BaseURL + "/chat/completions"
 		testReq, _ = http.NewRequest("POST", testURL, bytes.NewReader(testBody))
-		testReq.Header.Set("Authorization", "Bearer "+string(p.APIKey))
+		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 	testReq.Header.Set("Content-Type", "application/json")
 
