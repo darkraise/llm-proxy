@@ -837,10 +837,10 @@ export default function Accounts() {
             return (
               <div
                 key={p.id}
-                className={`card overflow-hidden flex ${!p.enabled ? 'opacity-60' : ''}`}
+                className={`card overflow-visible flex ${!p.enabled ? 'opacity-60' : ''}`}
               >
                 {/* Left color strip */}
-                <div className={`w-1 flex-shrink-0 ${stripColor}`} />
+                <div className={`w-1 flex-shrink-0 rounded-l-lg ${stripColor}`} />
 
                 <div className="flex-1 p-3 min-w-0">
                   {/* Header: name + badges + icon actions */}
