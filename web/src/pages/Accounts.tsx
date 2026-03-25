@@ -658,12 +658,23 @@ function ModelsAccordion({ models, defaultModel }: { models: string[]; defaultMo
   )
 }
 
-// ─── Rate Limit Accordion (read-only, collapsed by default) ─────────────────
+// ─── Rate Limit Popover (read-only) ──────────────────────────────────────────
 
-function RateLimitAccordion({ limits, models }: { limits: AccountLimit[]; models: string[] }) {
+function RateLimitPopover({ limits, models }: { limits: AccountLimit[]; models: string[] }) {
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
   return (
-    <div>
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -673,7 +684,7 @@ function RateLimitAccordion({ limits, models }: { limits: AccountLimit[]; models
         Rate Limits ({limits.length})
       </button>
       {open && (
-        <div className="mt-1.5">
+        <div className="absolute z-50 left-0 top-full mt-1 w-max max-w-[600px] shadow-lg rounded-lg border border-border bg-surface-raised">
           <RateLimitTable
             models={models}
             limits={limits}
@@ -924,7 +935,7 @@ export default function Accounts() {
                   <div className="space-y-1">
                     <ModelsAccordion models={models} defaultModel={p.default_model} />
                     {p.limits && p.limits.length > 0 && (
-                      <RateLimitAccordion limits={p.limits} models={models} />
+                      <RateLimitPopover limits={p.limits} models={models} />
                     )}
                   </div>
                 </div>
