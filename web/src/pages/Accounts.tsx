@@ -921,7 +921,7 @@ export default function Accounts() {
                   )}
 
                   {/* Accordions */}
-                  <div className="flex gap-4">
+                  <div className="space-y-1">
                     <ModelsAccordion models={models} defaultModel={p.default_model} />
                     {p.limits && p.limits.length > 0 && (
                       <RateLimitAccordion limits={p.limits} models={models} />
