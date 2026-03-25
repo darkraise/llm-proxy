@@ -225,7 +225,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 			}
 		}
 
-		slog.Info("request ok", "provider", prov.Name, "model", resp.Model, "latency", latency)
+		slog.Info("request ok", "provider", prov.Name, "model", resp.Model, "latency_ms", latency.Milliseconds())
 		return resp, logEntry
 	}
 

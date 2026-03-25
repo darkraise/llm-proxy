@@ -162,6 +162,37 @@ func (d *DB) GetAccountStats(from, to time.Time) ([]AccountStats, error) {
 	return stats, rows.Err()
 }
 
+// AccountTotals holds lifetime aggregate counts for a single account.
+type AccountTotals struct {
+	AccountName   string `json:"account_name"`
+	TotalRequests int    `json:"total_requests"`
+	TotalTokens   int    `json:"total_tokens"`
+}
+
+// GetAccountTotals returns lifetime total requests and tokens per account (no time window).
+func (d *DB) GetAccountTotals() (map[string]AccountTotals, error) {
+	rows, err := d.Query(`
+		SELECT account_name,
+		       count(*),
+		       coalesce(sum(prompt_tokens) + sum(completion_tokens), 0)
+		FROM request_logs
+		GROUP BY account_name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]AccountTotals)
+	for rows.Next() {
+		var t AccountTotals
+		if err := rows.Scan(&t.AccountName, &t.TotalRequests, &t.TotalTokens); err != nil {
+			return nil, err
+		}
+		result[t.AccountName] = t
+	}
+	return result, rows.Err()
+}
+
 type AccountStats struct {
 	AccountName      string  `json:"account_name"`
 	TotalRequests    int     `json:"total_requests"`

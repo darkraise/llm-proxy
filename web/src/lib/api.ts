@@ -95,6 +95,8 @@ export interface Account {
   updated_at: string
   limits: AccountLimit[]
   status?: AccountStatus
+  total_requests: number
+  total_tokens: number
 }
 
 export interface AccountInput {

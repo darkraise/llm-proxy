@@ -838,14 +838,11 @@ export default function Accounts() {
                       <RateLimitAccordion limits={p.limits} models={models} />
                     )}
 
-                    {/* Rate limit usage from metrics */}
-                    {p.status?.metrics && p.status.metrics.length > 0 && (
-                      <div className="flex flex-wrap gap-3 mt-2 text-xs text-text-muted">
-                        {p.status.metrics.map((m) => (
-                          <span key={m.metric}>
-                            {m.metric.toUpperCase()}: {m.used}/{formatCompact(m.max)}
-                          </span>
-                        ))}
+                    {/* Lifetime totals */}
+                    {(p.total_requests > 0 || p.total_tokens > 0) && (
+                      <div className="flex gap-4 mt-2 text-xs text-text-muted">
+                        <span>Requests: {formatCompact(p.total_requests)}</span>
+                        <span>Tokens: {formatCompact(p.total_tokens)}</span>
                       </div>
                     )}
 

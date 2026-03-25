@@ -44,11 +44,15 @@ func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Enrich with live rate limit status
+	// Enrich with live rate limit status and lifetime totals
 	status := h.pool.Status()
+	totals, _ := h.db.GetAccountTotals()
+
 	type enriched struct {
 		store.Account
-		Status *provider.AccountStatus `json:"status,omitempty"`
+		Status        *provider.AccountStatus `json:"status,omitempty"`
+		TotalRequests int                     `json:"total_requests"`
+		TotalTokens   int                     `json:"total_tokens"`
 	}
 
 	result := make([]enriched, len(accounts))
@@ -57,6 +61,10 @@ func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request
 		result[i] = enriched{Account: p}
 		if s, ok := status[p.Name]; ok {
 			result[i].Status = &s
+		}
+		if t, ok := totals[p.Name]; ok {
+			result[i].TotalRequests = t.TotalRequests
+			result[i].TotalTokens = t.TotalTokens
 		}
 	}
 
