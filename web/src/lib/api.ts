@@ -192,6 +192,8 @@ export const api = {
       request<TestResult>('POST', `/accounts/${id}/test`),
     discover: (data: { type: string; base_url: string; api_key: string; free_only: boolean }) =>
       request<DiscoverResult>('POST', '/accounts/discover', data),
+    discoverByAccount: (id: number) =>
+      request<DiscoverResult>('POST', `/accounts/${id}/discover`),
   },
 
   // ─── Rate Limit Definitions ──────────────────────────────────────────────

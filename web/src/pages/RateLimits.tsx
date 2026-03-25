@@ -105,12 +105,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
     setRefreshing(true)
     setRefreshError('')
     try {
-      const result = await api.accounts.discover({
-        type: account.type,
-        base_url: account.base_url,
-        api_key: '',
-        free_only: false,
-      })
+      const result = await api.accounts.discoverByAccount(account.id)
       setKnownModels(result.models.map((m) => m.id))
     } catch (err) {
       setRefreshError(err instanceof Error ? err.message : 'Discovery failed')

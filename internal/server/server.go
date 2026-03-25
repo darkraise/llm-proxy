@@ -199,6 +199,7 @@ func (s *Server) routes() {
 
 	// Account model discovery
 	s.mux.Handle("POST /admin/api/accounts/discover", protected(s.admin.HandleDiscoverModels))
+	s.mux.Handle("POST /admin/api/accounts/{id}/discover", protected(s.admin.HandleDiscoverByAccount))
 
 	// Admin UI: dev proxy or embedded SPA
 	if s.cfg.Dev && s.cfg.UIProxy != "" {

@@ -104,6 +104,23 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// If this is the first account for this provider and rate_limit_definitions
+	// is empty for this provider, back-populate definitions from the account's limits.
+	if len(req.Limits) > 0 {
+		existingDefs, _ := h.db.ListRateLimitDefs(req.Type)
+		if len(existingDefs) == 0 {
+			for _, l := range req.Limits {
+				h.db.SetRateLimitDef(store.RateLimitDef{
+					Provider:   req.Type,
+					Model:      l.Model,
+					Metric:     l.Metric,
+					MaxValue:   l.MaxValue,
+					WindowSecs: l.WindowSecs,
+				})
+			}
+		}
+	}
+
 	h.reloadPool()
 
 	writeJSON(w, 201, map[string]any{"id": id, "name": req.Name})
