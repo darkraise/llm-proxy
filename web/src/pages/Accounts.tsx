@@ -90,6 +90,19 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
 
   const parsedModels = parseModels(modelsRaw)
 
+  const hasChanges = (() => {
+    if (form.api_key) return true // new API key entered
+    if (form.name !== initial.name) return true
+    if (form.type !== initial.type) return true
+    if (form.base_url !== initial.base_url) return true
+    if (form.priority !== initial.priority) return true
+    if (form.enabled !== initial.enabled) return true
+    if (form.default_model !== (initial.default_model ?? '')) return true
+    if (JSON.stringify(parsedModels) !== JSON.stringify(parseAccountModels(initial.models))) return true
+    if (JSON.stringify(form.limits) !== JSON.stringify(initial.limits ?? [])) return true
+    return false
+  })()
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col">
@@ -196,7 +209,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
 
           <div className="flex justify-end gap-2 px-5 py-3 border-t border-border flex-shrink-0">
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
+            <button type="submit" disabled={saving || !hasChanges} className="btn-primary disabled:opacity-50">
               {saving ? 'Saving…' : 'Update'}
             </button>
           </div>
