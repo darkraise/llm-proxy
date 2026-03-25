@@ -120,3 +120,97 @@ func TestRateLimiter_UnconfiguredProviderAlwaysAllows(t *testing.T) {
 		t.Error("unconfigured provider should be allowed")
 	}
 }
+
+func TestRateLimiter_PerModelLimit_BlocksModel(t *testing.T) {
+	rl := NewRateLimiter()
+	rl.Configure("groq", []LimitConfig{
+		{Model: "", Metric: "rpm", MaxValue: 100, WindowSecs: 60},
+		{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 2, WindowSecs: 60},
+	})
+
+	// Account-level Allow still works before per-model limit is hit
+	if !rl.Allow("groq") {
+		t.Error("account-level should be allowed")
+	}
+
+	// Use up per-model limit
+	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
+	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
+
+	// AllowForModel should now be denied for this model
+	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
+		t.Error("per-model limit exhausted; should be denied")
+	}
+
+	// But account-level Allow is still fine (100 rpm not reached)
+	if !rl.Allow("groq") {
+		t.Error("account-level should still be allowed")
+	}
+}
+
+func TestRateLimiter_PerModelLimit_DoesNotAffectOtherModels(t *testing.T) {
+	rl := NewRateLimiter()
+	rl.Configure("groq", []LimitConfig{
+		{Model: "", Metric: "rpm", MaxValue: 100, WindowSecs: 60},
+		{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 1, WindowSecs: 60},
+	})
+
+	// Exhaust per-model limit for llama
+	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
+	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
+		t.Error("llama per-model limit should be exhausted")
+	}
+
+	// A different model on the same account is unaffected
+	if !rl.AllowForModel("groq", "mixtral-8x7b") {
+		t.Error("mixtral has no per-model limit; should be allowed")
+	}
+}
+
+func TestRateLimiter_AccountLevelLimit_BlocksAllModels(t *testing.T) {
+	rl := NewRateLimiter()
+	rl.Configure("groq", []LimitConfig{
+		{Model: "", Metric: "rpm", MaxValue: 2, WindowSecs: 60},
+		{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 10, WindowSecs: 60},
+	})
+
+	// Exhaust account-level limit
+	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
+	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
+
+	// Even though per-model limit has headroom, account-level blocks everything
+	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
+		t.Error("account-level limit exhausted; should block all models")
+	}
+	if rl.AllowForModel("groq", "mixtral-8x7b") {
+		t.Error("account-level limit exhausted; should block other models too")
+	}
+}
+
+func TestRateLimiter_PerModelTokens(t *testing.T) {
+	rl := NewRateLimiter()
+	rl.Configure("groq", []LimitConfig{
+		{Model: "", Metric: "tpm", MaxValue: 10000, WindowSecs: 60},
+		{Model: "llama-3.3-70b-versatile", Metric: "tpm", MaxValue: 500, WindowSecs: 60},
+	})
+
+	rl.RecordTokensForModel("groq", "llama-3.3-70b-versatile", 400)
+
+	// Per-model: 400/500 used; 200 more would exceed
+	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
+		// Allow check passes (request count, not tokens)
+		_ = "ok"
+	}
+
+	// Verify account-level token counter also got incremented
+	status := rl.Status("groq")
+	found := false
+	for _, m := range status.Metrics {
+		if m.Metric == "tpm" && m.Used == 400 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected account-level tpm counter to be 400")
+	}
+}

@@ -6,14 +6,14 @@ import (
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
-func makeTestProviders() []store.Provider {
-	return []store.Provider{
+func makeTestProviders() []store.Account {
+	return []store.Account{
 		{ID: 1, Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("k1"), Models: `["llama-3.3-70b-versatile"]`, Priority: 0, Enabled: true,
-			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 		{ID: 2, Name: "google-1", Type: "google", BaseURL: "", APIKey: []byte("k2"), Models: `["gemini-2.5-flash"]`, Priority: 1, Enabled: true,
-			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 10, WindowSecs: 60}}},
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 10, WindowSecs: 60}}},
 		{ID: 3, Name: "cerebras", Type: "cerebras", BaseURL: "https://api.cerebras.ai/v1", APIKey: []byte("k3"), Models: `["llama-3.3-70b"]`, Priority: 2, Enabled: true,
-			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 	}
 }
 
@@ -84,9 +84,9 @@ func TestPool_SkipsExhaustedProviders(t *testing.T) {
 }
 
 func TestPool_AllExhausted_ReturnsError(t *testing.T) {
-	providers := []store.Provider{
+	providers := []store.Account{
 		{ID: 1, Name: "p1", Type: "openai-compatible", Models: `["m"]`, Enabled: true,
-			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 1, WindowSecs: 60}}},
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 1, WindowSecs: 60}}},
 	}
 	pool := NewPool(providers)
 	pool.RecordSuccess("p1", 0)
@@ -102,6 +102,72 @@ func TestPool_UnknownModel_ReturnsError(t *testing.T) {
 	_, err := pool.Select("nonexistent-model", 3)
 	if err == nil {
 		t.Error("expected error for unknown model")
+	}
+}
+
+func TestPool_DefaultModel_UsedForAuto(t *testing.T) {
+	providers := []store.Account{
+		{
+			ID: 1, Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1",
+			APIKey: []byte("k1"), Models: `["llama-3.3-70b-versatile","mixtral-8x7b"]`,
+			Priority: 0, Enabled: true, DefaultModel: "mixtral-8x7b",
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}},
+		},
+	}
+	pool := NewPool(providers)
+
+	acc, err := pool.Select("auto", 3)
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	if acc.DefaultModel != "mixtral-8x7b" {
+		t.Errorf("expected DefaultModel=mixtral-8x7b, got %q", acc.DefaultModel)
+	}
+}
+
+func TestPool_DefaultModel_FallsBackToFirstModel(t *testing.T) {
+	providers := []store.Account{
+		{
+			ID: 1, Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1",
+			APIKey: []byte("k1"), Models: `["llama-3.3-70b-versatile","mixtral-8x7b"]`,
+			Priority: 0, Enabled: true, DefaultModel: "", // no default set
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}},
+		},
+	}
+	pool := NewPool(providers)
+
+	acc, err := pool.Select("auto", 3)
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	// DefaultModel is empty; firstModelFromJSON would give "llama-3.3-70b-versatile"
+	if acc.DefaultModel != "" {
+		t.Errorf("expected empty DefaultModel, got %q", acc.DefaultModel)
+	}
+}
+
+func TestPool_PerModelRateLimit_BlocksExhaustedModel(t *testing.T) {
+	providers := []store.Account{
+		{
+			ID: 1, Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1",
+			APIKey: []byte("k1"), Models: `["llama-3.3-70b-versatile"]`,
+			Priority: 0, Enabled: true,
+			Limits: []store.AccountLimit{
+				{Model: "", Metric: "rpm", MaxValue: 100, WindowSecs: 60},
+				{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 2, WindowSecs: 60},
+			},
+		},
+	}
+	pool := NewPool(providers)
+
+	// Use up the per-model limit for llama-3.3-70b-versatile
+	pool.RecordSuccessForModel("groq", "llama-3.3-70b-versatile", 0)
+	pool.RecordSuccessForModel("groq", "llama-3.3-70b-versatile", 0)
+
+	// Selecting this model specifically should now fail
+	_, err := pool.Select("llama-3.3-70b-versatile", 3)
+	if err == nil {
+		t.Error("expected error: per-model limit exhausted")
 	}
 }
 

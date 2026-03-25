@@ -32,8 +32,8 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 			break
 		}
 
-		logEntry.ProviderName = prov.Name
-		logEntry.ProviderID = &prov.ID
+		logEntry.AccountName = prov.Name
+		logEntry.AccountID = &prov.ID
 		t0 := time.Now()
 
 		var streamResp *http.Response
@@ -97,8 +97,8 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 	writeError(w, 503, "all providers exhausted")
 }
 
-func (h *Handler) openOpenAIStream(prov *provider.ProviderInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
-	req.Model = firstModel(prov.Models, req.Model)
+func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
+	req.Model = firstModel(prov, req.Model)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
 		return nil, err
@@ -114,8 +114,8 @@ func (h *Handler) openOpenAIStream(prov *provider.ProviderInfo, req adapter.Chat
 	return h.client.Do(httpReq)
 }
 
-func (h *Handler) openGoogleStream(prov *provider.ProviderInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
-	req.Model = firstModel(prov.Models, req.Model)
+func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
+	req.Model = firstModel(prov, req.Model)
 	url := adapter.GoogleStreamURL(req.Model, prov.DecryptedKey)
 
 	_, body, err := adapter.OpenAIToGoogle(req, prov.DecryptedKey)
@@ -169,7 +169,7 @@ func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, 
 	return totalTokens
 }
 
-func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, prov *provider.ProviderInfo, endpoint string) int {
+func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, prov *provider.AccountInfo, endpoint string) int {
 	scanner := bufio.NewScanner(body)
 	var totalTokens int
 	chunkIdx := 0
@@ -210,7 +210,7 @@ func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, 
 			ID:      fmt.Sprintf("chatcmpl-google-%d", time.Now().UnixMilli()),
 			Object:  "chat.completion.chunk",
 			Created: time.Now().Unix(),
-			Model:   firstModel(prov.Models, ""),
+			Model:   firstModel(prov, ""),
 			Choices: []adapter.StreamDelta{{
 				Index: 0,
 				Delta: adapter.Delta{Content: text},

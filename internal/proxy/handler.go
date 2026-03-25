@@ -150,8 +150,8 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 			break
 		}
 
-		logEntry.ProviderName = prov.Name
-		logEntry.ProviderID = &prov.ID
+		logEntry.AccountName = prov.Name
+		logEntry.AccountID = &prov.ID
 		t0 := time.Now()
 
 		var resp *adapter.ChatCompletionResponse
@@ -220,7 +220,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 					parsed, err := adapter.ParseOpenAIResponse(body)
 					if err == nil {
 						logEntry.Status = "success"
-						logEntry.ProviderName = "ollama-fallback"
+						logEntry.AccountName = "ollama-fallback"
 						logEntry.Model = h.fallback.Model
 						logEntry.PromptTokens = parsed.Usage.PromptTokens
 						logEntry.CompletionTokens = parsed.Usage.CompletionTokens
@@ -237,8 +237,8 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 	return nil, logEntry
 }
 
-func (h *Handler) callOpenAI(prov *provider.ProviderInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
-	req.Model = firstModel(prov.Models, req.Model)
+func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
+	req.Model = firstModel(prov, req.Model)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
 		return nil, 0, err
@@ -270,8 +270,8 @@ func (h *Handler) callOpenAI(prov *provider.ProviderInfo, req adapter.ChatComple
 	return &parsed, 200, err
 }
 
-func (h *Handler) callGoogle(prov *provider.ProviderInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
-	req.Model = firstModel(prov.Models, req.Model)
+func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
+	req.Model = firstModel(prov, req.Model)
 	url, body, err := adapter.OpenAIToGoogle(req, prov.DecryptedKey)
 	if err != nil {
 		return nil, 0, err
@@ -302,12 +302,18 @@ func (h *Handler) callGoogle(prov *provider.ProviderInfo, req adapter.ChatComple
 	return &parsed, 200, err
 }
 
-func firstModel(modelsJSON string, requested string) string {
+// firstModel resolves the actual model name to send to a provider.
+// For "auto" requests it prefers DefaultModel, then falls back to the first
+// model in the account's JSON list.
+func firstModel(prov *provider.AccountInfo, requested string) string {
 	if requested != "auto" {
 		return requested
 	}
+	if prov.DefaultModel != "" {
+		return prov.DefaultModel
+	}
 	var models []string
-	if err := json.Unmarshal([]byte(modelsJSON), &models); err == nil && len(models) > 0 {
+	if err := json.Unmarshal([]byte(prov.Models), &models); err == nil && len(models) > 0 {
 		return models[0]
 	}
 	return requested
