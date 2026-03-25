@@ -662,20 +662,33 @@ function ModelsAccordion({ models, defaultModel }: { models: string[]; defaultMo
 
 function RateLimitPopover({ limits, models }: { limits: AccountLimit[]; models: string[] }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
 
   useEffect(() => {
     if (!open) return
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (containerRef.current && !containerRef.current.contains(e.target as Node) &&
+          popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
+  useEffect(() => {
+    if (!open || !btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    setPos({ top: rect.bottom + 4, left: Math.max(8, rect.left) })
+  }, [open])
+
   return (
-    <div className="relative" ref={ref}>
+    <div ref={containerRef}>
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
@@ -684,7 +697,16 @@ function RateLimitPopover({ limits, models }: { limits: AccountLimit[]; models: 
         Rate Limits ({limits.length})
       </button>
       {open && (
-        <div className="absolute z-50 left-0 top-full mt-1 w-max shadow-lg rounded-lg border border-border bg-surface-raised">
+        <div
+          ref={popoverRef}
+          className="fixed z-50 shadow-lg rounded-lg border border-border bg-surface-raised overflow-auto"
+          style={{
+            top: pos.top,
+            left: pos.left,
+            maxWidth: 'calc(100vw - 1rem)',
+            maxHeight: 'calc(100vh - 4rem)',
+          }}
+        >
           <RateLimitTable
             models={models}
             limits={limits}
