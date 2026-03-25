@@ -51,30 +51,41 @@ func NewDB(path string) (*DB, error) {
 
 func (d *DB) migrate() error {
 	migrations := []string{
-		`CREATE TABLE IF NOT EXISTS providers (
-			id          INTEGER PRIMARY KEY AUTOINCREMENT,
-			name        TEXT UNIQUE NOT NULL,
-			type        TEXT NOT NULL CHECK (type IN ('groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible')),
-			base_url    TEXT NOT NULL DEFAULT '',
-			api_key_enc BLOB NOT NULL DEFAULT '',
-			models      TEXT NOT NULL DEFAULT '[]',
-			priority    INTEGER NOT NULL DEFAULT 0,
-			enabled     INTEGER NOT NULL DEFAULT 1,
-			created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		`CREATE TABLE IF NOT EXISTS accounts (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			name          TEXT UNIQUE NOT NULL,
+			type          TEXT NOT NULL CHECK (type IN ('groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible')),
+			base_url      TEXT NOT NULL DEFAULT '',
+			api_key_enc   BLOB NOT NULL DEFAULT '',
+			models        TEXT NOT NULL DEFAULT '[]',
+			priority      INTEGER NOT NULL DEFAULT 0,
+			enabled       INTEGER NOT NULL DEFAULT 1,
+			default_model TEXT NOT NULL DEFAULT '',
+			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
-		`CREATE TABLE IF NOT EXISTS provider_limits (
-			provider_id INTEGER NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+		`CREATE TABLE IF NOT EXISTS account_limits (
+			account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+			model       TEXT NOT NULL DEFAULT '',
 			metric      TEXT NOT NULL,
 			max_value   INTEGER NOT NULL,
 			window_secs INTEGER NOT NULL,
-			PRIMARY KEY (provider_id, metric)
+			PRIMARY KEY (account_id, model, metric)
+		)`,
+		`CREATE TABLE IF NOT EXISTS rate_limit_definitions (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			provider    TEXT NOT NULL,
+			model       TEXT NOT NULL DEFAULT '',
+			metric      TEXT NOT NULL,
+			max_value   INTEGER NOT NULL,
+			window_secs INTEGER NOT NULL,
+			UNIQUE(provider, model, metric)
 		)`,
 		`CREATE TABLE IF NOT EXISTS request_logs (
 			id                INTEGER PRIMARY KEY AUTOINCREMENT,
 			timestamp         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			provider_id       INTEGER REFERENCES providers(id) ON DELETE SET NULL,
-			provider_name     TEXT NOT NULL,
+			account_id        INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+			account_name      TEXT NOT NULL,
 			model             TEXT NOT NULL,
 			endpoint          TEXT NOT NULL,
 			status            TEXT NOT NULL,
@@ -85,18 +96,18 @@ func (d *DB) migrate() error {
 			error_message     TEXT
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs(timestamp)`,
-		`CREATE INDEX IF NOT EXISTS idx_request_logs_provider ON request_logs(provider_id, timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_request_logs_account ON request_logs(account_id, timestamp)`,
 		`CREATE TABLE IF NOT EXISTS daily_stats (
 			date          TEXT NOT NULL,
-			provider_id   INTEGER REFERENCES providers(id) ON DELETE SET NULL,
-			provider_name TEXT NOT NULL,
+			account_id    INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+			account_name  TEXT NOT NULL,
 			total_requests        INTEGER NOT NULL DEFAULT 0,
 			success_count         INTEGER NOT NULL DEFAULT 0,
 			error_count           INTEGER NOT NULL DEFAULT 0,
 			total_prompt_tokens   INTEGER NOT NULL DEFAULT 0,
 			total_completion_tokens INTEGER NOT NULL DEFAULT 0,
 			avg_latency_ms        INTEGER,
-			PRIMARY KEY (date, provider_id)
+			PRIMARY KEY (date, account_id)
 		)`,
 		`CREATE TABLE IF NOT EXISTS settings (
 			key   TEXT PRIMARY KEY,
