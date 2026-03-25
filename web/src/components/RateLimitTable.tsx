@@ -101,86 +101,82 @@ export function RateLimitTable({
   const rows = ['', ...models]
 
   return (
-    <div className="rounded-lg border border-border flex flex-col" style={{ maxHeight: '400px' }}>
+    <div className="rounded-lg border border-border flex flex-col">
       {/* Remove number input spin buttons */}
       <style>{`
         .rlt-input::-webkit-inner-spin-button,
         .rlt-input::-webkit-outer-spin-button { display: none; }
         .rlt-input { -moz-appearance: textfield; }
+        .rlt-table thead th { position: sticky; top: 0; z-index: 1; }
       `}</style>
 
-      {/* Sticky header */}
-      <div className="overflow-x-auto flex-shrink-0">
-        <table className="w-full border-collapse">
+      <div className="overflow-auto" style={{ maxHeight: '400px' }}>
+        <table className="rlt-table w-full border-collapse">
+          {/* Sticky header */}
           <thead>
-            <tr className="bg-surface-overlay">
-              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border w-40">
+            <tr>
+              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay w-40">
                 Model
               </th>
               {METRIC_DEFS.map((m) => (
                 <th
                   key={m.key}
                   title={m.label}
-                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border text-center whitespace-nowrap"
+                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay text-center whitespace-nowrap"
                 >
                   {m.short}
                 </th>
               ))}
             </tr>
           </thead>
-        </table>
-      </div>
 
-      {/* Scrollable body */}
-      <div className="overflow-y-auto overflow-x-auto flex-1">
-        <table className="w-full border-collapse">
           <tbody>
-          {rows.map((model) => {
-            const isDefault = model === ''
-            return (
-              <tr
-                key={model === '' ? '__default__' : model}
-                className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
-              >
-                {/* Model name cell */}
-                <td className="px-3 py-2 border-b border-border text-sm font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[12rem]">
-                  {isDefault ? (
-                    <span className="text-text-secondary italic">{defaultRowLabel}</span>
-                  ) : (
-                    <span title={model} className="block truncate">{model}</span>
-                  )}
-                </td>
+            {rows.map((model) => {
+              const isDefault = model === ''
+              return (
+                <tr
+                  key={model === '' ? '__default__' : model}
+                  className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
+                >
+                  {/* Model name cell */}
+                  <td className="px-3 py-2 border-b border-border text-sm font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[12rem]">
+                    {isDefault ? (
+                      <span className="text-text-secondary italic">{defaultRowLabel}</span>
+                    ) : (
+                      <span title={model} className="block truncate">{model}</span>
+                    )}
+                  </td>
 
-                {/* Metric cells */}
-                {METRIC_DEFS.map((m) => {
-                  const value = getCellValue(model, m.key)
-                  const defaultVal = isDefault ? null : getDefaultValue(m.key)
-                  const isOverride = !isDefault && value !== null
-                  const placeholder = defaultVal !== null ? String(defaultVal) : '—'
+                  {/* Metric cells */}
+                  {METRIC_DEFS.map((m) => {
+                    const value = getCellValue(model, m.key)
+                    const defaultVal = isDefault ? null : getDefaultValue(m.key)
+                    const isOverride = !isDefault && value !== null
+                    const placeholder = defaultVal !== null ? String(defaultVal) : '—'
 
-                  return (
-                    <td key={m.key} className="px-1 py-1.5 border-b border-border">
-                      <input
-                        type="number"
-                        min={1}
-                        className={[
-                          'rlt-input',
-                          'w-full bg-transparent border border-transparent rounded px-2 py-1',
-                          'text-center text-sm focus:outline-none focus:border-accent focus:bg-surface',
-                          'transition-colors placeholder-text-muted',
-                          isOverride ? 'text-warning' : 'text-text-primary',
-                        ].join(' ')}
-                        value={value !== null ? String(value) : ''}
-                        placeholder={placeholder}
-                        onChange={(e) => handleCellChange(model, m.key, e.target.value)}
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-            )
-          })}
-        </tbody>
+                    return (
+                      <td key={m.key} className="px-1 py-1.5 border-b border-border">
+                        <input
+                          type="number"
+                          min={1}
+                          className={[
+                            'rlt-input',
+                            'w-full bg-transparent border border-transparent rounded px-2 py-1',
+                            'text-center text-sm focus:outline-none focus:border-accent focus:bg-surface',
+                            'transition-colors placeholder-text-muted',
+                            isOverride ? 'text-warning' : 'text-text-primary',
+                          ].join(' ')}
+                          value={value !== null ? String(value) : ''}
+                          placeholder={placeholder}
+                          onChange={(e) => handleCellChange(model, m.key, e.target.value)}
+                        />
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
         </table>
       </div>
 
