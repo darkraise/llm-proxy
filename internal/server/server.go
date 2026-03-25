@@ -66,20 +66,20 @@ func New(cfg Config) (*Server, error) {
 		encryptionKey = cryptopkg.DeriveKey(adminPassword, salt)
 	}
 
-	// Load providers from DB
-	providers, err := db.ListProviders()
+	// Load accounts from DB
+	accounts, err := db.ListAccounts()
 	if err != nil {
-		return nil, fmt.Errorf("load providers: %w", err)
+		return nil, fmt.Errorf("load accounts: %w", err)
 	}
 
 	// Seed from YAML if DB is empty
-	if len(providers) == 0 && cfg.SeedConfig != "" {
+	if len(accounts) == 0 && cfg.SeedConfig != "" {
 		if data, err := os.ReadFile(cfg.SeedConfig); err == nil {
-			slog.Info("seeding providers from config", "path", cfg.SeedConfig)
+			slog.Info("seeding accounts from config", "path", cfg.SeedConfig)
 			if yamlCfg, err := config.ParseYAML(data); err == nil {
-				for _, p := range yamlCfg.ToProviders() {
-					if _, err := db.CreateProvider(p); err != nil {
-						slog.Warn("seed provider failed", "name", p.Name, "error", err)
+				for _, p := range yamlCfg.ToAccounts() {
+					if _, err := db.CreateAccount(p); err != nil {
+						slog.Warn("seed account failed", "name", p.Name, "error", err)
 					}
 				}
 				// Store proxy settings
@@ -89,15 +89,15 @@ func New(cfg Config) (*Server, error) {
 				if yamlCfg.Proxy.MaxRetries > 0 {
 					db.SetSetting("max_retries", fmt.Sprintf("%d", yamlCfg.Proxy.MaxRetries))
 				}
-				// Reload providers
-				providers, _ = db.ListProviders()
+				// Reload accounts
+				accounts, _ = db.ListAccounts()
 			} else {
 				slog.Warn("failed to parse seed config", "error", err)
 			}
 		}
 	}
 
-	pool := provider.NewPool(providers)
+	pool := provider.NewPool(accounts)
 
 	// Async request logger
 	logChan := make(chan store.RequestLog, 1000)
@@ -168,21 +168,31 @@ func (s *Server) routes() {
 		return s.auth.RequireAuth(handler)
 	}
 
-	s.mux.Handle("GET /admin/api/providers", protected(s.admin.HandleListProviders))
-	s.mux.Handle("POST /admin/api/providers", protected(s.admin.HandleCreateProvider))
-	s.mux.Handle("PUT /admin/api/providers/{id}", protected(s.admin.HandleUpdateProvider))
-	s.mux.Handle("DELETE /admin/api/providers/{id}", protected(s.admin.HandleDeleteProvider))
-	s.mux.Handle("POST /admin/api/providers/{id}/test", protected(s.admin.HandleTestProvider))
+	s.mux.Handle("GET /admin/api/accounts", protected(s.admin.HandleListAccounts))
+	s.mux.Handle("POST /admin/api/accounts", protected(s.admin.HandleCreateAccount))
+	s.mux.Handle("PUT /admin/api/accounts/{id}", protected(s.admin.HandleUpdateAccount))
+	s.mux.Handle("DELETE /admin/api/accounts/{id}", protected(s.admin.HandleDeleteAccount))
+	s.mux.Handle("POST /admin/api/accounts/{id}/test", protected(s.admin.HandleTestAccount))
 
 	s.mux.Handle("GET /admin/api/stats/overview", protected(s.admin.HandleStatsOverview))
 	s.mux.Handle("GET /admin/api/stats/requests", protected(s.admin.HandleStatsRequests))
-	s.mux.Handle("GET /admin/api/stats/providers", protected(s.admin.HandleStatsProviders))
+	s.mux.Handle("GET /admin/api/stats/accounts", protected(s.admin.HandleStatsAccounts))
 
 	s.mux.Handle("GET /admin/api/settings", protected(s.admin.HandleGetSettings))
 	s.mux.Handle("PUT /admin/api/settings", protected(s.admin.HandleUpdateSettings))
 
 	s.mux.Handle("POST /admin/api/config/import", protected(s.admin.HandleConfigImport))
 	s.mux.Handle("GET /admin/api/config/export", protected(s.admin.HandleConfigExport))
+
+	// Rate limit definitions — /defaults must be registered before /{provider}
+	// so the more-specific pattern wins.
+	s.mux.Handle("GET /admin/api/ratelimits/{provider}/defaults", protected(s.admin.HandleGetDefaultLimits))
+	s.mux.Handle("GET /admin/api/ratelimits/{provider}", protected(s.admin.HandleListRateLimitDefs))
+	s.mux.Handle("PUT /admin/api/ratelimits", protected(s.admin.HandleSetRateLimitDef))
+	s.mux.Handle("DELETE /admin/api/ratelimits/{id}", protected(s.admin.HandleDeleteRateLimitDef))
+
+	// Account model discovery
+	s.mux.Handle("POST /admin/api/accounts/discover", protected(s.admin.HandleDiscoverModels))
 
 	// Admin UI: dev proxy or embedded SPA
 	if s.cfg.Dev && s.cfg.UIProxy != "" {
@@ -248,11 +258,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"status":              health,
-		"available_providers": available,
-		"total_providers":     len(status),
-		"providers":           status,
-		"version":             s.cfg.Version,
+		"status":             health,
+		"available_accounts": available,
+		"total_accounts":     len(status),
+		"accounts":           status,
+		"version":            s.cfg.Version,
 	})
 }
 
@@ -285,7 +295,7 @@ func (s *Server) Start() error {
 
 	slog.Info("server started",
 		"port", s.cfg.Port,
-		"providers", len(s.pool.Providers()),
+		"accounts", len(s.pool.Accounts()),
 		"version", s.cfg.Version,
 	)
 	return s.http.ListenAndServe()
