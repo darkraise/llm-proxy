@@ -78,7 +78,7 @@ export default function Layout() {
                 <path d="M8 0L0 4v8l8 4 8-4V4L8 0zM1.5 4.9L8 1.6l6.5 3.3v6.2L8 14.4l-6.5-3.3V4.9z" />
               </svg>
             </div>
-            <span className="text-sm font-semibold text-text-primary">LLM Proxy</span>
+            <span className="font-semibold text-text-primary">LLM Proxy</span>
           </div>
         </div>
 
@@ -90,7 +90,7 @@ export default function Layout() {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors ${
+                `flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors ${
                   isActive
                     ? 'bg-accent/10 text-accent font-medium'
                     : 'text-text-secondary hover:text-text-primary hover:bg-surface-overlay'
@@ -107,7 +107,7 @@ export default function Layout() {
         <div className="p-2 border-t border-border">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path

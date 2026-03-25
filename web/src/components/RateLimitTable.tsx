@@ -105,7 +105,7 @@ function EditableCell({
           className={[
             'rlt-input',
             'w-full bg-surface border border-accent rounded px-2 py-1',
-            'text-center text-sm focus:outline-none',
+            'text-center focus:outline-none',
             'placeholder-text-muted',
             colorCls,
           ].join(' ')}
@@ -122,7 +122,7 @@ function EditableCell({
           onClick={() => setFocused(true)}
           className={[
             'w-full border border-border/40 rounded px-2 py-1 cursor-text',
-            'text-center text-sm transition-colors hover:border-border',
+            'text-center transition-colors hover:border-border',
             colorCls,
           ].join(' ')}
         >
@@ -214,7 +214,7 @@ export function RateLimitTable({
                   className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
                 >
                   {/* Model name cell */}
-                  <td className="px-3 py-2 border-b border-border text-sm font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[12rem]">
+                  <td className="px-3 py-2 border-b border-border font-mono text-text-primary whitespace-nowrap overflow-hidden max-w-[12rem]">
                     {isDefault ? (
                       <span className="text-text-secondary italic">{defaultRowLabel}</span>
                     ) : (
@@ -235,7 +235,7 @@ export function RateLimitTable({
                     return (
                       <td key={m.key} className="px-1 py-1.5 border-b border-border">
                         {readOnly ? (
-                          <div className={`text-center text-sm px-2 py-1 ${
+                          <div className={`text-center px-2 py-1 ${
                             value !== null ? (isOverride ? 'text-warning' : 'text-text-primary') : 'text-text-muted'
                           }`}>
                             {displayVal ?? displayDefault ?? '—'}

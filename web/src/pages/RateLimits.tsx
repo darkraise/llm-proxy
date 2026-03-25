@@ -121,7 +121,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
   ).sort()
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-8 text-center">Loading…</div>
+    return <div className="text-text-muted py-8 text-center">Loading…</div>
   }
 
   const limitsForTable = defsToLimits(defs)
@@ -129,7 +129,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
+        <div className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
           {error}
         </div>
       )}
@@ -137,7 +137,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
       {/* ── Spreadsheet table ── */}
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text-primary">Rate Limit Definitions</h3>
+          <h3 className="font-semibold text-text-primary">Rate Limit Definitions</h3>
           {saving && (
             <span className="text-xs text-text-muted flex items-center gap-1.5">
               <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -160,12 +160,12 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
 
       {/* ── Refresh models ── */}
       <div className="card p-4">
-        <h3 className="text-sm font-semibold text-text-primary mb-3">Refresh Model List</h3>
+        <h3 className="font-semibold text-text-primary mb-3">Refresh Model List</h3>
         <p className="text-xs text-text-muted mb-3">
           Fetch available models from an existing account to add model rows to the table above.
         </p>
         {providerAccounts.length === 0 ? (
-          <p className="text-sm text-text-muted">No {provider} accounts configured.</p>
+          <p className="text-text-muted">No {provider} accounts configured.</p>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
             <select
@@ -243,7 +243,7 @@ export default function RateLimits() {
             <button
               key={p}
               onClick={() => setActiveTab(p)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-4 py-2.5 font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === p
                   ? 'border-accent text-accent'
                   : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border'
@@ -257,7 +257,7 @@ export default function RateLimits() {
 
       {/* Tab content */}
       {loadingAccounts ? (
-        <div className="text-sm text-text-muted py-8 text-center">Loading accounts…</div>
+        <div className="text-text-muted py-8 text-center">Loading accounts…</div>
       ) : (
         <ProviderTab key={activeTab} provider={activeTab} accounts={accounts} />
       )}

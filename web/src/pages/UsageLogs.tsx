@@ -136,7 +136,7 @@ export default function UsageLogs() {
       </div>
 
       {error && (
-        <div className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
+        <div className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
           {error}
         </div>
       )}
@@ -144,7 +144,7 @@ export default function UsageLogs() {
       {/* Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">

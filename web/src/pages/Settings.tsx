@@ -9,7 +9,7 @@ interface SaveStatus {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="card p-5">
-      <h2 className="text-sm font-semibold text-text-primary mb-4 pb-2 border-b border-border">
+      <h2 className="font-semibold text-text-primary mb-4 pb-2 border-b border-border">
         {title}
       </h2>
       {children}
@@ -203,7 +203,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
                 checked={proxyAuth}
                 onChange={(e) => setProxyAuth(e.target.checked)}
               />
-              <label htmlFor="proxy-auth" className="text-sm text-text-primary">
+              <label htmlFor="proxy-auth" className="text-text-primary">
                 Enable proxy auth
               </label>
             </div>
@@ -236,7 +236,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
 
         {/* Change password */}
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium text-text-primary mb-3">Change Admin Password</p>
+          <p className="font-medium text-text-primary mb-3">Change Admin Password</p>
           <form onSubmit={handleChangePassword} className="space-y-3">
             <Field label="New Password">
               <input
@@ -312,7 +312,7 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />
-            <label htmlFor="ollama-enabled" className="text-sm text-text-primary">
+            <label htmlFor="ollama-enabled" className="text-text-primary">
               Enable fallback
             </label>
           </div>
@@ -422,7 +422,7 @@ function ConfigSettings() {
         </div>
 
         {status && (
-          <p className={`text-sm ${status.ok ? 'text-success' : 'text-error'}`}>
+          <p className={`${status.ok ? 'text-success' : 'text-error'}`}>
             {status.msg}
           </p>
         )}
@@ -452,13 +452,13 @@ export default function Settings() {
       </div>
 
       {error && (
-        <div className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
+        <div className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
           {error}
         </div>
       )}
 
       {settings === null && !error ? (
-        <div className="text-sm text-text-muted text-center py-16">Loading…</div>
+        <div className="text-text-muted text-center py-16">Loading…</div>
       ) : settings ? (
         <div className="space-y-5">
           <GeneralSettings settings={settings} />

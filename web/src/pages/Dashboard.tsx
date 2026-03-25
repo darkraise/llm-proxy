@@ -85,7 +85,7 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
+        <div className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
           {error}
         </div>
       )}
@@ -132,7 +132,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Hourly bar chart */}
         <div className="card p-4 lg:col-span-2">
-          <p className="text-sm font-medium text-text-primary mb-3">
+          <p className="font-medium text-text-primary mb-3">
             Request Volume (24h)
           </p>
           <ResponsiveContainer width="100%" height={180}>
@@ -168,11 +168,11 @@ export default function Dashboard() {
 
         {/* Per-account breakdown */}
         <div className="card p-4">
-          <p className="text-sm font-medium text-text-primary mb-3">
+          <p className="font-medium text-text-primary mb-3">
             Account Breakdown (Today)
           </p>
           {accountStats.length === 0 ? (
-            <p className="text-sm text-text-muted text-center py-8">
+            <p className="text-text-muted text-center py-8">
               No requests yet
             </p>
           ) : (
@@ -203,9 +203,9 @@ export default function Dashboard() {
 
       {/* Account status strip */}
       <div className="card p-4">
-        <p className="text-sm font-medium text-text-primary mb-3">Account Status</p>
+        <p className="font-medium text-text-primary mb-3">Account Status</p>
         {accounts.length === 0 ? (
-          <p className="text-sm text-text-muted">No accounts configured.</p>
+          <p className="text-text-muted">No accounts configured.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             {accounts.map((p) => {
@@ -253,7 +253,7 @@ export default function Dashboard() {
       {/* Token usage */}
       {accountStats.length > 0 && (
         <div className="card p-4">
-          <p className="text-sm font-medium text-text-primary mb-3">
+          <p className="font-medium text-text-primary mb-3">
             Token Usage by Account (Today)
           </p>
           <ResponsiveContainer width="100%" height={120}>

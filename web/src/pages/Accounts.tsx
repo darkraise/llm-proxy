@@ -107,7 +107,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-          <h2 className="text-sm font-semibold text-text-primary">Edit Account</h2>
+          <h2 className="font-semibold text-text-primary">Edit Account</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z" />
@@ -188,7 +188,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
                     checked={form.enabled}
                     onChange={(e) => set('enabled', e.target.checked)}
                   />
-                  <label htmlFor="edit-enabled" className="text-sm text-text-primary">Enabled</label>
+                  <label htmlFor="edit-enabled" className="text-text-primary">Enabled</label>
                 </div>
               </div>
             </div>
@@ -203,7 +203,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
             </div>
 
             {error && (
-              <p className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{error}</p>
+              <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{error}</p>
             )}
           </div>
 
@@ -368,7 +368,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
-            <h2 className="text-sm font-semibold text-text-primary">Add Account</h2>
+            <h2 className="font-semibold text-text-primary">Add Account</h2>
             <p className="text-xs text-text-muted mt-0.5">
               Step {step} of 3 — {step === 1 ? 'Credentials' : step === 2 ? 'Discover Models' : 'Rate Limits & Confirm'}
             </p>
@@ -469,7 +469,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                   checked={freeOnly}
                   onChange={(e) => setFreeOnly(e.target.checked)}
                 />
-                <label htmlFor="free-only" className="text-sm text-text-primary">
+                <label htmlFor="free-only" className="text-text-primary">
                   Free models only
                   <span className="text-text-muted ml-1">(OpenRouter)</span>
                 </label>
@@ -492,7 +492,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
               </button>
 
               {discoverError && (
-                <p className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{discoverError}</p>
+                <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{discoverError}</p>
               )}
 
               {discovered && availableModels.length > 0 && (
@@ -513,7 +513,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                             onChange={() => toggleModel(id)}
                             className="rounded border-border bg-surface flex-shrink-0"
                           />
-                          <span className="text-sm text-text-primary font-mono truncate">{id}</span>
+                          <span className="text-text-primary font-mono truncate">{id}</span>
                         </label>
                       ))}
                     </div>
@@ -534,7 +534,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
               )}
 
               {discovered && availableModels.length === 0 && (
-                <p className="text-sm text-text-muted text-center py-4">No models found.</p>
+                <p className="text-text-muted text-center py-4">No models found.</p>
               )}
 
               <div className="flex justify-between pt-2 border-t border-border">
@@ -573,7 +573,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                   checked={enabled}
                   onChange={(e) => setEnabled(e.target.checked)}
                 />
-                <label htmlFor="wizard-enabled" className="text-sm text-text-primary">Enabled</label>
+                <label htmlFor="wizard-enabled" className="text-text-primary">Enabled</label>
               </div>
 
               <div>
@@ -586,7 +586,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
               </div>
 
               {/* Summary */}
-              <div className="bg-surface border border-border rounded-md px-4 py-3 space-y-1 text-sm">
+              <div className="bg-surface border border-border rounded-md px-4 py-3 space-y-1">
                 <p className="text-text-secondary">
                   <span className="text-text-muted">Provider:</span>{' '}
                   <span className="text-text-primary font-medium">{s1.type}</span>
@@ -604,7 +604,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
               </div>
 
               {saveError && (
-                <p className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{saveError}</p>
+                <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{saveError}</p>
               )}
 
               <div className="flex justify-between pt-2 border-t border-border">
@@ -792,14 +792,14 @@ export default function Accounts() {
       </div>
 
       {error && (
-        <div className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
+        <div className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">
           {error}
         </div>
       )}
 
       {/* Account list */}
       {loading ? (
-        <div className="text-sm text-text-muted text-center py-16">Loading…</div>
+        <div className="text-text-muted text-center py-16">Loading…</div>
       ) : accounts.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-text-secondary mb-3">No accounts configured yet.</p>
@@ -834,7 +834,7 @@ export default function Accounts() {
                 <div className="flex-1 p-3 min-w-0">
                   {/* Header: name + badges + icon actions */}
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold text-text-primary truncate">{p.name}</span>
+                    <span className="font-semibold text-text-primary truncate">{p.name}</span>
                     <span className="badge-neutral text-xs flex-shrink-0">{p.type}</span>
                     {!p.enabled && <span className="badge-warning text-xs flex-shrink-0">disabled</span>}
                     {rateLimited && <span className="badge-warning text-xs flex-shrink-0">rate limited</span>}
@@ -888,12 +888,12 @@ export default function Accounts() {
                   <div className="flex gap-3 px-2.5 py-1.5 bg-surface/50 rounded-md mb-2 text-center">
                     <div className="flex-1">
                       <div className="text-xs text-text-muted uppercase tracking-wide">Requests</div>
-                      <div className="text-sm font-bold text-text-primary">{formatCompact(p.total_requests)}</div>
+                      <div className="font-bold text-text-primary">{formatCompact(p.total_requests)}</div>
                     </div>
                     <div className="w-px bg-border" />
                     <div className="flex-1">
                       <div className="text-xs text-text-muted uppercase tracking-wide">Tokens</div>
-                      <div className="text-sm font-bold text-text-primary">{formatCompact(p.total_tokens)}</div>
+                      <div className="font-bold text-text-primary">{formatCompact(p.total_tokens)}</div>
                     </div>
                     <div className="w-px bg-border" />
                     <div className="flex-1">
@@ -903,7 +903,7 @@ export default function Accounts() {
                     <div className="w-px bg-border" />
                     <div className="flex-shrink-0 w-10">
                       <div className="text-xs text-text-muted uppercase tracking-wide">Pri</div>
-                      <div className="text-sm font-bold text-text-primary">{p.priority}</div>
+                      <div className="font-bold text-text-primary">{p.priority}</div>
                     </div>
                   </div>
 
