@@ -58,6 +58,8 @@ export interface RateLimitTableProps {
   onChange: (limits: AccountLimit[]) => void
   /** Label for the first "default" row. */
   defaultRowLabel?: string
+  /** When true, cells are not editable. */
+  readOnly?: boolean
 }
 
 export function RateLimitTable({
@@ -65,6 +67,7 @@ export function RateLimitTable({
   limits,
   onChange,
   defaultRowLabel = 'Default (all)',
+  readOnly = false,
 }: RateLimitTableProps) {
   const matrix = limitsToMatrix(limits)
   // Ensure the default row entry exists in matrix
@@ -156,20 +159,28 @@ export function RateLimitTable({
 
                     return (
                       <td key={m.key} className="px-1 py-1.5 border-b border-border">
-                        <input
-                          type="number"
-                          min={1}
-                          className={[
-                            'rlt-input',
-                            'w-full bg-transparent border border-border/40 rounded px-2 py-1',
-                            'text-center text-sm focus:outline-none focus:border-accent focus:bg-surface',
-                            'transition-colors placeholder-text-muted',
-                            isOverride ? 'text-warning' : 'text-text-primary',
-                          ].join(' ')}
-                          value={value !== null ? String(value) : ''}
-                          placeholder={placeholder}
-                          onChange={(e) => handleCellChange(model, m.key, e.target.value)}
-                        />
+                        {readOnly ? (
+                          <div className={`text-center text-sm px-2 py-1 ${
+                            value !== null ? (isOverride ? 'text-warning' : 'text-text-primary') : 'text-text-muted'
+                          }`}>
+                            {value !== null ? String(value) : (defaultVal !== null ? String(defaultVal) : '—')}
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            min={1}
+                            className={[
+                              'rlt-input',
+                              'w-full bg-transparent border border-border/40 rounded px-2 py-1',
+                              'text-center text-sm focus:outline-none focus:border-accent focus:bg-surface',
+                              'transition-colors placeholder-text-muted',
+                              isOverride ? 'text-warning' : 'text-text-primary',
+                            ].join(' ')}
+                            value={value !== null ? String(value) : ''}
+                            placeholder={placeholder}
+                            onChange={(e) => handleCellChange(model, m.key, e.target.value)}
+                          />
+                        )}
                       </td>
                     )
                   })}
@@ -180,8 +191,8 @@ export function RateLimitTable({
         </table>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-overlay text-xs text-text-muted flex-shrink-0">
+      {/* Legend (hidden in read-only mode) */}
+      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-overlay text-xs text-text-muted flex-shrink-0">
         <span>
           <span className="text-warning font-medium">Amber</span>
           {' '}= override
@@ -191,7 +202,7 @@ export function RateLimitTable({
           <span className="font-medium">—</span>
           {' '}= no limit set
         </span>
-      </div>
+      </div>}
     </div>
   )
 }

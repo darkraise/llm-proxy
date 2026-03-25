@@ -685,6 +685,35 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
   )
 }
 
+// ─── Rate Limit Accordion (read-only, collapsed by default) ─────────────────
+
+function RateLimitAccordion({ limits, models }: { limits: AccountLimit[]; models: string[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
+      >
+        <span className={`transition-transform ${open ? 'rotate-90' : ''}`}>&#9654;</span>
+        Rate Limits ({limits.length})
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          <RateLimitTable
+            models={models}
+            limits={limits}
+            onChange={() => {}}
+            defaultRowLabel="Account Default"
+            readOnly
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function Accounts() {
@@ -865,13 +894,7 @@ export default function Accounts() {
                     )}
 
                     {p.limits && p.limits.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {p.limits.map((l, i) => (
-                          <span key={i} className="badge-neutral">
-                            {l.model ? `${l.model}:` : ''}{l.max_value} {l.metric}/{l.window_secs}s
-                          </span>
-                        ))}
-                      </div>
+                      <RateLimitAccordion limits={p.limits} models={models} />
                     )}
 
                     {/* Rate limit usage */}
