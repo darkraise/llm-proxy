@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -208,25 +207,24 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Send a minimal chat completion request to test connectivity
+	// Test connectivity using GET /models — no tokens consumed, no request quota used.
 	client := &http.Client{Timeout: 10 * time.Second}
-	testBody := []byte(`{"model":"` + adminFirstModel(p.Models) + `","messages":[{"role":"user","content":"Hi"}],"max_tokens":1}`)
 
 	var testURL string
 	var testReq *http.Request
 
 	switch p.Type {
 	case "google":
-		model := adminFirstModel(p.Models)
-		testURL = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
-		googleBody := []byte(`{"contents":[{"role":"user","parts":[{"text":"Hi"}]}],"generationConfig":{"maxOutputTokens":1}}`)
-		testReq, _ = http.NewRequest("POST", testURL, bytes.NewReader(googleBody))
+		testURL = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/openai/models?key=%s", apiKey)
+		testReq, _ = http.NewRequest("GET", testURL, nil)
+	case "ollama":
+		testURL = p.BaseURL + "/models"
+		testReq, _ = http.NewRequest("GET", testURL, nil)
 	default:
-		testURL = p.BaseURL + "/chat/completions"
-		testReq, _ = http.NewRequest("POST", testURL, bytes.NewReader(testBody))
+		testURL = p.BaseURL + "/models"
+		testReq, _ = http.NewRequest("GET", testURL, nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 	}
-	testReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(testReq)
 	if err != nil {
