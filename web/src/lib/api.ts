@@ -70,12 +70,16 @@ export interface AccountLimit {
   window_secs: number
 }
 
+export interface MetricStatus {
+  metric: string
+  used: number
+  max: number
+}
+
 export interface AccountStatus {
   available: boolean
-  requests_today: number
-  tokens_today: number
-  last_error?: string
-  rate_limited: boolean
+  reason?: string
+  metrics?: MetricStatus[]
 }
 
 export interface Account {

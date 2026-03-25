@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api'
-import { RateLimitTable } from '../components/RateLimitTable'
+import { RateLimitTable, formatCompact } from '../components/RateLimitTable'
 
 const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
 
@@ -780,7 +780,7 @@ export default function Accounts() {
           {accounts.map((p) => {
             const models = parseAccountModels(p.models)
             const available = p.status?.available ?? p.enabled
-            const rateLimited = p.status?.rate_limited ?? false
+            const rateLimited = p.status?.reason?.includes('exhausted') ?? false
             const testRes = testResults[p.id]
 
             return (
@@ -838,16 +838,14 @@ export default function Accounts() {
                       <RateLimitAccordion limits={p.limits} models={models} />
                     )}
 
-                    {/* Rate limit usage */}
-                    {p.status && (
-                      <div className="flex gap-4 mt-2 text-xs text-text-muted">
-                        <span>Requests today: {p.status.requests_today}</span>
-                        <span>Tokens today: {p.status.tokens_today}</span>
-                        {p.status.last_error && (
-                          <span className="text-error truncate max-w-xs">
-                            Last error: {p.status.last_error}
+                    {/* Rate limit usage from metrics */}
+                    {p.status?.metrics && p.status.metrics.length > 0 && (
+                      <div className="flex flex-wrap gap-3 mt-2 text-xs text-text-muted">
+                        {p.status.metrics.map((m) => (
+                          <span key={m.metric}>
+                            {m.metric.toUpperCase()}: {m.used}/{formatCompact(m.max)}
                           </span>
-                        )}
+                        ))}
                       </div>
                     )}
 

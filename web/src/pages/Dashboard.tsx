@@ -210,7 +210,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             {accounts.map((p) => {
               const available = p.status?.available ?? p.enabled
-              const rateLimited = p.status?.rate_limited ?? false
+              const rateLimited = p.status?.reason?.includes('exhausted') ?? false
               const models = (() => {
                 try {
                   const arr = JSON.parse(p.models) as string[]

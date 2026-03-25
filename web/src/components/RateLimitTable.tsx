@@ -3,7 +3,7 @@ import { AccountLimit } from '../lib/api'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatCompact(n: number): string {
+export function formatCompact(n: number): string {
   if (n >= 1_000_000 && n % 1_000_000 === 0) return `${n / 1_000_000}M`
   if (n >= 1_000_000) return `${parseFloat((n / 1_000_000).toFixed(1))}M`
   if (n >= 1_000 && n % 1_000 === 0) return `${n / 1_000}K`
