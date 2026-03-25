@@ -361,16 +361,8 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
     const models = Array.from(selectedModels)
     setLoadingDefaults(true)
     try {
-      // First try admin-defined defaults.
-      let defaults = await api.ratelimits.defaults(s1.type, models)
-      // Fall back to live docs when no admin definitions exist.
-      if (!defaults || defaults.length === 0) {
-        try {
-          defaults = await api.ratelimits.fetchDocs(s1.type)
-        } catch {
-          defaults = []
-        }
-      }
+      // Load admin-defined rate limit defaults for the selected models.
+      const defaults = await api.ratelimits.defaults(s1.type, models)
       setLimits(defaults ?? [])
     } catch {
       setLimits([])

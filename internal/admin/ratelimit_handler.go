@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/darkraise/llm-proxy/internal/ratelimit"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
@@ -71,35 +70,6 @@ func (h *AdminHandler) HandleDeleteRateLimitDef(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, 200, map[string]string{"status": "ok"})
-}
-
-// HandleFetchProviderDocs fetches live rate limit definitions from provider
-// documentation pages and returns them as AccountLimit entries.
-//
-// POST /admin/api/ratelimits/{provider}/fetch-docs
-func (h *AdminHandler) HandleFetchProviderDocs(w http.ResponseWriter, r *http.Request) {
-	provider := r.PathValue("provider")
-	if provider == "" {
-		writeJSON(w, 400, map[string]string{"error": "provider is required"})
-		return
-	}
-
-	defs, err := ratelimit.FetchProviderRateLimits(provider)
-	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": err.Error()})
-		return
-	}
-
-	limits := make([]store.AccountLimit, len(defs))
-	for i, d := range defs {
-		limits[i] = store.AccountLimit{
-			Model:      d.Model,
-			Metric:     d.Metric,
-			MaxValue:   d.MaxValue,
-			WindowSecs: d.WindowSecs,
-		}
-	}
-	writeJSON(w, 200, limits)
 }
 
 // HandleGetDefaultLimits returns merged default limits for a provider+models

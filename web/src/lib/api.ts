@@ -208,8 +208,6 @@ export const api = {
         'GET',
         `/ratelimits/${provider}/defaults${models.length > 0 ? '?models=' + models.join(',') : ''}`,
       ),
-    fetchDocs: (provider: string) =>
-      request<AccountLimit[]>('POST', `/ratelimits/${provider}/fetch-docs`),
   },
 
   // ─── Stats ───────────────────────────────────────────────────────────────

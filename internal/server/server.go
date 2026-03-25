@@ -193,7 +193,6 @@ func (s *Server) routes() {
 	// Rate limit definitions — more-specific sub-paths must be registered before
 	// /{provider} so the exact patterns win over the wildcard.
 	s.mux.Handle("GET /admin/api/ratelimits/{provider}/defaults", protected(s.admin.HandleGetDefaultLimits))
-	s.mux.Handle("POST /admin/api/ratelimits/{provider}/fetch-docs", protected(s.admin.HandleFetchProviderDocs))
 	s.mux.Handle("GET /admin/api/ratelimits/{provider}", protected(s.admin.HandleListRateLimitDefs))
 	s.mux.Handle("PUT /admin/api/ratelimits", protected(s.admin.HandleSetRateLimitDef))
 	s.mux.Handle("DELETE /admin/api/ratelimits/{id}", protected(s.admin.HandleDeleteRateLimitDef))
