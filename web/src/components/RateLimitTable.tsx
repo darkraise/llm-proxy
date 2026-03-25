@@ -90,35 +90,45 @@ function EditableCell({
 }) {
   const [focused, setFocused] = useState(false)
 
-  return focused ? (
-    <input
-      type="number"
-      min={1}
-      autoFocus
-      className={[
-        'rlt-input',
-        'w-full bg-transparent border border-accent rounded px-2 py-1',
-        'text-center text-sm focus:outline-none bg-surface',
-        'transition-colors placeholder-text-muted',
-        isOverride ? 'text-warning' : 'text-text-primary',
-      ].join(' ')}
-      value={value !== null ? String(value) : ''}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={() => setFocused(false)}
-    />
-  ) : (
-    <div
-      onClick={() => setFocused(true)}
-      className={[
-        'w-full border border-border/40 rounded px-2 py-1 cursor-text',
-        'text-center text-sm transition-colors hover:border-border',
-        value !== null
-          ? isOverride ? 'text-warning' : 'text-text-primary'
-          : 'text-text-muted',
-      ].join(' ')}
-    >
-      {displayValue ?? placeholder}
+  const colorCls = value !== null
+    ? isOverride ? 'text-warning' : 'text-text-primary'
+    : 'text-text-muted'
+
+  return (
+    <div className="relative">
+      {focused ? (
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoFocus
+          className={[
+            'rlt-input',
+            'w-full bg-surface border border-accent rounded px-2 py-1',
+            'text-center text-sm focus:outline-none',
+            'placeholder-text-muted',
+            colorCls,
+          ].join(' ')}
+          value={value !== null ? String(value) : ''}
+          placeholder={placeholder}
+          onChange={(e) => {
+            const v = e.target.value.replace(/[^0-9]/g, '')
+            onChange(v)
+          }}
+          onBlur={() => setFocused(false)}
+        />
+      ) : (
+        <div
+          onClick={() => setFocused(true)}
+          className={[
+            'w-full border border-border/40 rounded px-2 py-1 cursor-text',
+            'text-center text-sm transition-colors hover:border-border',
+            colorCls,
+          ].join(' ')}
+        >
+          {displayValue ?? placeholder}
+        </div>
+      )}
     </div>
   )
 }
