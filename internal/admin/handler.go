@@ -27,14 +27,15 @@ func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKe
 }
 
 type accountRequest struct {
-	Name     string              `json:"name"`
-	Type     string              `json:"type"`
-	BaseURL  string              `json:"base_url"`
-	APIKey   string              `json:"api_key"`
-	Models   []string            `json:"models"`
-	Priority int                 `json:"priority"`
-	Enabled  *bool               `json:"enabled"`
-	Limits   []store.AccountLimit `json:"limits"`
+	Name         string               `json:"name"`
+	Type         string               `json:"type"`
+	BaseURL      string               `json:"base_url"`
+	APIKey       string               `json:"api_key"`
+	Models       []string             `json:"models"`
+	Priority     int                  `json:"priority"`
+	Enabled      *bool                `json:"enabled"`
+	DefaultModel string               `json:"default_model"`
+	Limits       []store.AccountLimit `json:"limits"`
 }
 
 func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request) {
@@ -95,14 +96,15 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	p := store.Account{
-		Name:     req.Name,
-		Type:     req.Type,
-		BaseURL:  req.BaseURL,
-		APIKey:   apiKeyEnc,
-		Models:   string(modelsJSON),
-		Priority: req.Priority,
-		Enabled:  enabled,
-		Limits:   req.Limits,
+		Name:         req.Name,
+		Type:         req.Type,
+		BaseURL:      req.BaseURL,
+		APIKey:       apiKeyEnc,
+		Models:       string(modelsJSON),
+		Priority:     req.Priority,
+		Enabled:      enabled,
+		DefaultModel: req.DefaultModel,
+		Limits:       req.Limits,
 	}
 
 	id, err := h.db.CreateAccount(p)
@@ -159,14 +161,15 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	p := store.Account{
-		Name:     req.Name,
-		Type:     req.Type,
-		BaseURL:  req.BaseURL,
-		APIKey:   apiKeyEnc,
-		Models:   string(modelsJSON),
-		Priority: req.Priority,
-		Enabled:  enabled,
-		Limits:   req.Limits,
+		Name:         req.Name,
+		Type:         req.Type,
+		BaseURL:      req.BaseURL,
+		APIKey:       apiKeyEnc,
+		Models:       string(modelsJSON),
+		Priority:     req.Priority,
+		Enabled:      enabled,
+		DefaultModel: req.DefaultModel,
+		Limits:       req.Limits,
 	}
 
 	if err := h.db.UpdateAccount(id, p); err != nil {
