@@ -15,19 +15,6 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   'openai-compatible': '',
 }
 
-// Metric definitions: key, label, window in seconds
-const METRIC_DEFS: { key: string; label: string; window: number }[] = [
-  { key: 'rpm', label: 'Requests per minute', window: 60 },
-  { key: 'rpd', label: 'Requests per day', window: 86400 },
-  { key: 'rpmo', label: 'Requests per month', window: 2592000 },
-  { key: 'rps', label: 'Requests per second', window: 1 },
-  { key: 'tpm', label: 'Tokens per minute', window: 60 },
-  { key: 'tpd', label: 'Tokens per day', window: 86400 },
-  { key: 'tpmo', label: 'Tokens per month', window: 2592000 },
-]
-const METRIC_WINDOW: Record<string, number> = Object.fromEntries(METRIC_DEFS.map((m) => [m.key, m.window]))
-const METRICS = METRIC_DEFS.map((m) => m.key)
-
 function parseModels(raw: string): string[] {
   return raw
     .split(/[\n,]+/)
@@ -45,56 +32,6 @@ function parseAccountModels(modelsJSON: string): string[] {
   } catch {
     return []
   }
-}
-
-// ─── Limit Row ────────────────────────────────────────────────────────────────
-
-interface LimitRowProps {
-  limit: AccountLimit
-  index: number
-  onUpdate: (idx: number, partial: Partial<AccountLimit>) => void
-  onRemove: (idx: number) => void
-}
-
-function LimitRow({ limit, index, onUpdate, onRemove }: LimitRowProps) {
-  return (
-    <div className="flex items-center gap-2 bg-surface p-2 rounded-md border border-border">
-      <select
-        className="input py-1 flex-1 min-w-0"
-        value={limit.metric}
-        onChange={(e) => {
-          const metric = e.target.value
-          onUpdate(index, { metric, window_secs: METRIC_WINDOW[metric] ?? 60 })
-        }}
-      >
-        {METRICS.map((m) => (
-          <option key={m} value={m}>{m}</option>
-        ))}
-      </select>
-      <span className="text-text-muted text-xs flex-shrink-0">max</span>
-      <input
-        type="number"
-        className="input py-1 w-20 flex-shrink-0"
-        value={limit.max_value}
-        min={1}
-        onChange={(e) => onUpdate(index, { max_value: parseInt(e.target.value) || 1 })}
-      />
-      <span className="text-text-muted text-xs flex-shrink-0">/{limit.window_secs}s</span>
-      <button
-        type="button"
-        onClick={() => onRemove(index)}
-        className="text-error hover:text-error/70 flex-shrink-0"
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-          <path
-            fillRule="evenodd"
-            d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"
-          />
-        </svg>
-      </button>
-    </div>
-  )
 }
 
 // ─── Edit Modal (existing accounts) ──────────────────────────────────────────
@@ -136,18 +73,6 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
     })
   }
 
-  function addLimit() {
-    set('limits', [...form.limits, { model: '', metric: 'rpm', max_value: 100, window_secs: 60 }])
-  }
-
-  function updateLimit(idx: number, partial: Partial<AccountLimit>) {
-    set('limits', form.limits.map((l, i) => (i === idx ? { ...l, ...partial } : l)))
-  }
-
-  function removeLimit(idx: number) {
-    set('limits', form.limits.filter((_, i) => i !== idx))
-  }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -167,8 +92,8 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <h2 className="text-base font-semibold text-text-primary">Edit Account</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -177,96 +102,99 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
-          <div>
-            <label className="label">Name</label>
-            <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} required />
-          </div>
-
-          <div>
-            <label className="label">Provider</label>
-            <select className="input" value={form.type} onChange={(e) => set('type', e.target.value)}>
-              {PROVIDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Base URL</label>
-            <input className="input" value={form.base_url} onChange={(e) => set('base_url', e.target.value)} />
-          </div>
-
-          <div>
-            <label className="label">
-              API Key <span className="text-text-muted normal-case">(leave blank to keep current)</span>
-            </label>
-            <input
-              className="input font-mono"
-              type="password"
-              value={form.api_key}
-              onChange={(e) => set('api_key', e.target.value)}
-              placeholder="••••••••"
-              autoComplete="off"
-            />
-          </div>
-
-          <div>
-            <label className="label">Models (one per line or comma-separated)</label>
-            <textarea
-              className="input font-mono resize-none"
-              rows={3}
-              value={modelsRaw}
-              onChange={(e) => setModelsRaw(e.target.value)}
-              placeholder="gpt-4o&#10;gpt-4o-mini"
-            />
-          </div>
-
-          <div>
-            <label className="label">Default Model</label>
-            <select className="input" value={form.default_model} onChange={(e) => set('default_model', e.target.value)}>
-              <option value="">(none)</option>
-              {parsedModels.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Priority (lower = higher priority)</label>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              value={form.priority}
-              onChange={(e) => set('priority', parseInt(e.target.value) || 0)}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              id="edit-enabled"
-              type="checkbox"
-              className="rounded border-border bg-surface"
-              checked={form.enabled}
-              onChange={(e) => set('enabled', e.target.checked)}
-            />
-            <label htmlFor="edit-enabled" className="text-sm text-text-primary">Enabled</label>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="label mb-0">Rate Limits</label>
-              <button type="button" onClick={addLimit} className="btn-secondary text-xs px-2 py-1">+ Add limit</button>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Name</label>
+                <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Provider</label>
+                <select className="input" value={form.type} onChange={(e) => set('type', e.target.value)}>
+                  {PROVIDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="space-y-2">
-              {form.limits.map((l, i) => (
-                <LimitRow key={i} limit={l} index={i} onUpdate={updateLimit} onRemove={removeLimit} />
-              ))}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Base URL</label>
+                <input className="input" value={form.base_url} onChange={(e) => set('base_url', e.target.value)} />
+              </div>
+              <div>
+                <label className="label">
+                  API Key <span className="text-text-muted normal-case">(blank = keep current)</span>
+                </label>
+                <input
+                  className="input font-mono"
+                  type="password"
+                  value={form.api_key}
+                  onChange={(e) => set('api_key', e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="off"
+                />
+              </div>
             </div>
+
+            <div>
+              <label className="label">Models (one per line or comma-separated)</label>
+              <textarea
+                className="input font-mono resize-none"
+                rows={2}
+                value={modelsRaw}
+                onChange={(e) => setModelsRaw(e.target.value)}
+                placeholder="gpt-4o&#10;gpt-4o-mini"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="label">Default Model</label>
+                <select className="input" value={form.default_model} onChange={(e) => set('default_model', e.target.value)}>
+                  <option value="">(none)</option>
+                  {parsedModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Priority</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  value={form.priority}
+                  onChange={(e) => set('priority', parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div className="flex items-end pb-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="edit-enabled"
+                    type="checkbox"
+                    className="rounded border-border bg-surface"
+                    checked={form.enabled}
+                    onChange={(e) => set('enabled', e.target.checked)}
+                  />
+                  <label htmlFor="edit-enabled" className="text-sm text-text-primary">Enabled</label>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="label mb-2">Rate Limits</label>
+              <RateLimitTable
+                models={parsedModels}
+                limits={form.limits}
+                onChange={(newLimits) => set('limits', newLimits)}
+              />
+            </div>
+
+            {error && (
+              <p className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{error}</p>
+            )}
           </div>
 
-          {error && (
-            <p className="text-sm text-error bg-error/10 border border-error/30 rounded-md px-3 py-2">{error}</p>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <div className="flex justify-end gap-2 px-5 py-3 border-t border-border flex-shrink-0">
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
               {saving ? 'Saving…' : 'Update'}
