@@ -6,3 +6,5 @@ node_modules/
 web/dist/
 .env
 config.yml
+llm-proxy
+llm-proxy.exe
