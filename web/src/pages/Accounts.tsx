@@ -626,12 +626,44 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
   )
 }
 
+// ─── Models Accordion (collapsed by default) ────────────────────────────────
+
+function ModelsAccordion({ models, defaultModel }: { models: string[]; defaultModel: string }) {
+  const [open, setOpen] = useState(false)
+  if (models.length === 0) return null
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
+      >
+        <span className={`transition-transform ${open ? 'rotate-90' : ''}`}>&#9654;</span>
+        Models ({models.length})
+      </button>
+      {open && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {models.map((m) => (
+            <span
+              key={m}
+              className={`badge-accent font-mono text-[10px] ${defaultModel === m ? 'ring-1 ring-accent' : ''}`}
+              title={defaultModel === m ? 'Default model' : undefined}
+            >
+              {m}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Rate Limit Accordion (read-only, collapsed by default) ─────────────────
 
 function RateLimitAccordion({ limits, models }: { limits: AccountLimit[]; models: string[] }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="mt-2">
+    <div>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -776,128 +808,123 @@ export default function Accounts() {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {accounts.map((p) => {
             const models = parseAccountModels(p.models)
             const available = p.status?.available ?? p.enabled
             const rateLimited = p.status?.reason?.includes('exhausted') ?? false
             const testRes = testResults[p.id]
 
+            const stripColor = !p.enabled
+              ? 'bg-text-muted'
+              : rateLimited
+                ? 'bg-warning'
+                : available
+                  ? 'bg-success'
+                  : 'bg-error'
+
             return (
-              <div key={p.id} className="card p-4">
-                <div className="flex items-start gap-3">
-                  {/* Status dot */}
-                  <div className="mt-1 flex-shrink-0">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full block ${
-                        !p.enabled
-                          ? 'bg-text-muted'
-                          : rateLimited
-                            ? 'bg-warning'
-                            : available
-                              ? 'bg-success'
-                              : 'bg-error'
-                      }`}
-                      title={
-                        !p.enabled
-                          ? 'Disabled'
-                          : rateLimited
-                            ? 'Rate limited'
-                            : available
-                              ? 'Available'
-                              : 'Unavailable'
-                      }
-                    />
+              <div
+                key={p.id}
+                className={`card overflow-hidden flex ${!p.enabled ? 'opacity-60' : ''}`}
+              >
+                {/* Left color strip */}
+                <div className={`w-1 flex-shrink-0 ${stripColor}`} />
+
+                <div className="flex-1 p-3 min-w-0">
+                  {/* Header: name + badges + icon actions */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-text-primary truncate">{p.name}</span>
+                    <span className="badge-neutral text-[10px] flex-shrink-0">{p.type}</span>
+                    {!p.enabled && <span className="badge-warning text-[10px] flex-shrink-0">disabled</span>}
+                    {rateLimited && <span className="badge-warning text-[10px] flex-shrink-0">rate limited</span>}
+                    <span className="flex-1" />
+                    <div className="flex gap-0.5 flex-shrink-0">
+                      <button
+                        onClick={() => handleTest(p.id)}
+                        disabled={testRes === 'testing'}
+                        className="p-1 rounded hover:bg-surface-overlay text-accent transition-colors disabled:opacity-50"
+                        title="Test connectivity"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"/></svg>
+                      </button>
+                      <button
+                        onClick={() => openEdit(p)}
+                        className="p-1 rounded hover:bg-surface-overlay text-text-secondary transition-colors"
+                        title="Edit account"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zM13.5 6.207 9.793 2.5 3.5 8.793V12.5h3.707l6.293-6.293z"/><path d="M1 13.5V16h2.5l.793-.793H1.5v-1.914L1 13.5z"/></svg>
+                      </button>
+                      {deleteConfirm === p.id ? (
+                        <>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="p-1 rounded bg-error/10 text-error transition-colors"
+                            title="Confirm delete"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/></svg>
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(null)}
+                            className="p-1 rounded hover:bg-surface-overlay text-text-muted transition-colors"
+                            title="Cancel"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirm(p.id)}
+                          className="p-1 rounded hover:bg-error/10 text-error/60 hover:text-error transition-colors"
+                          title="Delete account"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-text-primary">{p.name}</span>
-                      <span className="badge-neutral">{p.type}</span>
-                      {!p.enabled && <span className="badge-warning">disabled</span>}
-                      {rateLimited && <span className="badge-warning">rate limited</span>}
+                  {/* Stats bar */}
+                  <div className="flex gap-3 px-2.5 py-1.5 bg-surface/50 rounded-md mb-2 text-center">
+                    <div className="flex-1">
+                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Requests</div>
+                      <div className="text-sm font-bold text-text-primary">{formatCompact(p.total_requests)}</div>
                     </div>
-                    <p className="text-xs text-text-muted mt-0.5 truncate">{p.base_url || 'No URL'}</p>
+                    <div className="w-px bg-border" />
+                    <div className="flex-1">
+                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Tokens</div>
+                      <div className="text-sm font-bold text-text-primary">{formatCompact(p.total_tokens)}</div>
+                    </div>
+                    <div className="w-px bg-border" />
+                    <div className="flex-1">
+                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Default</div>
+                      <div className="text-[10px] font-mono text-accent truncate">{p.default_model || '—'}</div>
+                    </div>
+                    <div className="w-px bg-border" />
+                    <div className="flex-shrink-0 w-10">
+                      <div className="text-[9px] text-text-muted uppercase tracking-wide">Pri</div>
+                      <div className="text-sm font-bold text-text-primary">{p.priority}</div>
+                    </div>
+                  </div>
 
-                    {models.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {models.map((m) => (
-                          <span
-                            key={m}
-                            className={`badge-accent font-mono text-xs ${p.default_model === m ? 'ring-1 ring-accent' : ''}`}
-                            title={p.default_model === m ? 'Default model' : undefined}
-                          >
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                  {/* Test result */}
+                  {testRes && testRes !== 'testing' && (
+                    <div
+                      className={`mb-2 text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
+                        testRes.success ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
+                      }`}
+                    >
+                      {testRes.success
+                        ? `Connected (HTTP ${testRes.status_code})`
+                        : `Failed: ${testRes.error}`}
+                    </div>
+                  )}
 
+                  {/* Accordions */}
+                  <div className="flex gap-4">
+                    <ModelsAccordion models={models} defaultModel={p.default_model} />
                     {p.limits && p.limits.length > 0 && (
                       <RateLimitAccordion limits={p.limits} models={models} />
-                    )}
-
-                    {/* Lifetime totals */}
-                    {(p.total_requests > 0 || p.total_tokens > 0) && (
-                      <div className="flex gap-4 mt-2 text-xs text-text-muted">
-                        <span>Requests: {formatCompact(p.total_requests)}</span>
-                        <span>Tokens: {formatCompact(p.total_tokens)}</span>
-                      </div>
-                    )}
-
-                    {/* Test result */}
-                    {testRes && testRes !== 'testing' && (
-                      <div
-                        className={`mt-2 text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
-                          testRes.success ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
-                        }`}
-                      >
-                        {testRes.success
-                          ? `Connected (HTTP ${testRes.status_code})`
-                          : `Failed: ${testRes.error}`}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => handleTest(p.id)}
-                      disabled={testRes === 'testing'}
-                      className="btn-secondary text-xs px-2 py-1"
-                      title="Test connectivity"
-                    >
-                      {testRes === 'testing' ? 'Testing…' : 'Test'}
-                    </button>
-                    <button
-                      onClick={() => openEdit(p)}
-                      className="btn-secondary text-xs px-2 py-1"
-                    >
-                      Edit
-                    </button>
-                    {deleteConfirm === p.id ? (
-                      <>
-                        <button
-                          onClick={() => handleDelete(p.id)}
-                          className="btn-danger text-xs px-2 py-1"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(null)}
-                          className="btn-secondary text-xs px-2 py-1"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => setDeleteConfirm(p.id)}
-                        className="btn-danger text-xs px-2 py-1"
-                      >
-                        Delete
-                      </button>
                     )}
                   </div>
                 </div>
