@@ -101,7 +101,7 @@ export function RateLimitTable({
   const rows = ['', ...models]
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="rounded-lg border border-border flex flex-col" style={{ maxHeight: '400px' }}>
       {/* Remove number input spin buttons */}
       <style>{`
         .rlt-input::-webkit-inner-spin-button,
@@ -109,26 +109,32 @@ export function RateLimitTable({
         .rlt-input { -moz-appearance: textfield; }
       `}</style>
 
-      <table className="w-full border-collapse">
-        {/* Header */}
-        <thead>
-          <tr className="bg-surface-overlay">
-            <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border w-40">
-              Model
-            </th>
-            {METRIC_DEFS.map((m) => (
-              <th
-                key={m.key}
-                title={m.label}
-                className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border text-center whitespace-nowrap"
-              >
-                {m.short}
+      {/* Sticky header */}
+      <div className="overflow-x-auto flex-shrink-0">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-surface-overlay">
+              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border w-40">
+                Model
               </th>
-            ))}
-          </tr>
-        </thead>
+              {METRIC_DEFS.map((m) => (
+                <th
+                  key={m.key}
+                  title={m.label}
+                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border text-center whitespace-nowrap"
+                >
+                  {m.short}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        </table>
+      </div>
 
-        <tbody>
+      {/* Scrollable body */}
+      <div className="overflow-y-auto overflow-x-auto flex-1">
+        <table className="w-full border-collapse">
+          <tbody>
           {rows.map((model) => {
             const isDefault = model === ''
             return (
@@ -175,10 +181,11 @@ export function RateLimitTable({
             )
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-overlay text-xs text-text-muted">
+      <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-overlay text-xs text-text-muted flex-shrink-0">
         <span>
           <span className="text-warning font-medium">Amber</span>
           {' '}= override
