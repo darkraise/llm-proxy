@@ -158,14 +158,31 @@ func TestGetDefaultLimits_EmptyModels(t *testing.T) {
 	}
 }
 
-func TestGetDefaultLimits_NoDefsForProvider(t *testing.T) {
+func TestGetDefaultLimits_FallsBackToDocumentedDefaults(t *testing.T) {
 	db := newTestDB(t)
 
-	limits, err := db.GetDefaultLimits("groq", []string{"llama-3.3-70b"})
+	// No admin-defined limits — should fall back to documented free-tier defaults
+	limits, err := db.GetDefaultLimits("groq", []string{"llama-3.3-70b-versatile"})
 	if err != nil {
 		t.Fatalf("GetDefaultLimits: %v", err)
 	}
-	if len(limits) != 0 {
-		t.Errorf("expected empty result when no defs exist, got %d", len(limits))
+	if len(limits) == 0 {
+		t.Fatal("expected documented defaults for groq, got empty")
+	}
+
+	found := false
+	for _, l := range limits {
+		if l.Model == "llama-3.3-70b-versatile" && l.Metric == "tpm" && l.MaxValue == 12000 {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected documented tpm=12000 for llama-3.3-70b-versatile")
+	}
+
+	// Unknown provider should return empty
+	limits2, _ := db.GetDefaultLimits("unknown-provider", []string{"model"})
+	if len(limits2) != 0 {
+		t.Errorf("expected empty for unknown provider, got %d", len(limits2))
 	}
 }
