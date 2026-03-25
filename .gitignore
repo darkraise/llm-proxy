@@ -1,0 +1,8 @@
+.superpowers/
+data/
+*.db
+*.sqlite
+node_modules/
+web/dist/
+.env
+config.yml
