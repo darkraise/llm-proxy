@@ -1,0 +1,91 @@
+proxy:
+  request_timeout: 30   # seconds per upstream request
+  max_retries: 3        # attempts before failing to next provider
+
+fallback:
+  enabled: false
+  base_url: ""
+  model: ""
+  timeout: 30
+
+providers:
+  # OpenAI — type: openai (no base_url needed; defaults to api.openai.com)
+  - name: openai
+    type: openai
+    api_key: sk-YOUR_OPENAI_API_KEY
+    models:
+      - gpt-4o
+      - gpt-4o-mini
+      - gpt-4-turbo
+    limits:
+      - metric: rpm
+        max_value: 500
+      - metric: tpm
+        max_value: 300000
+    enabled: true
+
+  # Google Gemini — type: google (uses Gemini API natively)
+  - name: google
+    type: google
+    api_key: AIzaSy_YOUR_GOOGLE_API_KEY
+    models:
+      - gemini-2.0-flash
+      - gemini-2.5-pro
+    limits:
+      - metric: rpm
+        max_value: 60
+      - metric: tpd
+        max_value: 1000000
+    enabled: true
+
+  # Anthropic — OpenAI-compatible base_url
+  - name: anthropic
+    type: openai
+    base_url: https://api.anthropic.com/v1
+    api_key: sk-ant-YOUR_ANTHROPIC_API_KEY
+    models:
+      - claude-3-5-sonnet-20241022
+      - claude-3-5-haiku-20241022
+    limits:
+      - metric: rpm
+        max_value: 50
+    enabled: true
+
+  # Groq — OpenAI-compatible, very fast inference
+  - name: groq
+    type: openai
+    base_url: https://api.groq.com/openai/v1
+    api_key: gsk_YOUR_GROQ_API_KEY
+    models:
+      - llama-3.3-70b-versatile
+      - llama-3.1-8b-instant
+    limits:
+      - metric: rpm
+        max_value: 30
+      - metric: tpm
+        max_value: 6000
+    enabled: true
+
+  # Mistral — OpenAI-compatible
+  - name: mistral
+    type: openai
+    base_url: https://api.mistral.ai/v1
+    api_key: YOUR_MISTRAL_API_KEY
+    models:
+      - mistral-large-latest
+      - mistral-small-latest
+    limits:
+      - metric: rpm
+        max_value: 60
+    enabled: true
+
+  # Ollama — local OpenAI-compatible endpoint
+  - name: ollama
+    type: openai
+    base_url: http://localhost:11434/v1
+    api_key: ollama
+    models:
+      - llama3.2
+      - qwen2.5-coder:7b
+    limits: []
+    enabled: false

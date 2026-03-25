@@ -1,0 +1,18 @@
+services:
+  llm-proxy:
+    image: darkraise/llm-proxy:latest
+    container_name: llm-proxy
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./data:/data
+      - ./config.yml:/app/seed.yml:ro
+    environment:
+      - ADMIN_PASSWORD=changeme
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/llm-proxy", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

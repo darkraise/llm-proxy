@@ -1,0 +1,16 @@
+services:
+  llm-proxy:
+    build: .
+    command: ["./llm-proxy", "--dev", "--ui-proxy=http://web:5173"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./data:/data
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      - ./web:/app
+    ports:
+      - "5173:5173"
