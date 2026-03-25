@@ -8,11 +8,11 @@ import (
 
 func makeTestProviders() []store.Provider {
 	return []store.Provider{
-		{ID: 1, Name: "groq", Type: "openai", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("k1"), Models: `["llama-3.3-70b-versatile"]`, Priority: 0, Enabled: true,
+		{ID: 1, Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("k1"), Models: `["llama-3.3-70b-versatile"]`, Priority: 0, Enabled: true,
 			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 		{ID: 2, Name: "google-1", Type: "google", BaseURL: "", APIKey: []byte("k2"), Models: `["gemini-2.5-flash"]`, Priority: 1, Enabled: true,
 			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 10, WindowSecs: 60}}},
-		{ID: 3, Name: "cerebras", Type: "openai", BaseURL: "https://api.cerebras.ai/v1", APIKey: []byte("k3"), Models: `["llama-3.3-70b"]`, Priority: 2, Enabled: true,
+		{ID: 3, Name: "cerebras", Type: "cerebras", BaseURL: "https://api.cerebras.ai/v1", APIKey: []byte("k3"), Models: `["llama-3.3-70b"]`, Priority: 2, Enabled: true,
 			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 	}
 }
@@ -85,7 +85,7 @@ func TestPool_SkipsExhaustedProviders(t *testing.T) {
 
 func TestPool_AllExhausted_ReturnsError(t *testing.T) {
 	providers := []store.Provider{
-		{ID: 1, Name: "p1", Type: "openai", Models: `["m"]`, Enabled: true,
+		{ID: 1, Name: "p1", Type: "openai-compatible", Models: `["m"]`, Enabled: true,
 			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 1, WindowSecs: 60}}},
 	}
 	pool := NewPool(providers)

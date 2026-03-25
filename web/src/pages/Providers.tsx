@@ -1,22 +1,23 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { api, Provider, ProviderInput, ProviderLimit, TestResult } from '../lib/api'
 
-const PROVIDER_TYPES = ['openai', 'anthropic', 'google', 'ollama', 'openai-compatible']
+const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
 
-const PROVIDER_NAME_PRESETS: Record<string, { type: string; base_url: string }> = {
-  groq: { type: 'openai', base_url: 'https://api.groq.com/openai/v1' },
-  openrouter: { type: 'openai', base_url: 'https://openrouter.ai/api/v1' },
-  cerebras: { type: 'openai', base_url: 'https://api.cerebras.ai/v1' },
-  mistral: { type: 'openai', base_url: 'https://api.mistral.ai/v1' },
-  github: { type: 'openai', base_url: 'https://models.inference.ai.azure.com' },
-  google: { type: 'google', base_url: '' },
-  ollama: { type: 'openai', base_url: 'http://localhost:11434/v1' },
+const PROVIDER_TYPE_URLS: Record<string, string> = {
+  groq: 'https://api.groq.com/openai/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+  cerebras: 'https://api.cerebras.ai/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  github: 'https://models.inference.ai.azure.com',
+  ollama: 'http://localhost:11434/v1',
+  google: '',
+  'openai-compatible': '',
 }
 
 const DEFAULT_INPUT: ProviderInput = {
   name: '',
-  type: 'openai',
-  base_url: '',
+  type: 'groq',
+  base_url: PROVIDER_TYPE_URLS['groq'],
   api_key: '',
   models: [],
   priority: 0,
@@ -77,16 +78,14 @@ function ProviderModal({ initial, onClose, onSave }: ProviderModalProps) {
     setForm((f) => {
       const next = { ...f, [k]: v }
 
-      // Auto-populate type + base_url when name matches a known provider (only for new providers)
-      if (k === 'name' && !initial) {
-        const normalized = (v as string).toLowerCase().replace(/[-_\s]*\d+$/, '').trim()
-        const preset = PROVIDER_NAME_PRESETS[normalized]
-        if (preset) {
-          const allDefaults = Object.values(PROVIDER_NAME_PRESETS).map((p) => p.base_url)
-          if (!next.base_url || allDefaults.includes(next.base_url)) {
-            next.base_url = preset.base_url
-          }
-          next.type = preset.type
+      // Auto-populate base_url when provider type changes
+      if (k === 'type') {
+        const typeStr = v as string
+        const defaultUrl = PROVIDER_TYPE_URLS[typeStr] ?? ''
+        const allDefaults = Object.values(PROVIDER_TYPE_URLS)
+        // Only overwrite if current URL is empty or was a previous type's default
+        if (!next.base_url || allDefaults.includes(next.base_url)) {
+          next.base_url = defaultUrl
         }
       }
 
@@ -159,7 +158,7 @@ function ProviderModal({ initial, onClose, onSave }: ProviderModalProps) {
               className="input"
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
-              placeholder="groq, google-1, cerebras..."
+              placeholder="my-groq-1"
               required
             />
           </div>

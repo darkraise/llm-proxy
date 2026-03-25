@@ -20,7 +20,7 @@ fallback:
 
 providers:
   - name: groq
-    type: openai
+    type: groq
     base_url: https://api.groq.com/openai/v1
     api_key: gsk_test
     models: ["llama-3.3-70b-versatile"]
@@ -64,7 +64,7 @@ providers:
 
 func TestExportYAML(t *testing.T) {
 	providers := []store.Provider{
-		{Name: "groq", Type: "openai", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("gsk_test"),
+		{Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("gsk_test"),
 			Models: `["llama-3.3-70b"]`, Enabled: true,
 			Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 	}

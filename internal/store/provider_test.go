@@ -9,7 +9,7 @@ func TestProviderCRUD(t *testing.T) {
 
 	p := Provider{
 		Name:    "groq",
-		Type:    "openai",
+		Type:    "groq",
 		BaseURL: "https://api.groq.com/openai/v1",
 		APIKey:  []byte("encrypted-key"),
 		Models:  `["llama-3.3-70b-versatile"]`,
@@ -36,8 +36,8 @@ func TestProviderCRUD(t *testing.T) {
 	if got.Name != "groq" {
 		t.Errorf("name: got %q, want %q", got.Name, "groq")
 	}
-	if got.Type != "openai" {
-		t.Errorf("type: got %q, want %q", got.Type, "openai")
+	if got.Type != "groq" {
+		t.Errorf("type: got %q, want %q", got.Type, "groq")
 	}
 	if len(got.Limits) != 2 {
 		t.Fatalf("limits: got %d, want 2", len(got.Limits))
@@ -81,7 +81,7 @@ func TestProviderCRUD(t *testing.T) {
 func TestProviderCRUD_UniqueNameConstraint(t *testing.T) {
 	db := newTestDB(t)
 
-	p := Provider{Name: "groq", Type: "openai", APIKey: []byte("k")}
+	p := Provider{Name: "groq", Type: "groq", APIKey: []byte("k")}
 	_, err := db.CreateProvider(p)
 	if err != nil {
 		t.Fatalf("first create: %v", err)
@@ -97,7 +97,7 @@ func TestProviderCRUD_CascadeDeleteLimits(t *testing.T) {
 	db := newTestDB(t)
 
 	p := Provider{
-		Name: "test", Type: "openai", APIKey: []byte("k"),
+		Name: "test", Type: "groq", APIKey: []byte("k"),
 		Limits: []ProviderLimit{{Metric: "rpm", MaxValue: 10, WindowSecs: 60}},
 	}
 	id, _ := db.CreateProvider(p)

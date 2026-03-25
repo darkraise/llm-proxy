@@ -54,7 +54,7 @@ func (d *DB) migrate() error {
 		`CREATE TABLE IF NOT EXISTS providers (
 			id          INTEGER PRIMARY KEY AUTOINCREMENT,
 			name        TEXT UNIQUE NOT NULL,
-			type        TEXT NOT NULL CHECK (type IN ('openai', 'google')),
+			type        TEXT NOT NULL CHECK (type IN ('groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible')),
 			base_url    TEXT NOT NULL DEFAULT '',
 			api_key_enc BLOB NOT NULL DEFAULT '',
 			models      TEXT NOT NULL DEFAULT '[]',

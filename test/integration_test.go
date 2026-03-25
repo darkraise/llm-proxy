@@ -114,7 +114,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 	t.Run("create_provider", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]any{
 			"name":     "mock-provider",
-			"type":     "openai",
+			"type":     "openai-compatible",
 			"base_url": mockProvider.URL,
 			"api_key":  "test-key",
 			"models":   []string{"test-model"},

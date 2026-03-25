@@ -36,7 +36,7 @@ func TestHandleChatCompletions_NonStreaming(t *testing.T) {
 	defer mock.Close()
 
 	providers := []store.Provider{{
-		ID: 1, Name: "test", Type: "openai", BaseURL: mock.URL,
+		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: mock.URL,
 		APIKey: []byte("test-key"), Models: `["test-model"]`, Enabled: true,
 	}}
 
@@ -68,7 +68,7 @@ func TestHandleChatCompletions_NonStreaming(t *testing.T) {
 
 func TestHandleChatCompletions_AllExhausted(t *testing.T) {
 	providers := []store.Provider{{
-		ID: 1, Name: "test", Type: "openai", BaseURL: "http://unreachable",
+		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: "http://unreachable",
 		APIKey: []byte("k"), Models: `["m"]`, Enabled: true,
 		Limits: []store.ProviderLimit{{Metric: "rpm", MaxValue: 0, WindowSecs: 60}},
 	}}
@@ -92,7 +92,7 @@ func TestHandleAnthropicMessages_NonStreaming(t *testing.T) {
 	defer mock.Close()
 
 	providers := []store.Provider{{
-		ID: 1, Name: "test", Type: "openai", BaseURL: mock.URL,
+		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: mock.URL,
 		APIKey: []byte("test-key"), Models: `["test-model"]`, Enabled: true,
 	}}
 

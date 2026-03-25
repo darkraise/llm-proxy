@@ -6,5 +6,6 @@ node_modules/
 web/dist/
 .env
 config.yml
-llm-proxy
-llm-proxy.exe
+/llm-proxy
+/llm-proxy.exe
+web/tsconfig.app.tsbuildinfo

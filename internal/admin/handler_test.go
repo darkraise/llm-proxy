@@ -36,7 +36,7 @@ func TestAdminHandler_ProviderCRUD(t *testing.T) {
 	h, cookie := setupTestAdmin(t)
 
 	// Create
-	createBody := `{"name":"groq","type":"openai","base_url":"https://api.groq.com","api_key":"gsk_test","models":["llama-3.3-70b"],"limits":[{"metric":"rpm","max_value":30,"window_secs":60}]}`
+	createBody := `{"name":"groq","type":"groq","base_url":"https://api.groq.com","api_key":"gsk_test","models":["llama-3.3-70b"],"limits":[{"metric":"rpm","max_value":30,"window_secs":60}]}`
 	req := httptest.NewRequest("POST", "/admin/api/providers", strings.NewReader(createBody))
 	req.AddCookie(cookie)
 	w := httptest.NewRecorder()
@@ -70,7 +70,7 @@ func TestAdminHandler_ProviderCRUD(t *testing.T) {
 	}
 
 	// Update
-	updateBody := `{"name":"groq-updated","type":"openai","base_url":"https://api.groq.com","api_key":"gsk_new","models":["llama-3.3-70b"],"limits":[]}`
+	updateBody := `{"name":"groq-updated","type":"groq","base_url":"https://api.groq.com","api_key":"gsk_new","models":["llama-3.3-70b"],"limits":[]}`
 	req = httptest.NewRequest("PUT", "/admin/api/providers/1", strings.NewReader(updateBody))
 	req.AddCookie(cookie)
 	req.SetPathValue("id", "1")

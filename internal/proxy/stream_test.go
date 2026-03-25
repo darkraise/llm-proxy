@@ -45,7 +45,7 @@ func TestHandleChatCompletions_Streaming(t *testing.T) {
 	defer mock.Close()
 
 	providers := []store.Provider{{
-		ID: 1, Name: "test", Type: "openai", BaseURL: mock.URL,
+		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: mock.URL,
 		APIKey: []byte("test-key"), Models: `["test-model"]`, Enabled: true,
 	}}
 
