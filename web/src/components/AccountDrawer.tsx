@@ -5,8 +5,9 @@ import { ProviderBadge } from './ui/Badge'
 import { ToggleSwitch } from './ui/ToggleSwitch'
 import { RateLimitTable, formatCompact } from './RateLimitTable'
 import { ModelName } from './ui/ModelName'
-import { FlaskConical, Pencil, Trash2 } from 'lucide-react'
+import { FlaskConical, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Select } from './ui/Select'
+import { AddModelsDialog } from './AddModelsDialog'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -26,15 +27,17 @@ interface AccountDrawerProps {
   onUpdate: () => void
   onTest: (id: number) => void
   onDelete: (id: number) => void
+  onClearTest?: () => void
   testResult?: TestResult | 'testing' | null
 }
 
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, testResult }: AccountDrawerProps) {
+export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, onClearTest, testResult }: AccountDrawerProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [addModelsOpen, setAddModelsOpen] = useState(false)
 
   // Edit mode state
   const [editData, setEditData] = useState<AccountInput | null>(null)
@@ -48,6 +51,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, te
   useEffect(() => {
     setIsEditing(false)
     setIsDeleting(false)
+    setAddModelsOpen(false)
     setEditData(null)
     setEditedLimits([])
     setSaveError('')
@@ -114,6 +118,25 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, te
   function confirmDelete() {
     onDelete(acct.id)
     onClose()
+  }
+
+  async function handleAddModels(newModels: string[], newLimits: AccountLimit[]) {
+    const currentModels = parseAccountModels(acct.models)
+    const updatedModels = [...currentModels, ...newModels]
+    const updatedLimits = [...(acct.limits ?? []), ...newLimits]
+
+    await api.accounts.update(acct.id, {
+      name: acct.name,
+      type: acct.type,
+      base_url: acct.base_url,
+      api_key: '',
+      models: updatedModels,
+      priority: acct.priority,
+      enabled: acct.enabled,
+      default_model: acct.default_model ?? '',
+      limits: updatedLimits,
+    })
+    onUpdate()
   }
 
   // ─── Header ──────────────────────────────────────────────────────────────
@@ -274,12 +297,17 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, te
 
           {/* Test result */}
           {testResult && testResult !== 'testing' && (
-            <div className={`rounded-md px-3 py-2 text-sm border ${
+            <div className={`rounded-md px-3 py-2 text-sm border flex items-start gap-2 ${
               testResult.success
                 ? 'bg-success/10 border-success/30 text-success'
                 : 'bg-error/10 border-error/30 text-error'
             }`}>
-              {testResult.success ? 'Connection successful' : `Error: ${testResult.error ?? 'Unknown error'}`}
+              <span className="flex-1">{testResult.success ? 'Connection successful' : `Error: ${testResult.error ?? 'Unknown error'}`}</span>
+              {onClearTest && (
+                <button onClick={onClearTest} className="flex-shrink-0 hover:opacity-70 transition-opacity mt-0.5">
+                  <X size={14} />
+                </button>
+              )}
             </div>
           )}
           {testResult === 'testing' && (
@@ -296,6 +324,15 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, te
         <div className="flex-1 flex flex-col min-h-0 px-4 pb-4">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <h3 className="text-xs uppercase tracking-wider text-text-muted font-medium">Models & Rate Limits</h3>
+            {!ed && (
+              <button
+                onClick={() => setAddModelsOpen(true)}
+                className="btn-secondary inline-flex items-center gap-1 text-xs px-2 py-1"
+                title="Add models"
+              >
+                <Plus size={14} />
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-auto min-h-0">
             <RateLimitTable
@@ -317,6 +354,14 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, te
   return (
     <Drawer open={account !== null} onClose={onClose} title={title} actions={actions} width={900}>
       {renderOverview()}
+      <AddModelsDialog
+        open={addModelsOpen}
+        onClose={() => setAddModelsOpen(false)}
+        account={acct}
+        existingModels={models}
+        existingLimits={acct.limits ?? []}
+        onFinish={handleAddModels}
+      />
     </Drawer>
   )
 }
