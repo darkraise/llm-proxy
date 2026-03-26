@@ -1,19 +1,11 @@
-import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Sidebar, SIDEBAR_COLLAPSED_KEY } from './Sidebar';
+import { Sidebar, SIDEBAR_COLLAPSED_KEY, SIDEBAR_WIDTH_COLLAPSED, SIDEBAR_WIDTH_EXPANDED } from './Sidebar';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 export default function Layout() {
   const [collapsed] = useLocalStorage(SIDEBAR_COLLAPSED_KEY, false);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mql = window.matchMedia('(max-width: 768px)');
-    setIsMobile(mql.matches);
-    const handler = () => setIsMobile(mql.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, []);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const isCollapsed = isMobile || collapsed;
 
@@ -22,7 +14,7 @@ export default function Layout() {
       <Sidebar />
       <main
         className="flex-1 p-6 transition-all duration-200 overflow-auto"
-        style={{ marginLeft: isCollapsed ? 60 : 220 }}
+        style={{ marginLeft: isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED }}
       >
         <Outlet />
       </main>

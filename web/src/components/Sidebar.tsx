@@ -1,4 +1,3 @@
-import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutGrid,
   Users,
@@ -13,12 +12,15 @@ import {
   Box,
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useTheme } from '../hooks/useTheme';
 import { ToggleSwitch } from './ui/ToggleSwitch';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
 export const SIDEBAR_COLLAPSED_KEY = 'llm-proxy:sidebar-collapsed';
+export const SIDEBAR_WIDTH_EXPANDED = 220;
+export const SIDEBAR_WIDTH_COLLAPSED = 60;
 
 const NAV_ITEMS = [
   { path: '/', icon: LayoutGrid, label: 'Dashboard' },
@@ -33,22 +35,10 @@ export function Sidebar() {
   const [theme, toggleTheme] = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const [isMobile, setIsMobile] = useState(false);
-
-  const checkMobile = useCallback(() => {
-    setIsMobile(window.matchMedia('(max-width: 768px)').matches);
-  }, []);
-
-  useEffect(() => {
-    checkMobile();
-    const mql = window.matchMedia('(max-width: 768px)');
-    const handler = () => checkMobile();
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, [checkMobile]);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const isCollapsed = isMobile || collapsed;
-  const width = isCollapsed ? 60 : 220;
+  const width = isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED;
 
   function isActive(path: string) {
     if (path === '/') return location.pathname === '/';
@@ -65,6 +55,7 @@ export function Sidebar() {
 
   return (
     <aside
+      aria-label="Main navigation"
       className="fixed top-0 left-0 h-screen bg-surface-raised border-r border-border flex flex-col z-10 transition-all duration-200"
       style={{ width }}
     >
@@ -72,17 +63,20 @@ export function Sidebar() {
       <div className="px-3 py-4 border-b border-border">
         {isCollapsed ? (
           <div className="flex items-center justify-center">
-            <button
-              onClick={() => !isMobile && setCollapsed(false)}
-              className={`w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center flex-shrink-0 ${isMobile ? '' : 'cursor-pointer'}`}
-              title={isMobile ? undefined : 'Expand sidebar'}
-            >
-              {isMobile ? (
+            {isMobile ? (
+              <div className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center flex-shrink-0">
                 <Box size={16} className="text-white" />
-              ) : (
+              </div>
+            ) : (
+              <button
+                aria-expanded={false}
+                onClick={() => setCollapsed(false)}
+                className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center flex-shrink-0 cursor-pointer"
+                title="Expand sidebar"
+              >
                 <ChevronsRight size={14} className="text-white" />
-              )}
-            </button>
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -93,6 +87,7 @@ export function Sidebar() {
               LLM Proxy
             </span>
             <button
+              aria-expanded={true}
               onClick={() => setCollapsed(true)}
               className="ml-auto text-text-muted hover:text-text-primary transition-colors p-1"
               title="Collapse sidebar"
@@ -104,7 +99,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-3 px-2 overflow-y-auto">
+      <nav aria-label="Primary" className="flex-1 py-3 px-2 overflow-y-auto">
         <div className="flex flex-col gap-0.5">
           {NAV_ITEMS.map((item) => {
             const active = isActive(item.path);
