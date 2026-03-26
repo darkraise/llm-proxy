@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, Account, AccountLimit, RateLimitDef } from '../lib/api'
 import { RateLimitTable } from '../components/RateLimitTable'
+import { Select } from '../components/ui/Select'
 
 const PROVIDER_TYPES = [
   'groq',
@@ -168,20 +169,15 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
           <p className="text-text-muted">No {provider} accounts configured.</p>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              className="input py-1.5 flex-1 min-w-[200px]"
-              value={refreshAccountId}
-              onChange={(e) =>
-                setRefreshAccountId(e.target.value === '' ? '' : Number(e.target.value))
-              }
-            >
-              <option value="">— select account —</option>
-              {providerAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={String(refreshAccountId)}
+              onChange={(v) => setRefreshAccountId(v === '' ? '' : Number(v))}
+              options={[
+                { value: '', label: '— select account —' },
+                ...providerAccounts.map((a) => ({ value: String(a.id), label: a.name })),
+              ]}
+              className="flex-1 min-w-48"
+            />
             <button
               type="button"
               onClick={handleRefreshModels}

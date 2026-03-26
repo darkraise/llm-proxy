@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ModelName } from './ui/ModelName'
+import { Select } from './ui/Select'
 
 interface BreakdownTabsProps {
   providerStats: Array<{
@@ -96,18 +97,15 @@ export default function BreakdownTabs({
         </div>
 
         {tab === 'model' && (
-          <select
+          <Select
             value={selectedProvider}
-            onChange={(e) => onProviderFilter(e.target.value)}
-            className="text-xs bg-surface border border-border rounded-md px-2 py-1 text-text-secondary focus:outline-none focus:border-accent"
-          >
-            <option value="">All Providers</option>
-            {providers.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+            onChange={onProviderFilter}
+            options={[
+              { value: '', label: 'All Providers' },
+              ...providers.map((p) => ({ value: p, label: p })),
+            ]}
+            className="w-36"
+          />
         )}
       </div>
 

@@ -64,14 +64,14 @@ export function Sidebar() {
         {isCollapsed ? (
           <div className="flex items-center justify-center">
             {isMobile ? (
-              <div className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center flex-shrink-0">
                 <Box size={16} className="text-white" />
               </div>
             ) : (
               <button
                 aria-expanded={false}
                 onClick={() => setCollapsed(false)}
-                className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center flex-shrink-0 cursor-pointer"
+                className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer"
                 title="Expand sidebar"
               >
                 <ChevronsRight size={14} className="text-white" />
@@ -80,10 +80,10 @@ export function Sidebar() {
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center flex-shrink-0">
               <Box size={16} className="text-white" />
             </div>
-            <span className="text-[15px] font-semibold text-text-primary whitespace-nowrap">
+            <span className="text-base font-semibold text-text-primary whitespace-nowrap">
               LLM Proxy
             </span>
             <button
@@ -111,7 +111,7 @@ export function Sidebar() {
                   key={item.path}
                   to={item.path}
                   title={item.label}
-                  className={`flex items-center justify-center w-10 h-10 rounded-[10px] mx-auto transition-colors ${
+                  className={`flex items-center justify-center w-10 h-10 rounded-xl mx-auto transition-colors ${
                     active
                       ? 'bg-accent-muted text-accent-light'
                       : 'text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)]'
@@ -126,7 +126,7 @@ export function Sidebar() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-2.5 px-3 py-[9px] rounded-lg transition-colors ${
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors ${
                   active
                     ? 'bg-accent-muted text-accent-light font-medium'
                     : 'text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)]'
@@ -147,21 +147,21 @@ export function Sidebar() {
             <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="flex items-center justify-center w-10 h-10 mx-auto rounded-[10px] text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+              className="flex items-center justify-center w-10 h-10 mx-auto rounded-xl text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors"
             >
               {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
             <button
               onClick={handleLogout}
               title="Logout"
-              className="flex items-center justify-center w-10 h-10 mx-auto rounded-[10px] text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+              className="flex items-center justify-center w-10 h-10 mx-auto rounded-xl text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors"
             >
               <LogOut size={18} />
             </button>
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between px-3 py-[9px]">
+            <div className="flex items-center justify-between px-3 py-2">
               <div className="flex items-center gap-2.5 text-text-muted">
                 {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
                 <span className="text-sm">
@@ -175,7 +175,7 @@ export function Sidebar() {
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2.5 px-3 py-[9px] rounded-lg text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors w-full"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-[rgba(255,255,255,0.04)] transition-colors w-full"
             >
               <LogOut size={18} />
               <span className="text-sm">Logout</span>

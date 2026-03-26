@@ -3,6 +3,7 @@ import { api, Account, RequestLog } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { ModelName } from '../components/ui/ModelName'
 import { LogDrawer } from '../components/LogDrawer'
+import { Select } from '../components/ui/Select'
 
 const PAGE_SIZES = [25, 50, 100]
 
@@ -113,18 +114,14 @@ export default function UsageLogs() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-32">
             <label className="label">Account</label>
-            <select
-              className="input"
+            <Select
               value={filterAccount}
-              onChange={(e) => setFilterAccount(e.target.value)}
-            >
-              <option value="">All accounts</option>
-              {accounts.map((p) => (
-                <option key={p.id} value={p.name}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              onChange={setFilterAccount}
+              options={[
+                { value: '', label: 'All accounts' },
+                ...accounts.map((p) => ({ value: p.name, label: p.name })),
+              ]}
+            />
           </div>
 
           <div className="flex-1 min-w-28">
@@ -139,31 +136,27 @@ export default function UsageLogs() {
 
           <div className="flex-1 min-w-28">
             <label className="label">Status</label>
-            <select
-              className="input"
+            <Select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="">All</option>
-              <option value="success">Success</option>
-              <option value="error">Error</option>
-            </select>
+              onChange={setFilterStatus}
+              options={[
+                { value: '', label: 'All' },
+                { value: 'success', label: 'Success' },
+                { value: 'error', label: 'Error' },
+              ]}
+            />
           </div>
 
           <div className="flex-1 min-w-32">
             <label className="label">Date Range</label>
-            <select
-              className="input"
+            <Select
               value={filterDateRange}
-              onChange={(e) => setFilterDateRange(e.target.value)}
-            >
-              <option value="">All time</option>
-              {DATE_PRESETS.map((p) => (
-                <option key={p.label} value={p.label}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+              onChange={setFilterDateRange}
+              options={[
+                { value: '', label: 'All time' },
+                ...DATE_PRESETS.map((p) => ({ value: p.label, label: p.label })),
+              ]}
+            />
           </div>
 
           <div className="min-w-24">
@@ -314,20 +307,15 @@ export default function UsageLogs() {
 
           <div className="flex items-center gap-2">
             <label className="text-xs text-text-muted">Per page</label>
-            <select
-              className="input py-1 text-xs w-16"
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value))
+            <Select
+              value={String(pageSize)}
+              onChange={(v) => {
+                setPageSize(Number(v))
                 setPage(0)
               }}
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+              options={PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
+              className="w-16"
+            />
           </div>
         </div>
       </div>

@@ -29,7 +29,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-[12px] uppercase tracking-wider text-text-secondary">{label}</label>
+      <label className="text-xs uppercase tracking-wider text-text-secondary">{label}</label>
       {children}
       {hint && <p className="text-xs text-text-muted mt-0.5">{hint}</p>}
     </div>
@@ -42,7 +42,7 @@ function SaveButton({ saving, status }: { saving: boolean; status: SaveStatus | 
       <button
         type="submit"
         disabled={saving}
-        className="bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-[13px] font-medium px-4 py-2 disabled:opacity-50"
+        className="bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-sm font-medium px-4 py-2 disabled:opacity-50"
       >
         {saving ? 'Saving…' : 'Save'}
       </button>
@@ -219,7 +219,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-[13px] font-medium px-4 py-2"
+                  className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-sm font-medium px-4 py-2"
                 >
                   {showKey ? 'Hide' : 'Show'}
                 </button>
@@ -382,7 +382,7 @@ function ConfigSettings() {
           <a
             href={api.config.exportUrl()}
             download
-            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-[13px] font-medium px-4 py-2 flex items-center gap-1.5"
+            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-sm font-medium px-4 py-2 flex items-center gap-1.5"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
@@ -394,7 +394,7 @@ function ConfigSettings() {
           <button
             onClick={() => importRef.current?.click()}
             disabled={importing}
-            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-[13px] font-medium px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
+            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-sm font-medium px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />

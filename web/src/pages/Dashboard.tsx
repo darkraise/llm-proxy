@@ -165,10 +165,10 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-[20px] font-semibold text-text-primary">
+          <h1 className="text-xl font-semibold text-text-primary">
             Dashboard
           </h1>
-          <p className="text-[13px] text-text-secondary mt-0.5">
+          <p className="text-sm text-text-secondary mt-0.5">
             Overview of your LLM proxy
           </p>
         </div>
@@ -278,7 +278,7 @@ export default function Dashboard() {
                     <span className="text-xs text-text-primary truncate flex-1">
                       {acct.name}
                     </span>
-                    <span className="text-[11px] text-text-muted flex-shrink-0">
+                    <span className="text-xs text-text-muted flex-shrink-0">
                       {acctStat
                         ? `${acctStat.total_requests} req`
                         : statusLabel[st]}

@@ -36,8 +36,8 @@ export default function Login() {
             <Box size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-[20px] font-semibold text-text-primary">LLM Proxy</h1>
-            <p className="text-[14px] text-text-secondary">Admin Dashboard</p>
+            <h1 className="text-xl font-semibold text-text-primary">LLM Proxy</h1>
+            <p className="text-sm text-text-secondary">Admin Dashboard</p>
           </div>
         </div>
 
@@ -75,7 +75,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="w-full bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-[13px] font-medium px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-sm font-medium px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

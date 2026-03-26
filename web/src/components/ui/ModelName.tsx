@@ -18,7 +18,7 @@ export function ModelName({ name, className = '' }: ModelNameProps) {
   return (
     <span
       onClick={handleClick}
-      className={`font-mono cursor-copy hover:text-accent-light transition-colors ${className}`}
+      className={`font-mono cursor-pointer hover:text-accent-light transition-colors ${className}`}
       title="Click to copy"
     >
       {name}

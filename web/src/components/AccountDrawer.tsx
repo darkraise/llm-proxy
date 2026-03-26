@@ -6,6 +6,7 @@ import { ToggleSwitch } from './ui/ToggleSwitch'
 import { RateLimitTable, formatCompact } from './RateLimitTable'
 import { ModelName } from './ui/ModelName'
 import { FlaskConical, Pencil, Trash2 } from 'lucide-react'
+import { Select } from './ui/Select'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -229,10 +230,14 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, te
             <div>
               <div className="text-xs uppercase tracking-wider text-text-muted mb-0.5">Default Model</div>
               {ed ? (
-                <select className="input" value={ed.default_model} onChange={(e) => setEditField('default_model', e.target.value)}>
-                  <option value="">(none)</option>
-                  {editModels.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <Select
+                  value={ed.default_model}
+                  onChange={(v) => setEditField('default_model', v)}
+                  options={[
+                    { value: '', label: '(none)' },
+                    ...editModels.map((m) => ({ value: m, label: m })),
+                  ]}
+                />
               ) : (
                 <div className="text-sm text-text-primary">
                   {acct.default_model

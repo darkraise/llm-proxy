@@ -1,4 +1,5 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import React, { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api'
 import { RateLimitTable } from '../components/RateLimitTable'
 import { AccountCard } from '../components/AccountCard'
@@ -6,6 +7,7 @@ import { AccountListRow, LIST_GRID_COLS } from '../components/AccountListRow'
 import { AccountDrawer } from '../components/AccountDrawer'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { LayoutGrid, List, Plus } from 'lucide-react'
+import { Select } from '../components/ui/Select'
 
 const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
 
@@ -47,7 +49,7 @@ interface AccountModalProps {
   onSave: () => void
 }
 
-function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
+function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): React.ReactNode {
   const [form, setForm] = useState<AccountInput>(() => ({
     name: initial.name,
     type: initial.type,
@@ -108,9 +110,9 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
     return false
   })()
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-surface-overlay border border-border rounded-xl max-w-[600px] w-full mx-4 max-h-[90vh] flex flex-col">
+      <div className="bg-surface-overlay border border-border rounded-xl max-w-xl w-full mx-4 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <h2 className="font-semibold text-text-primary">Edit Account</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
@@ -129,9 +131,11 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
               </div>
               <div>
                 <label className="label">Provider</label>
-                <select className="input" value={form.type} onChange={(e) => set('type', e.target.value)}>
-                  {PROVIDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <Select
+                  value={form.type}
+                  onChange={(v) => set('type', v)}
+                  options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
+                />
               </div>
             </div>
 
@@ -169,10 +173,14 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="label">Default Model</label>
-                <select className="input" value={form.default_model} onChange={(e) => set('default_model', e.target.value)}>
-                  <option value="">(none)</option>
-                  {parsedModels.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <Select
+                  value={form.default_model}
+                  onChange={(v) => set('default_model', v)}
+                  options={[
+                    { value: '', label: '(none)' },
+                    ...parsedModels.map((m) => ({ value: m, label: m })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="label">Priority</label>
@@ -220,7 +228,8 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -238,7 +247,7 @@ interface WizardStep1 {
   api_key: string
 }
 
-function AccountWizard({ onClose, onSave }: WizardProps) {
+function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   const [step, setStep] = useState<1 | 2 | 3>(1)
 
   // Step 1 state
@@ -366,9 +375,9 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
 
   const selectedList = Array.from(selectedModels)
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-surface-overlay border border-border rounded-xl max-w-[600px] w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface-overlay border border-border rounded-xl max-w-xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
@@ -418,13 +427,11 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
 
               <div>
                 <label className="label">Provider</label>
-                <select
-                  className="input"
+                <Select
                   value={s1.type}
-                  onChange={(e) => setS1Field('type', e.target.value)}
-                >
-                  {PROVIDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                  onChange={(v) => setS1Field('type', v)}
+                  options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
+                />
               </div>
 
               <div>
@@ -525,14 +532,14 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
 
                   <div>
                     <label className="label">Default Model</label>
-                    <select
-                      className="input"
+                    <Select
                       value={defaultModel}
-                      onChange={(e) => setDefaultModel(e.target.value)}
-                    >
-                      <option value="">(none)</option>
-                      {selectedList.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                      onChange={setDefaultModel}
+                      options={[
+                        { value: '', label: '(none)' },
+                        ...selectedList.map((m) => ({ value: m, label: m })),
+                      ]}
+                    />
                   </div>
                 </>
               )}
@@ -626,7 +633,8 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -711,8 +719,8 @@ export default function Accounts() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[20px] font-semibold text-text-primary">Accounts</h1>
-          <p className="text-[13px] text-text-secondary mt-0.5">
+          <h1 className="text-xl font-semibold text-text-primary">Accounts</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
             {accounts.length} accounts &middot; {activeCount} active
           </p>
         </div>
@@ -773,11 +781,12 @@ export default function Accounts() {
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 340px))' }}>
           {accounts.map((a) => (
             <AccountCard
               key={a.id}
               account={a}
+              selected={selectedAccountId === a.id}
               onClick={() => setSelectedAccountId(a.id)}
             />
           ))}
@@ -786,7 +795,7 @@ export default function Accounts() {
         <div className="bg-surface-raised border border-border rounded-xl overflow-hidden">
           {/* List header */}
           <div
-            className="grid items-center px-3 py-2 border-b border-border text-[10px] uppercase tracking-wider text-text-muted font-medium"
+            className="grid items-center px-3 py-2 border-b border-border text-[0.625rem] uppercase tracking-wider text-text-muted font-medium"
             style={{ gridTemplateColumns: LIST_GRID_COLS }}
           >
             <div />
@@ -802,6 +811,7 @@ export default function Accounts() {
             <AccountListRow
               key={a.id}
               account={a}
+              selected={selectedAccountId === a.id}
               onClick={() => setSelectedAccountId(a.id)}
             />
           ))}

@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface DrawerProps {
@@ -17,7 +18,7 @@ export function Drawer({ open, onClose, title, width = 420, actions, children }:
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -38,10 +39,11 @@ export function Drawer({ open, onClose, title, width = 420, actions, children }:
           </button>
         </div>
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col min-h-0">
           {children}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
