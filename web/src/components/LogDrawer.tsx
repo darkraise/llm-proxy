@@ -1,6 +1,7 @@
 import { RequestLog } from '../lib/api'
 import { Drawer } from './ui/Drawer'
 import { Badge } from './ui/Badge'
+import { ModelName } from './ui/ModelName'
 
 interface LogDrawerProps {
   log: RequestLog | null
@@ -15,7 +16,7 @@ function statusVariant(code: number) {
 
 function SectionHeading({ children }: { children: string }) {
   return (
-    <h3 className="text-[10px] uppercase tracking-wide text-text-secondary mb-3 font-medium">
+    <h3 className="text-xs uppercase tracking-wide text-text-secondary mb-3 font-medium">
       {children}
     </h3>
   )
@@ -24,8 +25,8 @@ function SectionHeading({ children }: { children: string }) {
 function KVRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between mb-2">
-      <span className="text-[13px] text-text-secondary">{label}</span>
-      <span className="text-[13px] text-text-primary">{children}</span>
+      <span className="text-sm text-text-secondary">{label}</span>
+      <span className="text-sm text-text-primary">{children}</span>
     </div>
   )
 }
@@ -42,7 +43,7 @@ export function LogDrawer({ log, onClose }: LogDrawerProps) {
               <span className="text-text-primary">{log.account_name || '\u2014'}</span>
             </KVRow>
             <KVRow label="Model">
-              <span className="font-mono">{log.model || '\u2014'}</span>
+              {log.model ? <ModelName name={log.model} /> : '\u2014'}
             </KVRow>
             <KVRow label="Endpoint">
               <span>{log.endpoint || '\u2014'}</span>
@@ -83,7 +84,7 @@ export function LogDrawer({ log, onClose }: LogDrawerProps) {
           {log.error_message && (
             <div className="px-5 py-4">
               <SectionHeading>ERROR</SectionHeading>
-              <div className="bg-[rgba(248,81,73,0.08)] text-error rounded-lg p-3 text-[12px] font-mono break-all">
+              <div className="bg-[rgba(248,81,73,0.08)] text-error rounded-lg p-3 text-xs font-mono break-all">
                 {log.error_message}
               </div>
             </div>

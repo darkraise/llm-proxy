@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, Account, RequestLog } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
+import { ModelName } from '../components/ui/ModelName'
 import { LogDrawer } from '../components/LogDrawer'
 
 const PAGE_SIZES = [25, 50, 100]
@@ -103,8 +104,8 @@ export default function UsageLogs() {
     <div className="p-6 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-[20px] font-semibold text-text-primary">Usage Logs</h1>
-        <p className="text-[13px] text-text-secondary mt-0.5">Request history and details</p>
+        <h1 className="text-xl font-semibold text-text-primary">Usage Logs</h1>
+        <p className="text-sm text-text-secondary mt-0.5">Request history and details</p>
       </div>
 
       {/* Filter bar */}
@@ -194,25 +195,25 @@ export default function UsageLogs() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface">
-                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Timestamp
                 </th>
-                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Account
                 </th>
-                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Model
                 </th>
-                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Endpoint
                 </th>
-                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Status
                 </th>
-                <th className="text-right px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Latency
                 </th>
-                <th className="text-right px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
+                <th className="text-right px-4 py-2.5 text-xs font-medium text-text-secondary uppercase">
                   Tokens
                 </th>
               </tr>
@@ -245,8 +246,8 @@ export default function UsageLogs() {
                     <td className="px-4 py-2.5 text-xs text-text-primary">
                       {log.account_name || '\u2014'}
                     </td>
-                    <td className="px-4 py-2.5 text-xs font-mono text-text-secondary max-w-32 truncate">
-                      {log.model || '\u2014'}
+                    <td className="px-4 py-2.5 text-xs text-text-secondary max-w-32 truncate">
+                      {log.model ? <ModelName name={log.model} className="truncate" /> : '\u2014'}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-muted">
                       {log.endpoint || '\u2014'}

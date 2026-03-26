@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AccountLimit } from '../lib/api'
+import { ModelName } from './ui/ModelName'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -175,7 +176,7 @@ export function RateLimitTable({
   const rows = ['', ...models]
 
   return (
-    <div className="rounded-xl overflow-hidden border border-border">
+    <div className="rounded-xl overflow-hidden border border-border flex flex-col h-full">
       {/* Remove number input spin buttons */}
       <style>{`
         .rlt-input::-webkit-inner-spin-button,
@@ -184,19 +185,19 @@ export function RateLimitTable({
         .rlt-table thead th { position: sticky; top: 0; z-index: 1; }
       `}</style>
 
-      <div className="overflow-auto" style={{ maxHeight: '400px' }}>
+      <div className="overflow-auto flex-1">
         <table className="rlt-table w-full border-collapse" style={{ tableLayout: 'fixed' }}>
           {/* Sticky header */}
           <thead>
             <tr>
-              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-[rgba(255,255,255,0.02)]" style={{ width: '180px', maxWidth: '180px' }}>
+              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised" style={{ width: '180px', maxWidth: '180px' }}>
                 Model
               </th>
               {METRIC_DEFS.map((m) => (
                 <th
                   key={m.key}
                   title={m.label}
-                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-[rgba(255,255,255,0.02)] text-center whitespace-nowrap"
+                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised text-center whitespace-nowrap"
                   style={{ width: '80px' }}
                 >
                   {m.short}
@@ -214,11 +215,11 @@ export function RateLimitTable({
                   className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
                 >
                   {/* Model name cell */}
-                  <td className="px-3 py-2 border-b border-border-muted font-mono text-text-primary overflow-hidden" style={{ maxWidth: '180px' }}>
+                  <td className="px-3 py-2 border-b border-border-muted text-text-primary overflow-hidden" style={{ maxWidth: '180px' }}>
                     {isDefault ? (
                       <span className="text-text-secondary italic">{defaultRowLabel}</span>
                     ) : (
-                      <span title={model} className="block truncate">{model}</span>
+                      <ModelName name={model} className="block truncate text-sm" />
                     )}
                   </td>
 
@@ -260,7 +261,7 @@ export function RateLimitTable({
       </div>
 
       {/* Legend (hidden in read-only mode) */}
-      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-[rgba(255,255,255,0.02)] text-xs text-text-muted flex-shrink-0">
+      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-raised text-xs text-text-muted flex-shrink-0">
         <span>
           <span className="text-warning font-medium">Amber</span>
           {' '}= override

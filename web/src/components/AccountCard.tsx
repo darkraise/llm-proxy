@@ -1,5 +1,6 @@
-import { Badge } from './ui/Badge';
+import { ProviderBadge } from './ui/Badge';
 import { StatusDot } from './ui/StatusDot';
+import { ModelName } from './ui/ModelName';
 import type { Account } from '../lib/api';
 
 function getAccountStatus(account: Account): 'healthy' | 'rate-limited' | 'error' | 'disabled' {
@@ -21,10 +22,11 @@ function countModels(modelsJson: string): number {
 
 interface AccountCardProps {
   account: Account;
+  selected?: boolean;
   onClick: () => void;
 }
 
-export function AccountCard({ account, onClick }: AccountCardProps) {
+export function AccountCard({ account, selected, onClick }: AccountCardProps) {
   const status = getAccountStatus(account);
   const totalModels = countModels(account.models);
   const extraModels = totalModels - (account.default_model ? 1 : 0);
@@ -32,42 +34,42 @@ export function AccountCard({ account, onClick }: AccountCardProps) {
   return (
     <div
       onClick={onClick}
-      className={`bg-surface-raised border border-border rounded-xl p-4 cursor-pointer transition-colors hover:border-[rgba(124,91,240,0.3)] ${!account.enabled ? 'opacity-50' : ''}`}
+      className={`bg-surface-raised border rounded-xl p-4 cursor-pointer transition-colors hover:border-[rgba(124,91,240,0.3)] ${selected ? 'border-accent-light ring-1 ring-accent-light' : 'border-border'} ${!account.enabled ? 'opacity-50' : ''}`}
     >
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
         <StatusDot status={status} />
-        <span className="text-[15px] font-semibold text-text-primary truncate flex-1">{account.name}</span>
-        <Badge variant="accent">{account.type}</Badge>
+        <span className="text-base font-semibold text-text-primary truncate flex-1">{account.name}</span>
+        <ProviderBadge provider={account.type} />
       </div>
 
       {/* Stats row */}
       <div className="flex gap-3 py-2 border-y border-border-muted mb-3">
         <div className="flex-1 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-text-muted">Requests</div>
-          <div className="text-[13px] font-semibold text-text-primary">{formatCompact(account.total_requests)}</div>
+          <div className="text-xs uppercase tracking-wider text-text-muted">Requests</div>
+          <div className="text-sm font-semibold text-text-primary">{formatCompact(account.total_requests)}</div>
         </div>
         <div className="flex-1 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-text-muted">Tokens</div>
-          <div className="text-[13px] font-semibold text-text-primary">{formatCompact(account.total_tokens)}</div>
+          <div className="text-xs uppercase tracking-wider text-text-muted">Tokens</div>
+          <div className="text-sm font-semibold text-text-primary">{formatCompact(account.total_tokens)}</div>
         </div>
         <div className="flex-1 text-center">
-          <div className="text-[9px] uppercase tracking-wider text-text-muted">Priority</div>
-          <div className="text-[13px] font-semibold text-text-primary">{account.priority}</div>
+          <div className="text-xs uppercase tracking-wider text-text-muted">Priority</div>
+          <div className="text-sm font-semibold text-text-primary">{account.priority}</div>
         </div>
       </div>
 
       {/* Model row */}
       <div className="flex items-center gap-1.5">
         {account.default_model ? (
-          <span className="bg-[rgba(255,255,255,0.05)] text-text-primary text-[10px] px-2 py-0.5 rounded-[5px] font-mono truncate">
-            {account.default_model}
+          <span className="bg-[rgba(255,255,255,0.05)] text-text-primary text-xs px-2 py-0.5 rounded truncate">
+            <ModelName name={account.default_model} />
           </span>
         ) : (
-          <span className="text-text-muted text-[10px]">No default model</span>
+          <span className="text-text-muted text-xs">No default model</span>
         )}
         {extraModels > 0 && (
-          <span className="bg-accent-muted text-accent-light text-[10px] px-2 py-0.5 rounded-[5px] flex-shrink-0">
+          <span className="bg-accent-muted text-accent-light text-xs px-2 py-0.5 rounded flex-shrink-0">
             +{extraModels} models
           </span>
         )}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ModelName } from './ui/ModelName'
 
 interface BreakdownTabsProps {
   providerStats: Array<{
@@ -27,18 +28,20 @@ function ProgressBar({
   value,
   max,
   secondary,
+  isModel,
 }: {
   name: string
   value: number
   max: number
   secondary?: string
+  isModel?: boolean
 }) {
   const pct = max > 0 ? (value / max) * 100 : 0
 
   return (
     <div className="flex items-center gap-3">
       <span className="text-xs text-text-secondary w-28 truncate flex-shrink-0">
-        {name}
+        {isModel ? <ModelName name={name} className="text-xs" /> : name}
       </span>
       <div className="flex-1 h-2 rounded bg-[rgba(255,255,255,0.06)] overflow-hidden">
         <div
@@ -152,6 +155,7 @@ export default function BreakdownTabs({
         name={m.model}
         value={m.total_requests}
         max={max}
+        isModel
       />
     ))
   }
