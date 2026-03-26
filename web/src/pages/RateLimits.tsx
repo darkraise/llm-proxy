@@ -229,7 +229,7 @@ export default function RateLimits() {
     <div className="p-6 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-semibold text-text-primary">Rate Limit Definitions</h1>
+        <h1 className="text-xl font-semibold text-text-primary">Rate Limits</h1>
         <p className="text-sm text-text-secondary mt-0.5">
           Define default rate limits by provider and model. These are applied when creating new
           accounts.
@@ -238,15 +238,15 @@ export default function RateLimits() {
 
       {/* Provider tabs */}
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-0 overflow-x-auto">
+        <nav className="flex gap-0 overflow-x-auto">
           {PROVIDER_TYPES.map((p) => (
             <button
               key={p}
               onClick={() => setActiveTab(p)}
-              className={`px-4 py-2.5 font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-4 py-2.5 font-medium transition-colors whitespace-nowrap ${
                 activeTab === p
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-text-secondary hover:text-text-primary hover:border-border'
+                  ? 'text-accent-light border-b-2 border-accent-light pb-2'
+                  : 'text-text-secondary pb-2 hover:text-text-primary'
               }`}
             >
               {p}

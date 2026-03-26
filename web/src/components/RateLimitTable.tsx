@@ -91,7 +91,7 @@ function EditableCell({
   const [focused, setFocused] = useState(false)
 
   const colorCls = value !== null
-    ? isOverride ? 'text-warning' : 'text-text-primary'
+    ? isOverride ? 'text-warning' : 'text-accent-light'
     : 'text-text-muted'
 
   return (
@@ -105,7 +105,7 @@ function EditableCell({
           className={[
             'rlt-input',
             'w-full bg-surface border border-accent rounded px-2 py-1',
-            'text-center focus:outline-none',
+            'text-center focus:outline-none focus:ring-1 focus:ring-accent',
             'placeholder-text-muted',
             colorCls,
           ].join(' ')}
@@ -175,7 +175,7 @@ export function RateLimitTable({
   const rows = ['', ...models]
 
   return (
-    <div className="rounded-lg border border-border flex flex-col">
+    <div className="rounded-xl overflow-hidden border border-border">
       {/* Remove number input spin buttons */}
       <style>{`
         .rlt-input::-webkit-inner-spin-button,
@@ -189,14 +189,14 @@ export function RateLimitTable({
           {/* Sticky header */}
           <thead>
             <tr>
-              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay" style={{ width: '180px', maxWidth: '180px' }}>
+              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-[rgba(255,255,255,0.02)]" style={{ width: '180px', maxWidth: '180px' }}>
                 Model
               </th>
               {METRIC_DEFS.map((m) => (
                 <th
                   key={m.key}
                   title={m.label}
-                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-overlay text-center whitespace-nowrap"
+                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-[rgba(255,255,255,0.02)] text-center whitespace-nowrap"
                   style={{ width: '80px' }}
                 >
                   {m.short}
@@ -214,7 +214,7 @@ export function RateLimitTable({
                   className={isDefault ? 'bg-surface/50' : 'bg-surface-raised hover:bg-surface-overlay/40'}
                 >
                   {/* Model name cell */}
-                  <td className="px-3 py-2 border-b border-border font-mono text-text-primary overflow-hidden" style={{ maxWidth: '180px' }}>
+                  <td className="px-3 py-2 border-b border-border-muted font-mono text-text-primary overflow-hidden" style={{ maxWidth: '180px' }}>
                     {isDefault ? (
                       <span className="text-text-secondary italic">{defaultRowLabel}</span>
                     ) : (
@@ -233,10 +233,10 @@ export function RateLimitTable({
                     const placeholderText = displayDefault ?? '—'
 
                     return (
-                      <td key={m.key} className="px-1 py-1.5 border-b border-border">
+                      <td key={m.key} className="px-1 py-1.5 border-b border-border-muted">
                         {readOnly ? (
                           <div className={`text-center px-2 py-1 ${
-                            value !== null ? (isOverride ? 'text-warning' : 'text-text-primary') : 'text-text-muted'
+                            value !== null ? (isOverride ? 'text-warning' : 'text-accent-light') : 'text-text-muted'
                           }`}>
                             {displayVal ?? displayDefault ?? '—'}
                           </div>
@@ -260,7 +260,7 @@ export function RateLimitTable({
       </div>
 
       {/* Legend (hidden in read-only mode) */}
-      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-overlay text-xs text-text-muted flex-shrink-0">
+      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-[rgba(255,255,255,0.02)] text-xs text-text-muted flex-shrink-0">
         <span>
           <span className="text-warning font-medium">Amber</span>
           {' '}= override
