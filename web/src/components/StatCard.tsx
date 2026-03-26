@@ -1,10 +1,12 @@
+import React from 'react'
+
 interface StatCardProps {
   label: string
   value: string | number
   subtitle?: string
   trend?: 'up' | 'down' | 'neutral'
   trendValue?: string
-  accent?: boolean
+  icon?: React.ComponentType<{ size?: number | string; className?: string }>
 }
 
 export default function StatCard({
@@ -13,30 +15,36 @@ export default function StatCard({
   subtitle,
   trend,
   trendValue,
-  accent,
+  icon: Icon,
 }: StatCardProps) {
+  const trendColor =
+    trend === 'up'
+      ? 'text-success'
+      : trend === 'down'
+        ? 'text-error'
+        : 'text-text-muted'
+
   return (
-    <div className={`card p-4 ${accent ? 'border-accent/30' : ''}`}>
-      <p className="label">{label}</p>
-      <p className="text-2xl font-bold text-text-primary mt-1">{value}</p>
+    <div className="bg-surface border border-border rounded-xl p-4">
+      <div className="flex items-center gap-1.5 mb-2">
+        {Icon && <Icon size={14} className="text-text-secondary" />}
+        <span className="text-[11px] uppercase tracking-wide text-text-secondary font-medium">
+          {label}
+        </span>
+      </div>
+      <p className="text-[22px] font-semibold text-text-primary leading-tight">
+        {value}
+      </p>
       {(subtitle || trendValue) && (
         <div className="flex items-center gap-2 mt-1">
           {trendValue && (
-            <span
-              className={`text-xs font-medium ${
-                trend === 'up'
-                  ? 'text-success'
-                  : trend === 'down'
-                    ? 'text-error'
-                    : 'text-text-muted'
-              }`}
-            >
-              {trend === 'up' ? '↑' : trend === 'down' ? '↓' : ''}
+            <span className={`text-[11px] font-medium ${trendColor}`}>
+              {trend === 'up' ? '↑ ' : trend === 'down' ? '↓ ' : ''}
               {trendValue}
             </span>
           )}
-          {subtitle && (
-            <span className="text-xs text-text-muted">{subtitle}</span>
+          {subtitle && !trendValue && (
+            <span className="text-[11px] text-text-secondary">{subtitle}</span>
           )}
         </div>
       )}
