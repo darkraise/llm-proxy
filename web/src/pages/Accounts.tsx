@@ -1,6 +1,10 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api'
-import { RateLimitTable, formatCompact } from '../components/RateLimitTable'
+import { RateLimitTable } from '../components/RateLimitTable'
+import { AccountCard } from '../components/AccountCard'
+import { AccountListRow, LIST_GRID_COLS } from '../components/AccountListRow'
+import { useLocalStorage } from '../hooks/useLocalStorage'
+import { LayoutGrid, List, Plus } from 'lucide-react'
 
 const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
 
@@ -91,7 +95,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
   const parsedModels = parseModels(modelsRaw)
 
   const hasChanges = (() => {
-    if (form.api_key) return true // new API key entered
+    if (form.api_key) return true
     if (form.name !== initial.name) return true
     if (form.type !== initial.type) return true
     if (form.base_url !== initial.base_url) return true
@@ -104,8 +108,8 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
   })()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div className="card w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-surface-overlay border border-border rounded-xl max-w-[600px] w-full mx-4 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <h2 className="font-semibold text-text-primary">Edit Account</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
@@ -210,7 +214,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps) {
           <div className="flex justify-end gap-2 px-5 py-3 border-t border-border flex-shrink-0">
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={saving || !hasChanges} className="btn-primary disabled:opacity-50">
-              {saving ? 'Saving…' : 'Update'}
+              {saving ? 'Saving\u2026' : 'Update'}
             </button>
           </div>
         </form>
@@ -302,7 +306,6 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
     const models = Array.from(selectedModels)
     setLoadingDefaults(true)
     try {
-      // Load admin-defined rate limit defaults for the selected models.
       const defaults = await api.ratelimits.defaults(s1.type, models)
       setLimits(defaults ?? [])
     } catch {
@@ -363,8 +366,8 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
   const selectedList = Array.from(selectedModels)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div className="card w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-surface-overlay border border-border rounded-xl max-w-[600px] w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
@@ -399,7 +402,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
         </div>
 
         <div className="px-5 py-4 space-y-4">
-          {/* ── Step 1: Credentials ── */}
+          {/* Step 1: Credentials */}
           {step === 1 && (
             <>
               <div>
@@ -458,7 +461,7 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
             </>
           )}
 
-          {/* ── Step 2: Discovery ── */}
+          {/* Step 2: Discovery */}
           {step === 2 && (
             <>
               <div className="flex items-center gap-2">
@@ -482,11 +485,11 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                 className="btn-secondary w-full"
               >
                 {discovering ? (
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center justify-center gap-2">
                     <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                     </svg>
-                    Discovering…
+                    Discovering...
                   </span>
                 ) : 'Discover Models'}
               </button>
@@ -545,13 +548,13 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                   onClick={goToStep3}
                   className="btn-primary disabled:opacity-50"
                 >
-                  {loadingDefaults ? 'Loading…' : 'Next'}
+                  {loadingDefaults ? 'Loading\u2026' : 'Next'}
                 </button>
               </div>
             </>
           )}
 
-          {/* ── Step 3: Rate Limits & Confirm ── */}
+          {/* Step 3: Rate Limits & Confirm */}
           {step === 3 && (
             <>
               <div>
@@ -615,107 +618,13 @@ function AccountWizard({ onClose, onSave }: WizardProps) {
                   onClick={handleSave}
                   className="btn-primary disabled:opacity-50"
                 >
-                  {saving ? 'Saving…' : 'Save Account'}
+                  {saving ? 'Saving\u2026' : 'Save Account'}
                 </button>
               </div>
             </>
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Models Accordion (collapsed by default) ────────────────────────────────
-
-function ModelsAccordion({ models, defaultModel }: { models: string[]; defaultModel: string }) {
-  const [open, setOpen] = useState(false)
-  if (models.length === 0) return null
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
-      >
-        <span className={`transition-transform ${open ? 'rotate-90' : ''}`}>&#9654;</span>
-        Models ({models.length})
-      </button>
-      {open && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {models.map((m) => (
-            <span
-              key={m}
-              className={`badge-accent font-mono text-xs ${defaultModel === m ? 'ring-1 ring-accent' : ''}`}
-              title={defaultModel === m ? 'Default model' : undefined}
-            >
-              {m}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Rate Limit Popover (read-only) ──────────────────────────────────────────
-
-function RateLimitPopover({ limits, models }: { limits: AccountLimit[]; models: string[] }) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const popoverRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
-
-  useEffect(() => {
-    if (!open) return
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node) &&
-          popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  useEffect(() => {
-    if (!open || !btnRef.current) return
-    const rect = btnRef.current.getBoundingClientRect()
-    setPos({ top: rect.bottom + 4, left: Math.max(8, rect.left) })
-  }, [open])
-
-  return (
-    <div ref={containerRef}>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
-      >
-        <span className={`transition-transform ${open ? 'rotate-90' : ''}`}>&#9654;</span>
-        Rate Limits ({limits.length})
-      </button>
-      {open && (
-        <div
-          ref={popoverRef}
-          className="fixed z-50 shadow-lg rounded-lg border border-border bg-surface-raised overflow-auto"
-          style={{
-            top: pos.top,
-            left: pos.left,
-            maxWidth: 'calc(100vw - 1rem)',
-            maxHeight: 'calc(100vh - 4rem)',
-          }}
-        >
-          <RateLimitTable
-            models={models}
-            limits={limits}
-            onChange={() => {}}
-            defaultRowLabel="Account Default"
-            readOnly
-          />
-        </div>
-      )}
     </div>
   )
 }
@@ -731,6 +640,8 @@ export default function Accounts() {
   const [testResults, setTestResults] = useState<Record<number, TestResult | 'testing'>>({})
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
+  const [viewMode, setViewMode] = useLocalStorage<'grid' | 'list'>('llm-proxy:accounts-view', 'grid')
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -758,16 +669,6 @@ export default function Accounts() {
     }
   }
 
-  async function handleTest(id: number) {
-    setTestResults((r) => ({ ...r, [id]: 'testing' }))
-    try {
-      const result = await api.accounts.test(id)
-      setTestResults((r) => ({ ...r, [id]: result }))
-    } catch {
-      setTestResults((r) => ({ ...r, [id]: { success: false, error: 'Request failed' } }))
-    }
-  }
-
   async function handleImport(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -782,29 +683,47 @@ export default function Accounts() {
     e.target.value = ''
   }
 
-  function openEdit(p: Account) {
-    setEditing(p)
-  }
-
-  function closeEdit() {
-    setEditing(null)
-  }
-
   function handleSaved() {
     setWizardOpen(false)
     setEditing(null)
     fetchAccounts()
   }
 
+  const activeCount = accounts.filter((a) => a.enabled).length
+
+  // testResults, setTestResults, deleteConfirm, handleDelete, selectedAccountId
+  // are used by the account detail drawer (Task 9)
+  void testResults; void setTestResults; void deleteConfirm; void handleDelete; void selectedAccountId
+
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-text-primary">Accounts</h1>
-          <p className="text-sm text-text-secondary mt-0.5">Manage LLM backend accounts</p>
+          <h1 className="text-[20px] font-semibold text-text-primary">Accounts</h1>
+          <p className="text-[13px] text-text-secondary mt-0.5">
+            {accounts.length} accounts &middot; {activeCount} active
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* View toggle */}
+          <div className="flex bg-[rgba(255,255,255,0.04)] border border-border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-accent-muted text-accent-light' : 'text-text-muted hover:text-text-secondary'}`}
+              title="Grid view"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-accent-muted text-accent-light' : 'text-text-muted hover:text-text-secondary'}`}
+              title="List view"
+            >
+              <List size={16} />
+            </button>
+          </div>
+
           <input
             ref={importRef}
             type="file"
@@ -818,7 +737,8 @@ export default function Accounts() {
           <a href={api.config.exportUrl()} download className="btn-secondary">
             Export YAML
           </a>
-          <button onClick={() => setWizardOpen(true)} className="btn-primary">
+          <button onClick={() => setWizardOpen(true)} className="btn-primary inline-flex items-center gap-1.5">
+            <Plus size={15} />
             Add Account
           </button>
         </div>
@@ -832,138 +752,48 @@ export default function Accounts() {
 
       {/* Account list */}
       {loading ? (
-        <div className="text-text-muted text-center py-16">Loading…</div>
+        <div className="text-text-muted text-center py-16">Loading...</div>
       ) : accounts.length === 0 ? (
-        <div className="card p-10 text-center">
+        <div className="bg-surface-raised border border-border rounded-xl p-10 text-center">
           <p className="text-text-secondary mb-3">No accounts configured yet.</p>
-          <button onClick={() => setWizardOpen(true)} className="btn-primary">
+          <button onClick={() => setWizardOpen(true)} className="btn-primary inline-flex items-center gap-1.5">
+            <Plus size={15} />
             Add your first account
           </button>
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {accounts.map((p) => {
-            const models = parseAccountModels(p.models)
-            const available = p.status?.available ?? p.enabled
-            const rateLimited = p.status?.reason?.includes('exhausted') ?? false
-            const testRes = testResults[p.id]
-
-            const stripColor = !p.enabled
-              ? 'bg-text-muted'
-              : rateLimited
-                ? 'bg-warning'
-                : available
-                  ? 'bg-success'
-                  : 'bg-error'
-
-            return (
-              <div
-                key={p.id}
-                className={`card overflow-visible flex ${!p.enabled ? 'opacity-60' : ''}`}
-              >
-                {/* Left color strip */}
-                <div className={`w-1 flex-shrink-0 rounded-l-lg ${stripColor}`} />
-
-                <div className="flex-1 p-3 min-w-0">
-                  {/* Header: name + badges + icon actions */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-text-primary truncate">{p.name}</span>
-                    <span className="badge-neutral text-xs flex-shrink-0">{p.type}</span>
-                    {!p.enabled && <span className="badge-warning text-xs flex-shrink-0">disabled</span>}
-                    {rateLimited && <span className="badge-warning text-xs flex-shrink-0">rate limited</span>}
-                    <span className="flex-1" />
-                    <div className="flex gap-0.5 flex-shrink-0">
-                      <button
-                        onClick={() => handleTest(p.id)}
-                        disabled={testRes === 'testing'}
-                        className="p-1 rounded hover:bg-surface-overlay text-accent transition-colors disabled:opacity-50"
-                        title="Test connectivity"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09z"/></svg>
-                      </button>
-                      <button
-                        onClick={() => openEdit(p)}
-                        className="p-1 rounded hover:bg-surface-overlay text-text-secondary transition-colors"
-                        title="Edit account"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zM13.5 6.207 9.793 2.5 3.5 8.793V12.5h3.707l6.293-6.293z"/><path d="M1 13.5V16h2.5l.793-.793H1.5v-1.914L1 13.5z"/></svg>
-                      </button>
-                      {deleteConfirm === p.id ? (
-                        <>
-                          <button
-                            onClick={() => handleDelete(p.id)}
-                            className="p-1 rounded bg-error/10 text-error transition-colors"
-                            title="Confirm delete"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/></svg>
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(null)}
-                            className="p-1 rounded hover:bg-surface-overlay text-text-muted transition-colors"
-                            title="Cancel"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => setDeleteConfirm(p.id)}
-                          className="p-1 rounded hover:bg-error/10 text-error/60 hover:text-error transition-colors"
-                          title="Delete account"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stats bar */}
-                  <div className="flex gap-3 px-2.5 py-1.5 bg-surface/50 rounded-md mb-2 text-center">
-                    <div className="flex-1">
-                      <div className="text-xs text-text-muted uppercase tracking-wide">Requests</div>
-                      <div className="font-bold text-text-primary">{formatCompact(p.total_requests)}</div>
-                    </div>
-                    <div className="w-px bg-border" />
-                    <div className="flex-1">
-                      <div className="text-xs text-text-muted uppercase tracking-wide">Tokens</div>
-                      <div className="font-bold text-text-primary">{formatCompact(p.total_tokens)}</div>
-                    </div>
-                    <div className="w-px bg-border" />
-                    <div className="flex-1">
-                      <div className="text-xs text-text-muted uppercase tracking-wide">Default</div>
-                      <div className="text-xs font-mono text-accent truncate">{p.default_model || '—'}</div>
-                    </div>
-                    <div className="w-px bg-border" />
-                    <div className="flex-shrink-0 w-10">
-                      <div className="text-xs text-text-muted uppercase tracking-wide">Pri</div>
-                      <div className="font-bold text-text-primary">{p.priority}</div>
-                    </div>
-                  </div>
-
-                  {/* Test result */}
-                  {testRes && testRes !== 'testing' && (
-                    <div
-                      className={`mb-2 text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
-                        testRes.success ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
-                      }`}
-                    >
-                      {testRes.success
-                        ? `Connected (HTTP ${testRes.status_code})`
-                        : `Failed: ${testRes.error}`}
-                    </div>
-                  )}
-
-                  {/* Accordions */}
-                  <div className="space-y-1">
-                    <ModelsAccordion models={models} defaultModel={p.default_model} />
-                    {p.limits && p.limits.length > 0 && (
-                      <RateLimitPopover limits={p.limits} models={models} />
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {accounts.map((a) => (
+            <AccountCard
+              key={a.id}
+              account={a}
+              onClick={() => setSelectedAccountId(a.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-surface-raised border border-border rounded-xl overflow-hidden">
+          {/* List header */}
+          <div
+            className="grid items-center px-3 py-2 border-b border-border text-[10px] uppercase tracking-wider text-text-muted font-medium"
+            style={{ gridTemplateColumns: LIST_GRID_COLS }}
+          >
+            <div />
+            <div>Name</div>
+            <div>Provider</div>
+            <div className="text-right">Requests</div>
+            <div className="text-right">Tokens</div>
+            <div className="text-center">Priority</div>
+            <div>Default Model</div>
+            <div className="text-center">Models</div>
+          </div>
+          {accounts.map((a) => (
+            <AccountListRow
+              key={a.id}
+              account={a}
+              onClick={() => setSelectedAccountId(a.id)}
+            />
+          ))}
         </div>
       )}
 
@@ -974,7 +804,7 @@ export default function Accounts() {
 
       {/* Edit modal */}
       {editing && (
-        <AccountEditModal initial={editing} onClose={closeEdit} onSave={handleSaved} />
+        <AccountEditModal initial={editing} onClose={() => setEditing(null)} onSave={handleSaved} />
       )}
     </div>
   )
