@@ -2,7 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --surface: #1a1a2e;
+  --surface-raised: #16162a;
+  --surface-overlay: #1e1e36;
+  --border: rgba(255,255,255,0.06);
+  --border-muted: rgba(255,255,255,0.03);
+  --text-primary: #e8e8f0;
+  --text-secondary: #7a7a8a;
+  --text-muted: #7a7a8e;
+  --accent: #7c5bf0;
+  --accent-light: #a78bfa;
+  --accent-muted: rgba(124,91,240,0.12);
+  --accent-gradient: linear-gradient(135deg, #7c5bf0, #5b8cf0);
+  --success: #52c41a;
+  --warning: #faad14;
+  --error: #f85149;
+}
+
+[data-theme="light"] {
+  --surface: #ffffff;
+  --surface-raised: #f8f9fa;
+  --surface-overlay: #ffffff;
+  --border: rgba(0,0,0,0.08);
+  --border-muted: rgba(0,0,0,0.04);
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --accent: #7c5bf0;
+  --accent-light: #6d4ed6;
+  --accent-muted: rgba(124,91,240,0.08);
+  --accent-gradient: linear-gradient(135deg, #7c5bf0, #5b8cf0);
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+}
+
 @layer base {
+  html {
+    color-scheme: dark;
+  }
+
   html,
   body,
   #root {
@@ -10,8 +50,9 @@
   }
 
   body {
-    @apply bg-surface text-text-primary font-sans antialiased text-base;
-    color-scheme: dark;
+    background: var(--surface);
+    color: var(--text-primary);
+    @apply font-sans antialiased text-base;
   }
 
   * {
@@ -23,29 +64,30 @@
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-surface-raised;
+    background: var(--surface-raised);
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    background: var(--border);
+    @apply rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-text-muted;
+    background: var(--text-muted);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-surface-raised border border-border rounded-lg;
+    @apply bg-surface-raised border border-border rounded-xl;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-surface;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-surface;
   }
 
   .btn-primary {
-    @apply btn bg-accent hover:bg-accent-hover text-white;
+    @apply btn bg-accent hover:bg-accent-light text-white;
   }
 
   .btn-secondary {
@@ -53,12 +95,24 @@
   }
 
   .btn-danger {
-    @apply btn bg-error/10 hover:bg-error/20 text-error border border-error/30;
+    @apply btn text-error border;
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    border-color: color-mix(in srgb, var(--error) 30%, transparent);
+  }
+
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--error) 20%, transparent);
   }
 
   .input {
-    @apply w-full bg-surface border border-border rounded-md px-3 py-1.5 text-text-primary placeholder-text-muted
-      focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors;
+    @apply w-full rounded-lg px-3 py-1.5 text-text-primary placeholder-text-muted
+      focus:outline-none focus:ring-1 focus:ring-accent transition-colors;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .input:focus {
+    border-color: var(--accent);
   }
 
   .label {
@@ -69,7 +123,7 @@
     @apply appearance-none w-4 h-4 rounded border border-border bg-surface cursor-pointer
       transition-colors shrink-0
       checked:bg-accent checked:border-accent
-      focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-0;
+      focus:outline-none focus:ring-2 focus:ring-accent-muted focus:ring-offset-0;
     background-image: none;
   }
 
@@ -81,19 +135,22 @@
   }
 
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-[5px] text-[11px] font-medium;
   }
 
   .badge-success {
-    @apply badge bg-success/10 text-success;
+    @apply badge text-success;
+    background: color-mix(in srgb, var(--success) 10%, transparent);
   }
 
   .badge-error {
-    @apply badge bg-error/10 text-error;
+    @apply badge text-error;
+    background: color-mix(in srgb, var(--error) 10%, transparent);
   }
 
   .badge-warning {
-    @apply badge bg-warning/10 text-warning;
+    @apply badge text-warning;
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
   }
 
   .badge-neutral {
@@ -101,6 +158,7 @@
   }
 
   .badge-accent {
-    @apply badge bg-accent/10 text-accent;
+    @apply badge text-accent;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 }

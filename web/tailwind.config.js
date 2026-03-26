@@ -1,37 +1,37 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
         surface: {
-          DEFAULT: '#0d1117',
-          raised: '#161b22',
-          overlay: '#1c2128',
+          DEFAULT: 'var(--surface)',
+          raised: 'var(--surface-raised)',
+          overlay: 'var(--surface-overlay)',
         },
         border: {
-          DEFAULT: '#30363d',
-          muted: '#21262d',
+          DEFAULT: 'var(--border)',
+          muted: 'var(--border-muted)',
         },
         text: {
-          primary: '#e1e4e8',
-          secondary: '#8b949e',
-          muted: '#484f58',
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
         },
         accent: {
-          DEFAULT: '#1f6feb',
-          hover: '#388bfd',
-          muted: 'rgba(31,111,235,0.1)',
+          DEFAULT: 'var(--accent)',
+          light: 'var(--accent-light)',
+          muted: 'var(--accent-muted)',
         },
-        success: '#52c41a',
-        warning: '#faad14',
-        error: '#f85149',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        error: 'var(--error)',
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Helvetica', 'Arial', 'sans-serif'],
-        mono: ['"SFMono-Regular"', 'Consolas', '"Liberation Mono"', 'Menlo', 'monospace'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Noto Sans', 'Helvetica', 'Arial', 'sans-serif'],
+        mono: ['SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'monospace'],
       },
     },
   },
   plugins: [],
-}
+};
