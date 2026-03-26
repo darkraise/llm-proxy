@@ -3,6 +3,7 @@ import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api
 import { RateLimitTable } from '../components/RateLimitTable'
 import { AccountCard } from '../components/AccountCard'
 import { AccountListRow, LIST_GRID_COLS } from '../components/AccountListRow'
+import { AccountDrawer } from '../components/AccountDrawer'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { LayoutGrid, List, Plus } from 'lucide-react'
 
@@ -638,7 +639,6 @@ export default function Accounts() {
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editing, setEditing] = useState<Account | null>(null)
   const [testResults, setTestResults] = useState<Record<number, TestResult | 'testing'>>({})
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [viewMode, setViewMode] = useLocalStorage<'grid' | 'list'>('llm-proxy:accounts-view', 'grid')
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -662,7 +662,7 @@ export default function Accounts() {
   async function handleDelete(id: number) {
     try {
       await api.accounts.delete(id)
-      setDeleteConfirm(null)
+      setSelectedAccountId(null)
       fetchAccounts()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
@@ -691,9 +691,20 @@ export default function Accounts() {
 
   const activeCount = accounts.filter((a) => a.enabled).length
 
-  // testResults, setTestResults, deleteConfirm, handleDelete, selectedAccountId
-  // are used by the account detail drawer (Task 9)
-  void testResults; void setTestResults; void deleteConfirm; void handleDelete; void selectedAccountId
+  async function handleTest(id: number) {
+    setTestResults((prev) => ({ ...prev, [id]: 'testing' }))
+    try {
+      const result = await api.accounts.test(id)
+      setTestResults((prev) => ({ ...prev, [id]: result }))
+    } catch (err) {
+      setTestResults((prev) => ({
+        ...prev,
+        [id]: { success: false, error: err instanceof Error ? err.message : 'Test failed' },
+      }))
+    }
+  }
+
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
 
   return (
     <div className="p-6 space-y-5">
@@ -806,6 +817,16 @@ export default function Accounts() {
       {editing && (
         <AccountEditModal initial={editing} onClose={() => setEditing(null)} onSave={handleSaved} />
       )}
+
+      {/* Account detail drawer */}
+      <AccountDrawer
+        account={selectedAccount}
+        onClose={() => setSelectedAccountId(null)}
+        onUpdate={() => fetchAccounts()}
+        onTest={(id) => handleTest(id)}
+        onDelete={(id) => handleDelete(id)}
+        testResult={testResults[selectedAccountId ?? -1]}
+      />
     </div>
   )
 }
