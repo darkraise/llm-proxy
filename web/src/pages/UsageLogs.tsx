@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, Account, RequestLog } from '../lib/api'
+import { Badge } from '../components/ui/Badge'
+import { LogDrawer } from '../components/LogDrawer'
 
 const PAGE_SIZES = [25, 50, 100]
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'success') return <span className="badge-success">{status}</span>
-  if (status === 'error') return <span className="badge-error">{status}</span>
-  return <span className="badge-warning">{status}</span>
-}
+const DATE_PRESETS = [
+  { label: 'Last 24h', hours: 24 },
+  { label: 'Last 7d', hours: 24 * 7 },
+  { label: 'Last 30d', hours: 24 * 30 },
+] as const
 
 function formatTs(ts: string): string {
   const d = new Date(ts)
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  return `${mm}-${dd} ${hh}:${min}:${ss}`
+}
+
+function statusVariant(code: number) {
+  if (code >= 200 && code < 300) return 'success' as const
+  if (code >= 400) return 'error' as const
+  return 'warning' as const
 }
 
 export default function UsageLogs() {
@@ -29,18 +35,38 @@ export default function UsageLogs() {
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [filterAccount, setFilterAccount] = useState('')
+  const [filterModel, setFilterModel] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterDateRange, setFilterDateRange] = useState('')
+  const [filterMinLatency, setFilterMinLatency] = useState('')
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(0)
 
+  const [selectedLogId, setSelectedLogId] = useState<number | null>(null)
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  function computeDateRange(): { from?: string; to?: string } {
+    if (!filterDateRange) return {}
+    const preset = DATE_PRESETS.find((p) => p.label === filterDateRange)
+    if (!preset) return {}
+    const to = new Date()
+    const from = new Date(to.getTime() - preset.hours * 60 * 60 * 1000)
+    return { from: from.toISOString(), to: to.toISOString() }
+  }
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
+      const dates = computeDateRange()
+      const minLat = filterMinLatency ? Number(filterMinLatency) : undefined
       const res = await api.stats.requests({
         account: filterAccount || undefined,
         status: filterStatus || undefined,
+        model: filterModel || undefined,
+        from: dates.from,
+        to: dates.to,
+        min_latency: minLat && !isNaN(minLat) ? minLat : undefined,
         limit: pageSize,
         offset: page * pageSize,
       })
@@ -52,7 +78,8 @@ export default function UsageLogs() {
     } finally {
       setLoading(false)
     }
-  }, [filterAccount, filterStatus, pageSize, page])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterAccount, filterStatus, filterModel, filterDateRange, filterMinLatency, pageSize, page])
 
   useEffect(() => {
     api.accounts.list().then((data) => setAccounts(data ?? [])).catch(() => {})
@@ -67,72 +94,92 @@ export default function UsageLogs() {
     fetchLogs()
   }
 
+  const startIdx = page * pageSize + 1
+  const endIdx = Math.min(page * pageSize + logs.length, total)
+
+  const selectedLog = logs.find((l) => l.id === selectedLogId) ?? null
+
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-semibold text-text-primary">Usage Logs</h1>
-        <p className="text-sm text-text-secondary mt-0.5">Per-request log of all proxied calls</p>
+        <h1 className="text-[20px] font-semibold text-text-primary">Usage Logs</h1>
+        <p className="text-[13px] text-text-secondary mt-0.5">Request history and details</p>
       </div>
 
       {/* Filter bar */}
-      <div className="card p-3 flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-32">
-          <label className="label">Account</label>
-          <select
-            className="input"
-            value={filterAccount}
-            onChange={(e) => {
-              setFilterAccount(e.target.value)
-              setPage(0)
-            }}
-          >
-            <option value="">All accounts</option>
-            {accounts.map((p) => (
-              <option key={p.id} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="bg-surface-raised border border-border rounded-xl p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-32">
+            <label className="label">Account</label>
+            <select
+              className="input"
+              value={filterAccount}
+              onChange={(e) => setFilterAccount(e.target.value)}
+            >
+              <option value="">All accounts</option>
+              {accounts.map((p) => (
+                <option key={p.id} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div className="flex-1 min-w-28">
-          <label className="label">Status</label>
-          <select
-            className="input"
-            value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value)
-              setPage(0)
-            }}
-          >
-            <option value="">All statuses</option>
-            <option value="success">success</option>
-            <option value="error">error</option>
-          </select>
-        </div>
+          <div className="flex-1 min-w-28">
+            <label className="label">Model</label>
+            <input
+              className="input font-mono"
+              placeholder="Type to filter"
+              value={filterModel}
+              onChange={(e) => setFilterModel(e.target.value)}
+            />
+          </div>
 
-        <div className="min-w-20">
-          <label className="label">Page size</label>
-          <select
-            className="input"
-            value={pageSize}
-            onChange={(e) => {
-              setPageSize(Number(e.target.value))
-              setPage(0)
-            }}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="flex-1 min-w-28">
+            <label className="label">Status</label>
+            <select
+              className="input"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="success">Success</option>
+              <option value="error">Error</option>
+            </select>
+          </div>
 
-        <button onClick={applyFilter} className="btn-primary">
-          Apply
-        </button>
+          <div className="flex-1 min-w-32">
+            <label className="label">Date Range</label>
+            <select
+              className="input"
+              value={filterDateRange}
+              onChange={(e) => setFilterDateRange(e.target.value)}
+            >
+              <option value="">All time</option>
+              {DATE_PRESETS.map((p) => (
+                <option key={p.label} value={p.label}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-24">
+            <label className="label">Min Latency</label>
+            <input
+              className="input"
+              type="number"
+              placeholder="ms"
+              value={filterMinLatency}
+              onChange={(e) => setFilterMinLatency(e.target.value)}
+            />
+          </div>
+
+          <button onClick={applyFilter} className="btn-primary">
+            Apply
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -147,25 +194,25 @@ export default function UsageLogs() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Timestamp
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Account
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Model
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Endpoint
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-left px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Status
                 </th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-right px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Latency
                 </th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-text-secondary">
+                <th className="text-right px-4 py-2.5 text-[11px] font-medium text-text-secondary uppercase">
                   Tokens
                 </th>
               </tr>
@@ -174,7 +221,7 @@ export default function UsageLogs() {
               {loading ? (
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-text-muted">
-                    Loading…
+                    Loading...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
@@ -187,22 +234,27 @@ export default function UsageLogs() {
                 logs.map((log) => (
                   <tr
                     key={log.id}
-                    className="border-b border-border/50 hover:bg-surface-overlay/50 transition-colors"
+                    onClick={() => setSelectedLogId(log.id)}
+                    className={`border-b border-border/50 cursor-pointer transition-colors hover:bg-[rgba(255,255,255,0.02)] ${
+                      selectedLogId === log.id ? 'bg-accent-muted/50' : ''
+                    }`}
                   >
                     <td className="px-4 py-2.5 text-xs text-text-muted whitespace-nowrap font-mono">
                       {formatTs(log.timestamp)}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-primary">
-                      {log.account_name || '—'}
+                      {log.account_name || '\u2014'}
                     </td>
                     <td className="px-4 py-2.5 text-xs font-mono text-text-secondary max-w-32 truncate">
-                      {log.model || '—'}
+                      {log.model || '\u2014'}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-muted">
-                      {log.endpoint || '—'}
+                      {log.endpoint || '\u2014'}
                     </td>
                     <td className="px-4 py-2.5">
-                      <StatusBadge status={log.status} />
+                      <Badge variant={statusVariant(log.status_code)}>
+                        {log.status_code}
+                      </Badge>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-secondary text-right whitespace-nowrap">
                       {log.latency_ms} ms
@@ -220,22 +272,25 @@ export default function UsageLogs() {
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border">
           <p className="text-xs text-text-muted">
-            {total} total record{total !== 1 ? 's' : ''}
+            {total > 0
+              ? `Showing ${startIdx}\u2013${endIdx} of ${total} requests`
+              : '0 requests'}
           </p>
+
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage(0)}
               disabled={page === 0}
               className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
             >
-              «
+              &laquo;
             </button>
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
               className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
             >
-              ‹
+              &lsaquo;
             </button>
             <span className="text-xs text-text-secondary px-2">
               {page + 1} / {totalPages}
@@ -245,18 +300,39 @@ export default function UsageLogs() {
               disabled={page >= totalPages - 1}
               className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
             >
-              ›
+              &rsaquo;
             </button>
             <button
               onClick={() => setPage(totalPages - 1)}
               disabled={page >= totalPages - 1}
               className="btn-secondary px-2 py-1 text-xs disabled:opacity-40"
             >
-              »
+              &raquo;
             </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-text-muted">Per page</label>
+            <select
+              className="input py-1 text-xs w-16"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(0)
+              }}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
+
+      {/* Detail drawer */}
+      <LogDrawer log={selectedLog} onClose={() => setSelectedLogId(null)} />
     </div>
   )
 }
