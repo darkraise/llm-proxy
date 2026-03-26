@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../lib/api'
+import { ToggleSwitch } from '../components/ui/ToggleSwitch'
 
 interface SaveStatus {
   ok: boolean
@@ -8,8 +9,8 @@ interface SaveStatus {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="card p-5">
-      <h2 className="font-semibold text-text-primary mb-4 pb-2 border-b border-border">
+    <div className="bg-surface-raised border border-border rounded-xl p-5">
+      <h2 className="text-sm font-medium text-text-primary mb-4">
         {title}
       </h2>
       {children}
@@ -28,7 +29,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="label">{label}</label>
+      <label className="text-[12px] uppercase tracking-wider text-text-secondary">{label}</label>
       {children}
       {hint && <p className="text-xs text-text-muted mt-0.5">{hint}</p>}
     </div>
@@ -41,7 +42,7 @@ function SaveButton({ saving, status }: { saving: boolean; status: SaveStatus | 
       <button
         type="submit"
         disabled={saving}
-        className="btn-primary disabled:opacity-50"
+        className="bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-[13px] font-medium px-4 py-2 disabled:opacity-50"
       >
         {saving ? 'Saving…' : 'Save'}
       </button>
@@ -90,7 +91,7 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
         >
           <input
             type="number"
-            className="input"
+            className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
             min={1}
             max={300}
             value={timeout}
@@ -103,7 +104,7 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
         >
           <input
             type="number"
-            className="input"
+            className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
             min={0}
             max={10}
             value={retries}
@@ -116,7 +117,7 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
         >
           <input
             type="number"
-            className="input"
+            className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
             min={1}
             max={365}
             value={retention}
@@ -195,17 +196,12 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
         {/* Proxy auth */}
         <form onSubmit={handleSaveAuth} className="space-y-4">
           <Field label="Proxy Authentication" hint="Require an API key for all proxied requests.">
-            <div className="flex items-center gap-2 mt-1">
-              <input
-                id="proxy-auth"
-                type="checkbox"
-                className="checkbox"
+            <div className="mt-1">
+              <ToggleSwitch
                 checked={proxyAuth}
-                onChange={(e) => setProxyAuth(e.target.checked)}
+                onChange={setProxyAuth}
+                label="Enable proxy auth"
               />
-              <label htmlFor="proxy-auth" className="text-text-primary">
-                Enable proxy auth
-              </label>
             </div>
           </Field>
 
@@ -213,7 +209,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
             <Field label="Proxy API Key" hint="Clients must send this as a Bearer token.">
               <div className="flex gap-2">
                 <input
-                  className="input font-mono flex-1"
+                  className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent font-mono flex-1"
                   type={showKey ? 'text' : 'password'}
                   value={proxyKey}
                   onChange={(e) => setProxyKey(e.target.value)}
@@ -223,7 +219,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="btn-secondary px-2"
+                  className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-[13px] font-medium px-4 py-2"
                 >
                   {showKey ? 'Hide' : 'Show'}
                 </button>
@@ -236,12 +232,12 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
 
         {/* Change password */}
         <div className="border-t border-border pt-4">
-          <p className="font-medium text-text-primary mb-3">Change Admin Password</p>
+          <p className="text-sm font-medium text-text-primary mb-3">Change Admin Password</p>
           <form onSubmit={handleChangePassword} className="space-y-3">
             <Field label="New Password">
               <input
                 type="password"
-                className="input"
+                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 autoComplete="new-password"
@@ -252,7 +248,7 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
             <Field label="Confirm Password">
               <input
                 type="password"
-                className="input"
+                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
@@ -304,17 +300,12 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
           label="Enable Ollama Fallback"
           hint="Route requests to a local Ollama instance when all upstream providers fail."
         >
-          <div className="flex items-center gap-2 mt-1">
-            <input
-              id="ollama-enabled"
-              type="checkbox"
-              className="checkbox"
+          <div className="mt-1">
+            <ToggleSwitch
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
+              onChange={setEnabled}
+              label="Enable fallback"
             />
-            <label htmlFor="ollama-enabled" className="text-text-primary">
-              Enable fallback
-            </label>
           </div>
         </Field>
 
@@ -323,7 +314,7 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
             <Field label="Ollama URL" hint="Base URL of your Ollama instance.">
               <input
                 type="url"
-                className="input"
+                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="http://localhost:11434"
@@ -331,7 +322,7 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
             </Field>
             <Field label="Fallback Model" hint="Model to use when falling back to Ollama.">
               <input
-                className="input font-mono"
+                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent font-mono w-full"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 placeholder="llama3.2"
@@ -340,7 +331,7 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
             <Field label="Timeout (seconds)" hint="Request timeout for Ollama calls.">
               <input
                 type="number"
-                className="input"
+                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
                 min={1}
                 max={600}
                 value={timeout}
@@ -391,7 +382,7 @@ function ConfigSettings() {
           <a
             href={api.config.exportUrl()}
             download
-            className="btn-secondary"
+            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-[13px] font-medium px-4 py-2 flex items-center gap-1.5"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
@@ -403,7 +394,7 @@ function ConfigSettings() {
           <button
             onClick={() => importRef.current?.click()}
             disabled={importing}
-            className="btn-secondary disabled:opacity-50"
+            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-[13px] font-medium px-4 py-2 flex items-center gap-1.5 disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
@@ -422,7 +413,7 @@ function ConfigSettings() {
         </div>
 
         {status && (
-          <p className={`${status.ok ? 'text-success' : 'text-error'}`}>
+          <p className={`text-sm ${status.ok ? 'text-success' : 'text-error'}`}>
             {status.msg}
           </p>
         )}
