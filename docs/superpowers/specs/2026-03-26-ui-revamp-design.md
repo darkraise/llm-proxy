@@ -117,10 +117,10 @@ Complete redesign as an analytics + status hub. Top-down flow layout.
 
 | Card | Value | Subtext |
 |---|---|---|
-| Requests | Total today | `+N%` vs yesterday (green/red trend) |
-| Tokens | Total today | Prompt in / completion out breakdown |
+| Requests | Total today | `+N%` vs yesterday (green/red trend) — **requires backend: yesterday comparison data** |
+| Tokens | Total today | Prompt in / completion out breakdown — **requires backend: `prompt_tokens` + `completion_tokens` in overview response** |
 | Errors | Count today | Error rate percentage |
-| Avg Latency | Milliseconds | `+/-N%` vs yesterday (green/red trend) |
+| Avg Latency | Milliseconds | `+/-N%` vs yesterday (green/red trend) — **requires backend: yesterday comparison data** |
 
 Each stat card: `--surface` background, `--border` border, 12px radius. Small inline Lucide icon next to label.
 
@@ -137,12 +137,13 @@ Single card with 3 tabs:
 Active tab: Purple text + background tint. Inactive: muted gray.
 
 ### Data Requirements
-The dashboard requires these API endpoints (existing or new):
-- `GET /admin/api/stats/overview` — totals, trends (exists)
-- `GET /admin/api/stats/accounts` — per-account breakdown (exists)
-- `GET /admin/api/stats/providers` — per-provider breakdown (may need new endpoint or derive from accounts)
-- `GET /admin/api/stats/models` — per-model breakdown with optional provider filter (may need new endpoint)
-- `GET /admin/api/accounts` — account list for status strip (exists)
+
+**Backend changes required:**
+- `GET /admin/api/stats/overview` — **extend** to include: yesterday's totals (for trend calculation), `prompt_tokens` + `completion_tokens` split (currently only returns `total_tokens`)
+- `GET /admin/api/stats/accounts` — per-account breakdown (exists, no changes needed)
+- `GET /admin/api/stats/providers` — **new endpoint**. Returns request count, token count, error count grouped by provider type. Derivable from accounts table joined with request_logs.
+- `GET /admin/api/stats/models` — **new endpoint**. Returns request count, token count grouped by model. Accepts optional `?provider=<type>` query parameter for filtering. Derivable from request_logs grouped by model.
+- `GET /admin/api/accounts` — account list for status strip (exists, no changes needed)
 
 ## 3. Accounts Page
 
@@ -227,8 +228,8 @@ Card containing filters in a horizontal row:
 | Account | Dropdown | All accounts / specific account |
 | Model | Dropdown | All models / specific model |
 | Status | Dropdown | All / Success (2xx) / Error (4xx/5xx) |
-| Date Range | Date picker | Last 24h / Last 7d / Last 30d / Custom range |
-| Min Latency | Number input | Any / threshold in ms |
+| Date Range | Date picker | Last 24h / Last 7d / Last 30d / Custom range — **requires backend: handler must parse `from`/`to` query params (struct supports it, handler does not)** |
+| Min Latency | Number input | Any / threshold in ms — **requires backend: add `min_latency` query param to handler** |
 
 "Apply" button at the end (accent style).
 
@@ -246,11 +247,13 @@ Slides in from right. 320px width. Same pattern as Accounts drawer.
 
 **Content:** Three sections separated by border dividers. Left-right key-value layout (OK because fixed 320px width):
 
-1. **Request:** Endpoint, Method, Stream
-2. **Tokens:** Prompt, Completion, Total
-3. **Performance:** Latency, TTFB, Provider
+1. **Request:** Account, Model, Endpoint, Status Code
+2. **Tokens:** Prompt Tokens, Completion Tokens, Total
+3. **Performance:** Latency, Provider Type
 
-**Error rows:** Additional section showing error message/response body.
+**Error rows:** Additional section showing error message (from `error_message` field).
+
+**Note:** Fields are limited to what exists in the `request_logs` schema. Method, Stream, and TTFB are not tracked and are out of scope unless the schema is extended.
 
 **Navigation:** Clicking a different table row switches the drawer content (no close/reopen needed).
 
