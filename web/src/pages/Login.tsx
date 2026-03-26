@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Box } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
 
 export default function Login() {
@@ -31,19 +32,17 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 16 16" fill="white">
-              <path d="M8 0L0 4v8l8 4 8-4V4L8 0zM1.5 4.9L8 1.6l6.5 3.3v6.2L8 14.4l-6.5-3.3V4.9z" />
-            </svg>
+          <div className="w-10 h-10 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center">
+            <Box size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-text-primary">LLM Proxy</h1>
-            <p className="text-xs text-text-muted">Admin Dashboard</p>
+            <h1 className="text-[20px] font-semibold text-text-primary">LLM Proxy</h1>
+            <p className="text-[14px] text-text-secondary">Admin Dashboard</p>
           </div>
         </div>
 
         {/* Card */}
-        <div className="card p-6">
+        <div className="bg-surface-raised border border-border rounded-xl p-6">
           <h2 className="text-base font-medium text-text-primary mb-1">Sign in</h2>
           <p className="text-sm text-text-secondary mb-5">
             Enter your admin password to continue.
@@ -76,7 +75,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-[13px] font-medium px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
