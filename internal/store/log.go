@@ -29,22 +29,40 @@ type RequestLog struct {
 }
 
 type RequestLogFilter struct {
-	AccountName string
-	Status      string
-	Model       string
-	From        *time.Time
-	To          *time.Time
-	Limit       int
-	Offset      int
+	AccountName  string
+	Status       string
+	Model        string
+	From         *time.Time
+	To           *time.Time
+	MinLatencyMs int64 // 0 means no filter
+	Limit        int
+	Offset       int
 }
 
 type OverviewStats struct {
-	TotalRequests int     `json:"total_requests"`
-	SuccessCount  int     `json:"success_count"`
-	ErrorCount    int     `json:"error_count"`
-	AvgLatencyMs  float64 `json:"avg_latency_ms"`
-	P95LatencyMs  int     `json:"p95_latency_ms"`
-	TotalTokens   int     `json:"total_tokens"`
+	TotalRequests      int     `json:"total_requests"`
+	SuccessCount       int     `json:"success_count"`
+	ErrorCount         int     `json:"error_count"`
+	AvgLatencyMs       float64 `json:"avg_latency_ms"`
+	P95LatencyMs       int     `json:"p95_latency_ms"`
+	TotalTokens        int     `json:"total_tokens"`
+	PromptTokens       int64   `json:"prompt_tokens"`
+	CompletionTokens   int64   `json:"completion_tokens"`
+	YesterdayRequests  int64   `json:"yesterday_requests"`
+	YesterdayLatencyMs float64 `json:"yesterday_avg_latency_ms"`
+}
+
+type ProviderStats struct {
+	Provider      string `json:"provider"`
+	TotalRequests int64  `json:"total_requests"`
+	TotalTokens   int64  `json:"total_tokens"`
+	ErrorCount    int64  `json:"error_count"`
+}
+
+type ModelStats struct {
+	Model         string `json:"model"`
+	TotalRequests int64  `json:"total_requests"`
+	TotalTokens   int64  `json:"total_tokens"`
 }
 
 func (d *DB) InsertRequestLog(l RequestLog) error {
@@ -79,6 +97,10 @@ func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 	if f.To != nil {
 		where = append(where, "datetime(timestamp) <= datetime(?)")
 		args = append(args, sqliteTime(*f.To))
+	}
+	if f.MinLatencyMs > 0 {
+		where = append(where, "latency_ms >= ?")
+		args = append(args, f.MinLatencyMs)
 	}
 
 	whereClause := strings.Join(where, " AND ")
@@ -125,10 +147,26 @@ func (d *DB) GetOverviewStats(from, to time.Time) (OverviewStats, error) {
 			count(CASE WHEN status = 'success' THEN 1 END),
 			count(CASE WHEN status != 'success' THEN 1 END),
 			coalesce(avg(CASE WHEN status = 'success' THEN latency_ms END), 0),
-			coalesce(sum(prompt_tokens) + sum(completion_tokens), 0)
+			coalesce(sum(prompt_tokens) + sum(completion_tokens), 0),
+			coalesce(sum(prompt_tokens), 0),
+			coalesce(sum(completion_tokens), 0)
 		FROM request_logs WHERE datetime(timestamp) BETWEEN datetime(?) AND datetime(?)`,
 		sqliteTime(from), sqliteTime(to),
-	).Scan(&s.TotalRequests, &s.SuccessCount, &s.ErrorCount, &s.AvgLatencyMs, &s.TotalTokens)
+	).Scan(&s.TotalRequests, &s.SuccessCount, &s.ErrorCount, &s.AvgLatencyMs, &s.TotalTokens,
+		&s.PromptTokens, &s.CompletionTokens)
+	if err != nil {
+		return s, err
+	}
+
+	// Yesterday's stats for trend comparison
+	yesterdayStart := from.AddDate(0, 0, -1)
+	err = d.QueryRow(`
+		SELECT
+			count(*),
+			coalesce(avg(CASE WHEN status = 'success' THEN latency_ms END), 0)
+		FROM request_logs WHERE datetime(timestamp) BETWEEN datetime(?) AND datetime(?)`,
+		sqliteTime(yesterdayStart), sqliteTime(from),
+	).Scan(&s.YesterdayRequests, &s.YesterdayLatencyMs)
 	return s, err
 }
 
@@ -155,6 +193,72 @@ func (d *DB) GetAccountStats(from, to time.Time) ([]AccountStats, error) {
 	for rows.Next() {
 		var s AccountStats
 		if err := rows.Scan(&s.AccountName, &s.TotalRequests, &s.SuccessCount, &s.ErrorCount, &s.AvgLatencyMs, &s.PromptTokens, &s.CompletionTokens); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, rows.Err()
+}
+
+func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
+	rows, err := d.Query(`
+		SELECT a.type AS provider,
+		       COUNT(*) AS total_requests,
+		       COALESCE(SUM(r.prompt_tokens + r.completion_tokens), 0) AS total_tokens,
+		       SUM(CASE WHEN r.status = 'error' THEN 1 ELSE 0 END) AS error_count
+		FROM request_logs r
+		JOIN accounts a ON r.account_id = a.id
+		WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)
+		GROUP BY a.type
+		ORDER BY total_requests DESC`,
+		sqliteTime(from), sqliteTime(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []ProviderStats
+	for rows.Next() {
+		var s ProviderStats
+		if err := rows.Scan(&s.Provider, &s.TotalRequests, &s.TotalTokens, &s.ErrorCount); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, rows.Err()
+}
+
+func (d *DB) GetModelStats(from, to time.Time, provider string) ([]ModelStats, error) {
+	query := `
+		SELECT r.model,
+		       COUNT(*) AS total_requests,
+		       COALESCE(SUM(r.prompt_tokens + r.completion_tokens), 0) AS total_tokens
+		FROM request_logs r`
+	args := []any{}
+
+	if provider != "" {
+		query += ` JOIN accounts a ON r.account_id = a.id
+		WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)
+		AND a.type = ?`
+		args = append(args, sqliteTime(from), sqliteTime(to), provider)
+	} else {
+		query += ` WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)`
+		args = append(args, sqliteTime(from), sqliteTime(to))
+	}
+
+	query += ` GROUP BY r.model ORDER BY total_requests DESC LIMIT 20`
+
+	rows, err := d.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []ModelStats
+	for rows.Next() {
+		var s ModelStats
+		if err := rows.Scan(&s.Model, &s.TotalRequests, &s.TotalTokens); err != nil {
 			return nil, err
 		}
 		stats = append(stats, s)

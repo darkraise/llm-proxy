@@ -192,6 +192,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /admin/api/stats/overview", protected(s.admin.HandleStatsOverview))
 	s.mux.Handle("GET /admin/api/stats/requests", protected(s.admin.HandleStatsRequests))
 	s.mux.Handle("GET /admin/api/stats/accounts", protected(s.admin.HandleStatsAccounts))
+	s.mux.Handle("GET /admin/api/stats/providers", protected(s.admin.HandleStatsProviders))
+	s.mux.Handle("GET /admin/api/stats/models", protected(s.admin.HandleStatsModels))
 
 	s.mux.Handle("GET /admin/api/settings", protected(s.admin.HandleGetSettings))
 	s.mux.Handle("PUT /admin/api/settings", protected(s.admin.HandleUpdateSettings))

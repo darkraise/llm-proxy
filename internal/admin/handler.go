@@ -286,13 +286,17 @@ func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, 200, map[string]any{
-		"total_requests":  stats.TotalRequests,
-		"success_count":   stats.SuccessCount,
-		"error_count":     stats.ErrorCount,
-		"avg_latency_ms":  stats.AvgLatencyMs,
-		"total_tokens":    stats.TotalTokens,
-		"active_accounts": active,
-		"total_accounts":  len(status),
+		"total_requests":          stats.TotalRequests,
+		"success_count":           stats.SuccessCount,
+		"error_count":             stats.ErrorCount,
+		"avg_latency_ms":          stats.AvgLatencyMs,
+		"total_tokens":            stats.TotalTokens,
+		"prompt_tokens":           stats.PromptTokens,
+		"completion_tokens":       stats.CompletionTokens,
+		"yesterday_requests":      stats.YesterdayRequests,
+		"yesterday_avg_latency_ms": stats.YesterdayLatencyMs,
+		"active_accounts":         active,
+		"total_accounts":          len(status),
 	})
 }
 
@@ -309,6 +313,19 @@ func (h *AdminHandler) HandleStatsRequests(w http.ResponseWriter, r *http.Reques
 	}
 	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
 		filter.Offset = o
+	}
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.From = &t
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.To = &t
+		}
+	}
+	if v, err := strconv.ParseInt(r.URL.Query().Get("min_latency"), 10, 64); err == nil && v > 0 {
+		filter.MinLatencyMs = v
 	}
 
 	logs, total, err := h.db.QueryRequestLogs(filter)
@@ -330,6 +347,27 @@ func (h *AdminHandler) HandleStatsAccounts(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	writeJSON(w, 200, stats)
+}
+
+func (h *AdminHandler) HandleStatsProviders(w http.ResponseWriter, r *http.Request) {
+	startOfDay := time.Now().Truncate(24 * time.Hour)
+	stats, err := h.db.GetProviderStats(startOfDay, time.Now())
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, stats)
+}
+
+func (h *AdminHandler) HandleStatsModels(w http.ResponseWriter, r *http.Request) {
+	provider := r.URL.Query().Get("provider")
+	startOfDay := time.Now().Truncate(24 * time.Hour)
+	stats, err := h.db.GetModelStats(startOfDay, time.Now(), provider)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
 	writeJSON(w, 200, stats)
 }
 

@@ -135,8 +135,25 @@ export interface OverviewStats {
   error_count: number
   avg_latency_ms: number
   total_tokens: number
+  prompt_tokens: number
+  completion_tokens: number
+  yesterday_requests: number
+  yesterday_avg_latency_ms: number
   active_accounts: number
   total_accounts: number
+}
+
+export interface ProviderStats {
+  provider: string
+  total_requests: number
+  total_tokens: number
+  error_count: number
+}
+
+export interface ModelStats {
+  model: string
+  total_requests: number
+  total_tokens: number
 }
 
 export interface RequestLog {
@@ -225,12 +242,20 @@ export const api = {
     requests: (params?: {
       account?: string
       status?: string
+      model?: string
+      from?: string
+      to?: string
+      min_latency?: number
       limit?: number
       offset?: number
     }) => {
       const qs = new URLSearchParams()
       if (params?.account) qs.set('account', params.account)
       if (params?.status) qs.set('status', params.status)
+      if (params?.model) qs.set('model', params.model)
+      if (params?.from) qs.set('from', params.from)
+      if (params?.to) qs.set('to', params.to)
+      if (params?.min_latency != null) qs.set('min_latency', String(params.min_latency))
       if (params?.limit != null) qs.set('limit', String(params.limit))
       if (params?.offset != null) qs.set('offset', String(params.offset))
       const query = qs.toString()
@@ -240,6 +265,11 @@ export const api = {
       )
     },
     accounts: () => request<AccountStats[]>('GET', '/stats/accounts'),
+    providers: () => request<ProviderStats[]>('GET', '/stats/providers'),
+    models: (provider?: string) => {
+      const params = provider ? `?provider=${encodeURIComponent(provider)}` : ''
+      return request<ModelStats[]>('GET', `/stats/models${params}`)
+    },
   },
 
   // ─── Settings ────────────────────────────────────────────────────────────
