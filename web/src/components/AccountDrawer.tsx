@@ -15,7 +15,7 @@ import { AddModelsDialog } from './AddModelsDialog'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'google'])
+const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'llm7', 'google'])
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

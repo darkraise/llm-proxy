@@ -11,6 +11,7 @@ const PROVIDER_TYPES = [
   'mistral',
   'github',
   'cohere',
+  'llm7',
   'ollama',
   'openai-compatible',
 ]
