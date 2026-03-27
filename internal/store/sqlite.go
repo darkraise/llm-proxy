@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -54,7 +55,7 @@ func (d *DB) migrate() error {
 		`CREATE TABLE IF NOT EXISTS accounts (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
 			name          TEXT UNIQUE NOT NULL,
-			type          TEXT NOT NULL CHECK (type IN ('groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible')),
+			type          TEXT NOT NULL,
 			base_url      TEXT NOT NULL DEFAULT '',
 			api_key_enc   BLOB NOT NULL DEFAULT '',
 			models        TEXT NOT NULL DEFAULT '[]',
@@ -127,6 +128,46 @@ func (d *DB) migrate() error {
 	}
 	for _, m := range alterMigrations {
 		d.Exec(m) // ignore errors (column already exists)
+	}
+
+	// Remove CHECK constraint on accounts.type (allows adding new providers)
+	// SQLite doesn't support ALTER CHECK, so recreate the table if needed.
+	var hasCheck bool
+	row := d.QueryRow("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'")
+	var createSQL string
+	if row.Scan(&createSQL) == nil {
+		hasCheck = strings.Contains(createSQL, "CHECK")
+	}
+	if hasCheck {
+		tx, err := d.Begin()
+		if err != nil {
+			return fmt.Errorf("begin tx: %w", err)
+		}
+		stmts := []string{
+			`CREATE TABLE accounts_new (
+				id            INTEGER PRIMARY KEY AUTOINCREMENT,
+				name          TEXT UNIQUE NOT NULL,
+				type          TEXT NOT NULL,
+				base_url      TEXT NOT NULL DEFAULT '',
+				api_key_enc   BLOB NOT NULL DEFAULT '',
+				models        TEXT NOT NULL DEFAULT '[]',
+				priority      INTEGER NOT NULL DEFAULT 0,
+				enabled       BOOLEAN NOT NULL DEFAULT 1,
+				default_model TEXT NOT NULL DEFAULT '',
+				created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+				updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)`,
+			`INSERT INTO accounts_new SELECT * FROM accounts`,
+			`DROP TABLE accounts`,
+			`ALTER TABLE accounts_new RENAME TO accounts`,
+		}
+		for _, s := range stmts {
+			if _, err := tx.Exec(s); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migrate accounts CHECK: %w", err)
+			}
+		}
+		tx.Commit()
 	}
 
 	return nil
