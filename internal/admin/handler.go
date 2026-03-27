@@ -281,11 +281,30 @@ func adminFirstModel(modelsJSON string) string {
 	return "test"
 }
 
-func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Request) {
+// parseTimeRange extracts optional from/to query params (RFC 3339).
+// Falls back to start-of-day → now when absent.
+func parseTimeRange(r *http.Request) (from, to time.Time) {
 	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	from = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	to = now
 
-	stats, err := h.db.GetOverviewStats(startOfDay, now)
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			from = t
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			to = t
+		}
+	}
+	return
+}
+
+func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Request) {
+	from, to := parseTimeRange(r)
+
+	stats, err := h.db.GetOverviewStats(from, to)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -353,10 +372,9 @@ func (h *AdminHandler) HandleStatsRequests(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *AdminHandler) HandleStatsAccounts(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	from, to := parseTimeRange(r)
 
-	stats, err := h.db.GetAccountStats(startOfDay, now)
+	stats, err := h.db.GetAccountStats(from, to)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -366,8 +384,8 @@ func (h *AdminHandler) HandleStatsAccounts(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *AdminHandler) HandleStatsProviders(w http.ResponseWriter, r *http.Request) {
-	startOfDay := time.Now().Truncate(24 * time.Hour)
-	stats, err := h.db.GetProviderStats(startOfDay, time.Now())
+	from, to := parseTimeRange(r)
+	stats, err := h.db.GetProviderStats(from, to)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -377,8 +395,8 @@ func (h *AdminHandler) HandleStatsProviders(w http.ResponseWriter, r *http.Reque
 
 func (h *AdminHandler) HandleStatsModels(w http.ResponseWriter, r *http.Request) {
 	provider := r.URL.Query().Get("provider")
-	startOfDay := time.Now().Truncate(24 * time.Hour)
-	stats, err := h.db.GetModelStats(startOfDay, time.Now(), provider)
+	from, to := parseTimeRange(r)
+	stats, err := h.db.GetModelStats(from, to, provider)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return

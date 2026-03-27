@@ -187,6 +187,7 @@ export interface ProviderStats {
   total_requests: number
   total_tokens: number
   error_count: number
+  avg_latency_ms: number
 }
 
 export interface ModelStats {
@@ -286,7 +287,13 @@ export const api = {
   // ─── Stats ───────────────────────────────────────────────────────────────
 
   stats: {
-    overview: () => request<OverviewStats>('GET', '/stats/overview'),
+    overview: (from?: string, to?: string) => {
+      const qs = new URLSearchParams()
+      if (from) qs.set('from', from)
+      if (to) qs.set('to', to)
+      const query = qs.toString()
+      return request<OverviewStats>('GET', `/stats/overview${query ? '?' + query : ''}`)
+    },
     requests: (params?: {
       account?: string
       status?: string
@@ -312,11 +319,27 @@ export const api = {
         `/stats/requests${query ? '?' + query : ''}`,
       )
     },
-    accounts: () => request<AccountStats[]>('GET', '/stats/accounts'),
-    providers: () => request<ProviderStats[]>('GET', '/stats/providers'),
-    models: (provider?: string) => {
-      const params = provider ? `?provider=${encodeURIComponent(provider)}` : ''
-      return request<ModelStats[]>('GET', `/stats/models${params}`)
+    accounts: (from?: string, to?: string) => {
+      const qs = new URLSearchParams()
+      if (from) qs.set('from', from)
+      if (to) qs.set('to', to)
+      const query = qs.toString()
+      return request<AccountStats[]>('GET', `/stats/accounts${query ? '?' + query : ''}`)
+    },
+    providers: (from?: string, to?: string) => {
+      const qs = new URLSearchParams()
+      if (from) qs.set('from', from)
+      if (to) qs.set('to', to)
+      const query = qs.toString()
+      return request<ProviderStats[]>('GET', `/stats/providers${query ? '?' + query : ''}`)
+    },
+    models: (provider?: string, from?: string, to?: string) => {
+      const qs = new URLSearchParams()
+      if (provider) qs.set('provider', provider)
+      if (from) qs.set('from', from)
+      if (to) qs.set('to', to)
+      const query = qs.toString()
+      return request<ModelStats[]>('GET', `/stats/models${query ? '?' + query : ''}`)
     },
   },
 

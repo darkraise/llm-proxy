@@ -54,10 +54,11 @@ type OverviewStats struct {
 }
 
 type ProviderStats struct {
-	Provider      string `json:"provider"`
-	TotalRequests int64  `json:"total_requests"`
-	TotalTokens   int64  `json:"total_tokens"`
-	ErrorCount    int64  `json:"error_count"`
+	Provider      string  `json:"provider"`
+	TotalRequests int64   `json:"total_requests"`
+	TotalTokens   int64   `json:"total_tokens"`
+	ErrorCount    int64   `json:"error_count"`
+	AvgLatencyMs  float64 `json:"avg_latency_ms"`
 }
 
 type ModelStats struct {
@@ -206,7 +207,8 @@ func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
 		SELECT a.type AS provider,
 		       COUNT(*) AS total_requests,
 		       COALESCE(SUM(r.prompt_tokens + r.completion_tokens), 0) AS total_tokens,
-		       SUM(CASE WHEN r.status = 'error' THEN 1 ELSE 0 END) AS error_count
+		       SUM(CASE WHEN r.status = 'error' THEN 1 ELSE 0 END) AS error_count,
+		       COALESCE(AVG(CASE WHEN r.status = 'success' THEN r.latency_ms END), 0) AS avg_latency_ms
 		FROM request_logs r
 		JOIN accounts a ON r.account_id = a.id
 		WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)
@@ -222,7 +224,7 @@ func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
 	var stats []ProviderStats
 	for rows.Next() {
 		var s ProviderStats
-		if err := rows.Scan(&s.Provider, &s.TotalRequests, &s.TotalTokens, &s.ErrorCount); err != nil {
+		if err := rows.Scan(&s.Provider, &s.TotalRequests, &s.TotalTokens, &s.ErrorCount, &s.AvgLatencyMs); err != nil {
 			return nil, err
 		}
 		stats = append(stats, s)

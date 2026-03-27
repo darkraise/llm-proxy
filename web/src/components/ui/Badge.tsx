@@ -26,7 +26,7 @@ export function Badge({
   );
 }
 
-const providerColors: Record<string, string> = {
+export const providerColors: Record<string, string> = {
   google: "bg-[rgba(66,133,244,0.12)] text-[#5b9cf5]",
   groq: "bg-[rgba(244,147,40,0.12)] text-[#f4932a]",
   openrouter: "bg-[rgba(110,207,176,0.12)] text-[#6ecfb0]",
