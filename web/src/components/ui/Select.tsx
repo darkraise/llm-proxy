@@ -1,9 +1,94 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { ChevronDown } from 'lucide-react';
+import * as React from "react"
+import * as SelectPrimitive from "@radix-ui/react-select"
+import { Check, ChevronDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const SelectRoot = SelectPrimitive.Root
+const SelectGroup = SelectPrimitive.Group
+const SelectValue = SelectPrimitive.Value
+
+const SelectTrigger = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Trigger
+    ref={ref}
+    className={cn(
+      "flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-[rgba(255,255,255,0.04)] px-3 py-2 text-sm text-text-primary",
+      "focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent",
+      "disabled:cursor-not-allowed disabled:opacity-50",
+      "[&>span]:truncate",
+      className
+    )}
+    {...props}
+  >
+    {children}
+    <SelectPrimitive.Icon asChild>
+      <ChevronDown size={14} className="text-text-muted shrink-0" />
+    </SelectPrimitive.Icon>
+  </SelectPrimitive.Trigger>
+))
+SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
+
+const SelectContent = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+>(({ className, children, position = "popper", ...props }, ref) => (
+  <SelectPrimitive.Portal>
+    <SelectPrimitive.Content
+      ref={ref}
+      className={cn(
+        "relative z-[100] max-h-60 min-w-[8rem] overflow-hidden rounded-lg border border-border bg-surface-overlay shadow-lg",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        position === "popper" && "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
+        className
+      )}
+      position={position}
+      {...props}
+    >
+      <SelectPrimitive.Viewport
+        className={cn(
+          "p-1",
+          position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+        )}
+      >
+        {children}
+      </SelectPrimitive.Viewport>
+    </SelectPrimitive.Content>
+  </SelectPrimitive.Portal>
+))
+SelectContent.displayName = SelectPrimitive.Content.displayName
+
+const SelectItem = React.forwardRef<
+  React.ComponentRef<typeof SelectPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
+>(({ className, children, ...props }, ref) => (
+  <SelectPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-text-primary outline-none",
+      "focus:bg-accent-muted focus:text-accent-light",
+      "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <SelectPrimitive.ItemIndicator>
+        <Check size={12} />
+      </SelectPrimitive.ItemIndicator>
+    </span>
+    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+  </SelectPrimitive.Item>
+))
+SelectItem.displayName = SelectPrimitive.Item.displayName
+
+// ─── Drop-in replacement wrapper ─────────────────────────────────────────────
+// Preserves the same API as the old custom Select for easy migration.
 
 interface SelectOption {
   value: string;
-  label: ReactNode;
+  label: React.ReactNode;
 }
 
 interface SelectProps {
@@ -14,51 +99,27 @@ interface SelectProps {
   placeholder?: string;
 }
 
+// Radix reserves "" for "no selection". Use a sentinel for options with empty string values.
+const EMPTY_SENTINEL = '__empty__'
+
+function toRadix(v: string) { return v === '' ? EMPTY_SENTINEL : v }
+function fromRadix(v: string) { return v === EMPTY_SENTINEL ? '' : v }
+
 export function Select({ value, onChange, options, className = '', placeholder }: SelectProps) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const selected = options.find((o) => o.value === value);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   return (
-    <div ref={ref} className={`relative ${className}`}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="input w-full flex items-center justify-between gap-2 text-left"
-      >
-        <span className={`truncate ${selected ? 'text-text-primary' : 'text-text-muted'}`}>
-          {selected?.label ?? placeholder ?? 'Select...'}
-        </span>
-        <ChevronDown size={14} className={`text-text-muted flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open && (
-        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto bg-surface-overlay border border-border rounded-lg shadow-lg py-1">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
-                opt.value === value
-                  ? 'bg-accent-muted text-accent-light'
-                  : 'text-text-primary hover:bg-[rgba(255,255,255,0.04)]'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    <SelectRoot value={toRadix(value)} onValueChange={(v) => onChange(fromRadix(v))}>
+      <SelectTrigger className={className}>
+        <SelectValue placeholder={placeholder ?? 'Select...'} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt.value || EMPTY_SENTINEL} value={toRadix(opt.value)}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </SelectRoot>
+  )
 }
+
+export { SelectRoot, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem }
