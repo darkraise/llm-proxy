@@ -4,8 +4,9 @@ import "encoding/json"
 
 type EmbeddingRequest struct {
 	Model          string `json:"model"`
-	Input          any    `json:"input"` // string or []string
+	Input          any    `json:"input"`                    // string or []string
 	EncodingFormat string `json:"encoding_format,omitempty"`
+	Dimensions     *int   `json:"dimensions,omitempty"`
 }
 
 type EmbeddingResponse struct {
