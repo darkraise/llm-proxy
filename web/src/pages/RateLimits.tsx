@@ -12,6 +12,7 @@ const PROVIDER_TYPES = [
   'mistral',
   'github',
   'cohere',
+  'nvidia',
   'llm7',
   'ollama',
   'openai-compatible',
@@ -94,18 +95,19 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
         return !existing || existing.max_value !== l.max_value
       })
 
-      await Promise.all([
-        ...removed.map((d) => api.ratelimits.delete(d.id)),
-        ...upserted.map((l) =>
-          api.ratelimits.set({
-            provider,
-            model: l.model,
-            metric: l.metric,
-            max_value: l.max_value,
-            window_secs: l.window_secs,
-          }),
-        ),
-      ])
+      // Sequential to avoid SQLite BUSY errors from concurrent writes
+      for (const d of removed) {
+        await api.ratelimits.delete(d.id)
+      }
+      for (const l of upserted) {
+        await api.ratelimits.set({
+          provider,
+          model: l.model,
+          metric: l.metric,
+          max_value: l.max_value,
+          window_secs: l.window_secs,
+        })
+      }
 
       await fetchDefs()
     } catch (err) {

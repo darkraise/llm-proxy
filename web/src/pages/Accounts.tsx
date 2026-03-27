@@ -14,7 +14,7 @@ import { LayoutGrid, List, Plus, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 
-const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'llm7', 'ollama', 'openai-compatible']
+const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'ollama', 'openai-compatible']
 
 const PROVIDER_TYPE_URLS: Record<string, string> = {
   groq: 'https://api.groq.com/openai/v1',
@@ -24,13 +24,14 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   github: 'https://models.inference.ai.azure.com',
   cohere: 'https://api.cohere.ai/compatibility/v1',
   llm7: 'https://api.llm7.io/v1',
+  nvidia: 'https://integrate.api.nvidia.com/v1',
   ollama: 'http://localhost:11434/v1',
   google: '',
   'openai-compatible': '',
 }
 
 // Providers with hardcoded base URLs — no need to show base URL field
-const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'llm7', 'google'])
+const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
 
 // ─── Edit Modal (existing accounts) ──────────────────────────────────────────
 
