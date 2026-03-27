@@ -284,6 +284,8 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   const [modelCategories, setModelCategories] = useState<Record<string, ModelCategory | 'skip'>>({})
   const [defaultModels, setDefaultModels] = useState<Record<string, string>>({})
   const [discovered, setDiscovered] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
+  const [debouncedModelSearch, setDebouncedModelSearch] = useState('')
 
   // Step 3 state
   const [limits, setLimits] = useState<AccountLimit[]>([])
@@ -323,6 +325,11 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
       return next
     })
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedModelSearch(modelSearch), 500)
+    return () => clearTimeout(timer)
+  }, [modelSearch])
 
   async function handleDiscover() {
     setDiscovering(true)
@@ -614,8 +621,15 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                         {selectedModels.size === availableModels.length ? 'Deselect all' : 'Select all'}
                       </button>
                     </div>
-                    <div className="max-h-48 overflow-y-auto border border-border rounded-md divide-y divide-border">
-                      {availableModels.map((id) => (
+                    <input
+                      className="input mb-2"
+                      placeholder="Search models..."
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      autoComplete="one-time-code"
+                    />
+                    <div className="max-h-[60vh] overflow-y-auto border border-border rounded-md divide-y divide-border">
+                      {availableModels.filter((id) => !debouncedModelSearch || id.toLowerCase().includes(debouncedModelSearch.toLowerCase())).map((id) => (
                         <label key={id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-surface-overlay cursor-pointer">
                           <input
                             type="checkbox"
