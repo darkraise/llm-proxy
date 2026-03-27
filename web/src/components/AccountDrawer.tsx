@@ -11,6 +11,8 @@ import { AddModelsDialog } from './AddModelsDialog'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'google'])
+
 function parseAccountModels(modelsJSON: string): string[] {
   try {
     return JSON.parse(modelsJSON) as string[]
@@ -271,17 +273,19 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
             </div>
           </div>
 
-          {/* Base URL — swaps in-place */}
-          <div>
-            <h3 className="text-xs uppercase tracking-wider text-text-muted font-medium mb-1.5">Base URL</h3>
-            {ed ? (
-              <input className="input font-mono" value={ed.base_url} onChange={(e) => setEditField('base_url', e.target.value)} />
-            ) : (
-              <div className="bg-surface border border-border rounded-md px-3 py-2 font-mono text-sm text-text-secondary break-all">
-                {acct.base_url || '(not set)'}
-              </div>
-            )}
-          </div>
+          {/* Base URL — only for ollama and openai-compatible */}
+          {!FIXED_URL_PROVIDERS.has(acct.type) && (
+            <div>
+              <h3 className="text-xs uppercase tracking-wider text-text-muted font-medium mb-1.5">Base URL</h3>
+              {ed ? (
+                <input className="input font-mono" value={ed.base_url} onChange={(e) => setEditField('base_url', e.target.value)} />
+              ) : (
+                <div className="bg-surface border border-border rounded-md px-3 py-2 font-mono text-sm text-text-secondary break-all">
+                  {acct.base_url || '(not set)'}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Usage (hidden in edit mode) */}
           {!ed && (
@@ -334,7 +338,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
               </button>
             )}
           </div>
-          <div className="flex-1 overflow-auto min-h-0">
+          <div className="flex-1 min-h-0">
             <RateLimitTable
               models={models}
               limits={ed ? editedLimits : (acct.limits ?? [])}

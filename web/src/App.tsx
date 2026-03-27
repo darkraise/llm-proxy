@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import Setup from './pages/Setup'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
 import RateLimits from './pages/RateLimits'
@@ -13,6 +14,7 @@ export default function App() {
     <ToastProvider>
       <BrowserRouter basename="/admin">
         <Routes>
+          <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<Login />} />
           <Route element={<Layout />}>
             <Route index element={<Dashboard />} />

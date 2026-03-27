@@ -15,10 +15,10 @@ export function formatCompact(n: number): string {
 // ─── Metric definitions ───────────────────────────────────────────────────────
 
 export const METRIC_DEFS: { key: string; label: string; short: string; window: number }[] = [
+  { key: 'rps',  label: 'Requests per second', short: 'RPS',    window: 1 },
   { key: 'rpm',  label: 'Requests per minute', short: 'RPM',    window: 60 },
   { key: 'rpd',  label: 'Requests per day',    short: 'RPD',    window: 86400 },
   { key: 'rpmo', label: 'Requests per month',  short: 'RPM/mo', window: 2592000 },
-  { key: 'rps',  label: 'Requests per second', short: 'RPS',    window: 1 },
   { key: 'tpm',  label: 'Tokens per minute',   short: 'TPM',    window: 60 },
   { key: 'tpd',  label: 'Tokens per day',      short: 'TPD',    window: 86400 },
   { key: 'tpmo', label: 'Tokens per month',    short: 'TPM/mo', window: 2592000 },
@@ -72,6 +72,8 @@ export interface RateLimitTableProps {
   defaultRowLabel?: string
   /** When true, cells are not editable. */
   readOnly?: boolean
+  /** Max height of the scrollable container (e.g. '400px', '100%'). Default: none. */
+  maxHeight?: string
 }
 
 // ─── Editable cell: shows compact format, raw number on focus ────────────────
@@ -138,8 +140,9 @@ export function RateLimitTable({
   models,
   limits,
   onChange,
-  defaultRowLabel = 'Default (all)',
+  defaultRowLabel = 'Default (shared across all models)',
   readOnly = false,
+  maxHeight,
 }: RateLimitTableProps) {
   const matrix = limitsToMatrix(limits)
   // Ensure the default row entry exists in matrix
@@ -176,37 +179,33 @@ export function RateLimitTable({
   const rows = ['', ...models]
 
   return (
-    <div className="rounded-xl overflow-hidden border border-border flex flex-col h-full">
+    <div className="rounded-xl border border-border overflow-auto h-full" style={maxHeight ? { maxHeight } : undefined}>
       {/* Remove number input spin buttons */}
       <style>{`
         .rlt-input::-webkit-inner-spin-button,
         .rlt-input::-webkit-outer-spin-button { display: none; }
         .rlt-input { -moz-appearance: textfield; }
-        .rlt-table thead th { position: sticky; top: 0; z-index: 1; }
       `}</style>
 
-      <div className="overflow-auto flex-1">
-        <table className="rlt-table w-full border-collapse" style={{ tableLayout: 'fixed' }}>
-          {/* Sticky header */}
-          <thead>
-            <tr>
-              <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised" style={{ width: '180px', maxWidth: '180px' }}>
-                Model
+      <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+        <thead>
+          <tr>
+            <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised sticky top-0 z-10" style={{ width: '180px', maxWidth: '180px' }}>
+              Model
+            </th>
+            {METRIC_DEFS.map((m) => (
+              <th
+                key={m.key}
+                title={m.label}
+                className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised text-center whitespace-nowrap sticky top-0 z-10"
+                style={{ width: '80px' }}
+              >
+                {m.short}
               </th>
-              {METRIC_DEFS.map((m) => (
-                <th
-                  key={m.key}
-                  title={m.label}
-                  className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised text-center whitespace-nowrap"
-                  style={{ width: '80px' }}
-                >
-                  {m.short}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
             {rows.map((model) => {
               const isDefault = model === ''
               return (
@@ -258,10 +257,9 @@ export function RateLimitTable({
             })}
           </tbody>
         </table>
-      </div>
 
       {/* Legend (hidden in read-only mode) */}
-      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-raised text-xs text-text-muted flex-shrink-0">
+      {!readOnly && <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-surface-raised text-xs text-text-muted sticky bottom-0 z-10">
         <span>
           <span className="text-warning font-medium">Amber</span>
           {' '}= override

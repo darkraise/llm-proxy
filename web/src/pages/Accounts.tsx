@@ -6,7 +6,8 @@ import { AccountCard } from '../components/AccountCard'
 import { AccountListRow, LIST_GRID_COLS } from '../components/AccountListRow'
 import { AccountDrawer } from '../components/AccountDrawer'
 import { useLocalStorage } from '../hooks/useLocalStorage'
-import { LayoutGrid, List, Plus } from 'lucide-react'
+import { LayoutGrid, List, Plus, X } from 'lucide-react'
+import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 
 const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
@@ -21,6 +22,9 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   google: '',
   'openai-compatible': '',
 }
+
+// Providers with hardcoded base URLs — no need to show base URL field
+const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'google'])
 
 function parseModels(raw: string): string[] {
   return raw
@@ -115,11 +119,9 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
       <div className="bg-surface-overlay border border-border rounded-xl max-w-xl w-full mx-4 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <h2 className="font-semibold text-text-primary">Edit Account</h2>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z" />
-            </svg>
-          </button>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X size={16} />
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
@@ -127,7 +129,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label">Name</label>
-                <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} required />
+                <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} required autoComplete="one-time-code" />
               </div>
               <div>
                 <label className="label">Provider</label>
@@ -139,11 +141,13 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label">Base URL</label>
-                <input className="input" value={form.base_url} onChange={(e) => set('base_url', e.target.value)} />
-              </div>
+            <div className={`grid gap-4 ${FIXED_URL_PROVIDERS.has(initial.type) ? '' : 'grid-cols-2'}`}>
+              {!FIXED_URL_PROVIDERS.has(initial.type) && (
+                <div>
+                  <label className="label">Base URL</label>
+                  <input className="input" value={form.base_url} onChange={(e) => set('base_url', e.target.value)} />
+                </div>
+              )}
               <div>
                 <label className="label">
                   API Key <span className="text-text-muted normal-case">(blank = keep current)</span>
@@ -154,7 +158,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
                   value={form.api_key}
                   onChange={(e) => set('api_key', e.target.value)}
                   placeholder="••••••••"
-                  autoComplete="off"
+                  autoComplete="one-time-code"
                 />
               </div>
             </div>
@@ -274,8 +278,23 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   const [loadingDefaults, setLoadingDefaults] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [s1Errors, setS1Errors] = useState<Partial<Record<keyof WizardStep1, string>>>({})
+
+  function validateStep1(): boolean {
+    const errors: Partial<Record<keyof WizardStep1, string>> = {}
+    if (!s1.name.trim()) errors.name = 'Name is required'
+    if (!s1.api_key.trim()) errors.api_key = 'API key is required'
+    if (!FIXED_URL_PROVIDERS.has(s1.type) && !s1.base_url.trim()) errors.base_url = 'Base URL is required'
+    setS1Errors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  function goToStep2() {
+    if (validateStep1()) setStep(2)
+  }
 
   function setS1Field<K extends keyof WizardStep1>(k: K, v: WizardStep1[K]) {
+    if (s1Errors[k]) setS1Errors((prev) => { const next = { ...prev }; delete next[k]; return next })
     setS1((prev) => {
       const next = { ...prev, [k]: v }
       if (k === 'type') {
@@ -300,7 +319,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
         api_key: s1.api_key,
         free_only: freeOnly,
       })
-      const ids = result.models.map((m) => m.id)
+      const ids = [...new Set(result.models.map((m) => m.id))]
       setAvailableModels(ids)
       setSelectedModels(new Set(ids))
       setDefaultModel(ids[0] ?? '')
@@ -340,13 +359,15 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   }
 
   function toggleAll() {
-    if (selectedModels.size === availableModels.length) {
-      setSelectedModels(new Set())
-      setDefaultModel('')
-    } else {
-      setSelectedModels(new Set(availableModels))
-      if (!defaultModel && availableModels.length > 0) setDefaultModel(availableModels[0])
-    }
+    setSelectedModels((prev) => {
+      if (prev.size === availableModels.length) {
+        setDefaultModel('')
+        return new Set<string>()
+      } else {
+        if (!defaultModel && availableModels.length > 0) setDefaultModel(availableModels[0])
+        return new Set(availableModels)
+      }
+    })
   }
 
   async function handleSave() {
@@ -377,7 +398,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-surface-overlay border border-border rounded-xl max-w-xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface-overlay border border-border rounded-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
@@ -386,11 +407,9 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
               Step {step} of 3 — {step === 1 ? 'Credentials' : step === 2 ? 'Discover Models' : 'Rate Limits & Confirm'}
             </p>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z" />
-            </svg>
-          </button>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X size={16} />
+          </Button>
         </div>
 
         {/* Step indicator */}
@@ -411,20 +430,10 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
           ))}
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="px-5 py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
           {/* Step 1: Credentials */}
           {step === 1 && (
             <>
-              <div>
-                <label className="label">Name</label>
-                <input
-                  className="input"
-                  value={s1.name}
-                  onChange={(e) => setS1Field('name', e.target.value)}
-                  placeholder="my-groq-1"
-                />
-              </div>
-
               <div>
                 <label className="label">Provider</label>
                 <Select
@@ -435,33 +444,50 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
               </div>
 
               <div>
-                <label className="label">Base URL</label>
+                <label className="label">Name <span className="text-error">*</span></label>
                 <input
-                  className="input"
-                  value={s1.base_url}
-                  onChange={(e) => setS1Field('base_url', e.target.value)}
-                  placeholder="https://api.openai.com/v1"
+                  className={`input ${s1Errors.name ? 'border-error' : ''}`}
+                  value={s1.name}
+                  onChange={(e) => setS1Field('name', e.target.value)}
+                  placeholder="my-groq-1"
+                  autoComplete="one-time-code"
                 />
+                {s1Errors.name && <p className="text-xs text-error mt-1">{s1Errors.name}</p>}
               </div>
 
+              {!FIXED_URL_PROVIDERS.has(s1.type) && (
+                <div>
+                  <label className="label">Base URL <span className="text-error">*</span></label>
+                  <input
+                    className={`input ${s1Errors.base_url ? 'border-error' : ''}`}
+                    value={s1.base_url}
+                    onChange={(e) => setS1Field('base_url', e.target.value)}
+                    placeholder="https://api.openai.com/v1"
+                    autoComplete="one-time-code"
+                  />
+                  {s1Errors.base_url && <p className="text-xs text-error mt-1">{s1Errors.base_url}</p>}
+                </div>
+              )}
+
               <div>
-                <label className="label">API Key</label>
+                <label className="label">API Key <span className="text-error">*</span></label>
                 <input
-                  className="input font-mono"
+                  className={`input font-mono ${s1Errors.api_key ? 'border-error' : ''}`}
                   type="password"
                   value={s1.api_key}
                   onChange={(e) => setS1Field('api_key', e.target.value)}
                   placeholder="sk-..."
-                  autoComplete="off"
+                  autoComplete="one-time-code"
                 />
+                {s1Errors.api_key && <p className="text-xs text-error mt-1">{s1Errors.api_key}</p>}
               </div>
 
               <div className="flex justify-end pt-2 border-t border-border">
                 <button
                   type="button"
-                  disabled={!s1.name || !s1.api_key}
-                  onClick={() => setStep(2)}
-                  className="btn-primary disabled:opacity-50"
+                  disabled={!s1.name.trim() || !s1.api_key.trim() || (!FIXED_URL_PROVIDERS.has(s1.type) && !s1.base_url.trim())}
+                  onClick={goToStep2}
+                  className="btn-primary"
                 >
                   Next
                 </button>
@@ -522,7 +548,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                             type="checkbox"
                             checked={selectedModels.has(id)}
                             onChange={() => toggleModel(id)}
-                            className="rounded border-border bg-surface flex-shrink-0"
+                            className="checkbox flex-shrink-0"
                           />
                           <span className="text-text-primary font-mono truncate">{id}</span>
                         </label>
@@ -593,25 +619,14 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                   models={selectedList}
                   limits={limits}
                   onChange={setLimits}
+                  maxHeight="400px"
                 />
               </div>
 
               {/* Summary */}
-              <div className="bg-surface border border-border rounded-md px-4 py-3 space-y-1">
-                <p className="text-text-secondary">
-                  <span className="text-text-muted">Provider:</span>{' '}
-                  <span className="text-text-primary font-medium">{s1.type}</span>
-                </p>
-                <p className="text-text-secondary">
-                  <span className="text-text-muted">Models:</span>{' '}
-                  <span className="text-text-primary">{selectedList.length === 0 ? 'none' : selectedList.join(', ')}</span>
-                </p>
-                {defaultModel && (
-                  <p className="text-text-secondary">
-                    <span className="text-text-muted">Default model:</span>{' '}
-                    <span className="text-text-primary font-mono">{defaultModel}</span>
-                  </p>
-                )}
+              <div className="text-xs text-text-muted">
+                {selectedList.length} model{selectedList.length !== 1 ? 's' : ''} selected
+                {defaultModel && <> &middot; Default: <span className="font-mono text-text-secondary">{defaultModel}</span></>}
               </div>
 
               {saveError && (
@@ -650,6 +665,7 @@ export default function Accounts() {
   const importRef = useRef<HTMLInputElement>(null)
   const [viewMode, setViewMode] = useLocalStorage<'grid' | 'list'>('llm-proxy:accounts-view', 'grid')
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
+  const [providerFilter, setProviderFilter] = useState<string>('all')
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -698,6 +714,8 @@ export default function Accounts() {
   }
 
   const activeCount = accounts.filter((a) => a.enabled).length
+  const providerTypes = Array.from(new Set(accounts.map((a) => a.type))).sort()
+  const filteredAccounts = providerFilter === 'all' ? accounts : accounts.filter((a) => a.type === providerFilter)
 
   async function handleTest(id: number) {
     setTestResults((prev) => ({ ...prev, [id]: 'testing' }))
@@ -725,24 +743,6 @@ export default function Accounts() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* View toggle */}
-          <div className="flex bg-[rgba(255,255,255,0.04)] border border-border rounded-lg overflow-hidden">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-accent-muted text-accent-light' : 'text-text-muted hover:text-text-secondary'}`}
-              title="Grid view"
-            >
-              <LayoutGrid size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-accent-muted text-accent-light' : 'text-text-muted hover:text-text-secondary'}`}
-              title="List view"
-            >
-              <List size={16} />
-            </button>
-          </div>
-
           <input
             ref={importRef}
             type="file"
@@ -769,9 +769,53 @@ export default function Accounts() {
         </div>
       )}
 
+      {/* Provider filter + view toggle */}
+      {!loading && accounts.length > 0 && (
+        <div className="flex items-center justify-between">
+          {providerTypes.length > 1 ? (
+            <div className="flex flex-wrap gap-0 bg-[rgba(255,255,255,0.04)] border border-border rounded-lg overflow-hidden">
+              {['all', ...providerTypes].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setProviderFilter(type)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    providerFilter === type
+                      ? 'bg-accent-muted text-accent-light'
+                      : 'text-text-muted hover:text-text-secondary'
+                  }`}
+            >
+              {type === 'all' ? 'All' : type}
+            </button>
+          ))}
+            </div>
+          ) : <div />}
+          {/* View toggle */}
+          <div className="flex bg-[rgba(255,255,255,0.04)] border border-border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-accent-muted text-accent-light' : 'text-text-muted hover:text-text-secondary'}`}
+              title="Grid view"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-accent-muted text-accent-light' : 'text-text-muted hover:text-text-secondary'}`}
+              title="List view"
+            >
+              <List size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Account list */}
       {loading ? (
         <div className="text-text-muted text-center py-16">Loading...</div>
+      ) : filteredAccounts.length === 0 && accounts.length > 0 ? (
+        <div className="bg-surface-raised border border-border rounded-xl p-10 text-center">
+          <p className="text-text-secondary">No accounts match this filter.</p>
+        </div>
       ) : accounts.length === 0 ? (
         <div className="bg-surface-raised border border-border rounded-xl p-10 text-center">
           <p className="text-text-secondary mb-3">No accounts configured yet.</p>
@@ -782,7 +826,7 @@ export default function Accounts() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 340px))' }}>
-          {accounts.map((a) => (
+          {filteredAccounts.map((a) => (
             <AccountCard
               key={a.id}
               account={a}
@@ -807,7 +851,7 @@ export default function Accounts() {
             <div>Default Model</div>
             <div className="text-center">Models</div>
           </div>
-          {accounts.map((a) => (
+          {filteredAccounts.map((a) => (
             <AccountListRow
               key={a.id}
               account={a}
@@ -835,6 +879,7 @@ export default function Accounts() {
         onUpdate={() => fetchAccounts()}
         onTest={(id) => handleTest(id)}
         onDelete={(id) => handleDelete(id)}
+        onClearTest={() => { if (selectedAccountId != null) setTestResults((prev) => { const next = { ...prev }; delete next[selectedAccountId]; return next; }); }}
         testResult={testResults[selectedAccountId ?? -1]}
       />
     </div>

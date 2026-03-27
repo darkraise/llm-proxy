@@ -23,10 +23,16 @@ function formatTs(ts: string): string {
   return `${mm}-${dd} ${hh}:${min}:${ss}`
 }
 
-function statusVariant(code: number) {
+function statusVariant(code: number, status: string) {
   if (code >= 200 && code < 300) return 'success' as const
-  if (code >= 400) return 'error' as const
+  if (code >= 400 || status === 'error') return 'error' as const
+  if (code === 0 && status === 'success') return 'success' as const
   return 'warning' as const
+}
+
+function statusLabel(code: number, status: string) {
+  if (code > 0) return code
+  return status === 'error' ? 'ERR' : status
 }
 
 export default function UsageLogs() {
@@ -237,7 +243,11 @@ export default function UsageLogs() {
                       {formatTs(log.timestamp)}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-primary">
-                      {log.account_name || '\u2014'}
+                      {log.account_name
+                        ? accounts.some((a) => a.name === log.account_name)
+                          ? log.account_name
+                          : <span className="text-text-muted">{log.provider_type || log.account_name} <span className="text-xs">(deleted)</span></span>
+                        : '\u2014'}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-secondary max-w-32 truncate">
                       {log.model ? <ModelName name={log.model} className="truncate" /> : '\u2014'}
@@ -246,8 +256,8 @@ export default function UsageLogs() {
                       {log.endpoint || '\u2014'}
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge variant={statusVariant(log.status_code)}>
-                        {log.status_code}
+                      <Badge variant={statusVariant(log.status_code, log.status)}>
+                        {statusLabel(log.status_code, log.status)}
                       </Badge>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-secondary text-right whitespace-nowrap">

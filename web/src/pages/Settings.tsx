@@ -134,7 +134,8 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
 
 function SecuritySettings({ settings }: { settings: Record<string, string> }) {
   const [proxyAuth, setProxyAuth] = useState(settings.proxy_auth_enabled === 'true')
-  const [proxyKey, setProxyKey] = useState(settings.proxy_api_key ?? '')
+  const [proxyKey, setProxyKey] = useState('')
+  const keyConfigured = settings.proxy_api_key_configured === 'true'
   const [showKey, setShowKey] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -148,10 +149,12 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
     setSaving(true)
     setStatus(null)
     try {
-      await api.settings.update({
+      const payload: Record<string, string> = {
         proxy_auth_enabled: proxyAuth ? 'true' : 'false',
-        proxy_api_key: proxyKey,
-      })
+      }
+      if (proxyKey) payload.proxy_api_key = proxyKey
+      await api.settings.update(payload)
+      setProxyKey('')
       setStatus({ ok: true, msg: 'Saved.' })
     } catch (err) {
       setStatus({ ok: false, msg: err instanceof Error ? err.message : 'Save failed' })
@@ -206,14 +209,19 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
           </Field>
 
           {proxyAuth && (
-            <Field label="Proxy API Key" hint="Clients must send this as a Bearer token.">
+            <Field
+              label="Proxy API Key"
+              hint={keyConfigured
+                ? 'A key is configured. Enter a new value to replace it, or leave blank to keep current.'
+                : 'Set an API key that clients must send as a Bearer token.'}
+            >
               <div className="flex gap-2">
                 <input
                   className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent font-mono flex-1"
                   type={showKey ? 'text' : 'password'}
                   value={proxyKey}
                   onChange={(e) => setProxyKey(e.target.value)}
-                  placeholder="sk-proxy-..."
+                  placeholder={keyConfigured ? '••••••••  (blank = keep current)' : 'sk-proxy-...'}
                   autoComplete="off"
                 />
                 <button
@@ -267,10 +275,10 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
 // ─── Ollama Fallback Section ─────────────────────────────────────────────────
 
 function OllamaSettings({ settings }: { settings: Record<string, string> }) {
-  const [enabled, setEnabled] = useState(settings.ollama_fallback_enabled === 'true')
-  const [url, setUrl] = useState(settings.ollama_fallback_url ?? 'http://localhost:11434')
-  const [model, setModel] = useState(settings.ollama_fallback_model ?? '')
-  const [timeout, setTimeout] = useState(settings.ollama_fallback_timeout ?? '60')
+  const [enabled, setEnabled] = useState(settings.fallback_enabled === 'true')
+  const [url, setUrl] = useState(settings.fallback_url ?? 'http://localhost:11434')
+  const [model, setModel] = useState(settings.fallback_model ?? '')
+  const [timeout, setTimeout] = useState(settings.fallback_timeout ?? '60')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<SaveStatus | null>(null)
 
@@ -280,10 +288,10 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
     setStatus(null)
     try {
       await api.settings.update({
-        ollama_fallback_enabled: enabled ? 'true' : 'false',
-        ollama_fallback_url: url,
-        ollama_fallback_model: model,
-        ollama_fallback_timeout: timeout,
+        fallback_enabled: enabled ? 'true' : 'false',
+        fallback_url: url,
+        fallback_model: model,
+        fallback_timeout: timeout,
       })
       setStatus({ ok: true, msg: 'Saved.' })
     } catch (err) {

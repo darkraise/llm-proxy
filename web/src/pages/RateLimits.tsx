@@ -23,6 +23,7 @@ interface ProviderTabProps {
 
 function ProviderTab({ provider, accounts }: ProviderTabProps) {
   const [defs, setDefs] = useState<RateLimitDef[]>([])
+  const [pendingLimits, setPendingLimits] = useState<AccountLimit[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -42,6 +43,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
     try {
       const data = await api.ratelimits.list(provider)
       setDefs(data ?? [])
+      setPendingLimits(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load definitions')
     } finally {
@@ -63,17 +65,22 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
     }))
   }
 
-  async function handleLimitsChange(newLimits: AccountLimit[]) {
+  const hasChanges = pendingLimits !== null
+
+  function handleLimitsChange(newLimits: AccountLimit[]) {
+    setPendingLimits(newLimits)
+  }
+
+  async function handleSave() {
+    if (!pendingLimits) return
     setSaving(true)
     setSaveError('')
     try {
-      // Find removed limits: defs that have no corresponding entry in newLimits
       const removed = defs.filter(
-        (d) => !newLimits.some((l) => l.model === d.model && l.metric === d.metric),
+        (d) => !pendingLimits.some((l) => l.model === d.model && l.metric === d.metric),
       )
 
-      // Find added/updated limits: entries in newLimits not matching current defs
-      const upserted = newLimits.filter((l) => {
+      const upserted = pendingLimits.filter((l) => {
         const existing = defs.find((d) => d.model === l.model && d.metric === l.metric)
         return !existing || existing.max_value !== l.max_value
       })
@@ -97,6 +104,10 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
     } finally {
       setSaving(false)
     }
+  }
+
+  function handleDiscard() {
+    setPendingLimits(null)
   }
 
   async function handleRefreshModels() {
@@ -139,18 +150,26 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-text-primary">Rate Limit Definitions</h3>
-          {saving && (
-            <span className="text-xs text-text-muted flex items-center gap-1.5">
-              <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-              </svg>
-              Saving…
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {saving && (
+              <span className="text-xs text-text-muted flex items-center gap-1.5">
+                <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+                Saving…
+              </span>
+            )}
+            {hasChanges && !saving && (
+              <>
+                <button onClick={handleDiscard} className="btn-secondary text-xs px-2.5 py-1">Discard</button>
+                <button onClick={handleSave} className="btn-primary text-xs px-2.5 py-1">Save Changes</button>
+              </>
+            )}
+          </div>
         </div>
         <RateLimitTable
           models={allModels}
-          limits={limitsForTable}
+          limits={pendingLimits ?? limitsForTable}
           onChange={handleLimitsChange}
           defaultRowLabel="Provider Default"
         />
