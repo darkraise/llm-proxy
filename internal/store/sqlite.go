@@ -120,5 +120,14 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("migration failed: %w\nSQL: %s", err, m)
 		}
 	}
+
+	// Column additions (idempotent — ignore "duplicate column" errors)
+	alterMigrations := []string{
+		`ALTER TABLE request_logs ADD COLUMN provider_type TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, m := range alterMigrations {
+		d.Exec(m) // ignore errors (column already exists)
+	}
+
 	return nil
 }

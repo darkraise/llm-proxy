@@ -43,6 +43,51 @@ func NewAuth(db *store.DB, initialPassword string) *Auth {
 	return a
 }
 
+func (a *Auth) IsSetupRequired() bool {
+	hash, _ := a.db.GetSetting("admin_password_hash")
+	return hash == ""
+}
+
+func (a *Auth) HandleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"setup_required": a.IsSetupRequired()})
+}
+
+func (a *Auth) HandleSetup(w http.ResponseWriter, r *http.Request) {
+	if !a.IsSetupRequired() {
+		http.Error(w, `{"error":"setup already completed"}`, 400)
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, 400)
+		return
+	}
+
+	if len(req.Password) < 8 {
+		http.Error(w, `{"error":"password must be at least 8 characters"}`, 400)
+		return
+	}
+
+	hash, err := crypto.HashPassword(req.Password)
+	if err != nil {
+		http.Error(w, `{"error":"failed to hash password"}`, 500)
+		return
+	}
+
+	if err := a.db.SetSetting("admin_password_hash", hash); err != nil {
+		http.Error(w, `{"error":"failed to save password"}`, 500)
+		return
+	}
+
+	slog.Info("initial admin password set via setup page")
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 func (a *Auth) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Password string `json:"password"`

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/darkraise/llm-proxy/internal/config"
@@ -149,10 +150,22 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	modelsJSON, _ := json.Marshal(req.Models)
-	apiKeyEnc := []byte(req.APIKey)
-	if h.encryptionKey != nil {
-		enc, _ := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
-		apiKeyEnc = enc
+
+	// If API key is blank, preserve existing key (blank = keep current)
+	var apiKeyEnc []byte
+	if req.APIKey != "" {
+		apiKeyEnc = []byte(req.APIKey)
+		if h.encryptionKey != nil {
+			enc, _ := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
+			apiKeyEnc = enc
+		}
+	} else {
+		existing, err := h.db.GetAccount(id)
+		if err != nil {
+			writeJSON(w, 404, map[string]string{"error": "account not found"})
+			return
+		}
+		apiKeyEnc = existing.APIKey
 	}
 
 	enabled := true
@@ -211,11 +224,16 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Decrypt API key
-	apiKey := string(p.APIKey)
+	var apiKey string
 	if h.encryptionKey != nil {
-		if plain, err := crypto.Decrypt(h.encryptionKey, p.APIKey); err == nil {
-			apiKey = string(plain)
+		plain, err := crypto.Decrypt(h.encryptionKey, p.APIKey)
+		if err != nil {
+			writeJSON(w, 200, map[string]any{"success": false, "error": "failed to decrypt API key: " + err.Error()})
+			return
 		}
+		apiKey = strings.TrimSpace(string(plain))
+	} else {
+		apiKey = strings.TrimSpace(string(p.APIKey))
 	}
 
 	// Test connectivity using GET /models — no tokens consumed, no request quota used.
@@ -226,15 +244,15 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 
 	switch p.Type {
 	case "google":
-		testURL = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/openai/models?key=%s", apiKey)
+		testURL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
 		testReq, _ = http.NewRequest("GET", testURL, nil)
-	case "ollama":
-		testURL = p.BaseURL + "/models"
-		testReq, _ = http.NewRequest("GET", testURL, nil)
+		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 	default:
 		testURL = p.BaseURL + "/models"
 		testReq, _ = http.NewRequest("GET", testURL, nil)
-		testReq.Header.Set("Authorization", "Bearer "+apiKey)
+		if p.Type != "ollama" {
+			testReq.Header.Set("Authorization", "Bearer "+apiKey)
+		}
 	}
 
 	resp, err := client.Do(testReq)
@@ -382,11 +400,15 @@ func (h *AdminHandler) HandleGetSettings(w http.ResponseWriter, r *http.Request)
 	safe := make(map[string]string)
 	for k, v := range all {
 		switch k {
-		case "admin_password_hash", "encryption_key_salt":
+		case "admin_password_hash", "encryption_key_salt", "proxy_api_key_hash":
 			continue
 		default:
 			safe[k] = v
 		}
+	}
+	// Indicate whether a proxy key is configured (without exposing the hash)
+	if hash, ok := all["proxy_api_key_hash"]; ok && hash != "" {
+		safe["proxy_api_key_configured"] = "true"
 	}
 	writeJSON(w, 200, safe)
 }
@@ -399,9 +421,37 @@ func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	for k, v := range settings {
-		// Block sensitive keys from being set via this endpoint
 		switch k {
 		case "admin_password_hash", "encryption_key_salt":
+			continue // block direct writes to hashed keys
+		case "admin_password":
+			// Hash the password before storing
+			hash, err := crypto.HashPassword(v)
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "failed to hash password"})
+				return
+			}
+			if err := h.db.SetSetting("admin_password_hash", hash); err != nil {
+				writeJSON(w, 500, map[string]string{"error": err.Error()})
+				return
+			}
+			continue
+		case "proxy_api_key":
+			// Hash the API key before storing
+			if v == "" {
+				// Clear proxy auth key
+				h.db.SetSetting("proxy_api_key_hash", "")
+			} else {
+				hash, err := crypto.HashPassword(v)
+				if err != nil {
+					writeJSON(w, 500, map[string]string{"error": "failed to hash API key"})
+					return
+				}
+				if err := h.db.SetSetting("proxy_api_key_hash", hash); err != nil {
+					writeJSON(w, 500, map[string]string{"error": err.Error()})
+					return
+				}
+			}
 			continue
 		}
 		if err := h.db.SetSetting(k, v); err != nil {

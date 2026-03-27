@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,47 @@ import (
 
 	"github.com/darkraise/llm-proxy/internal/crypto"
 )
+
+// parseModelList handles both OpenAI format {"data":[{"id":"..."}]} and
+// plain array [{"id":"...","name":"..."}] responses from different providers.
+func parseModelList(data []byte) []discoverModel {
+	// Try OpenAI format first: {"data": [{"id": "..."}]}
+	var openai struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &openai); err == nil && len(openai.Data) > 0 {
+		models := make([]discoverModel, 0, len(openai.Data))
+		for _, item := range openai.Data {
+			if item.ID != "" {
+				models = append(models, discoverModel{ID: item.ID, Name: item.ID})
+			}
+		}
+		return models
+	}
+
+	// Try plain array: [{"id":"...", "name":"..."}]
+	var arr []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &arr); err == nil && len(arr) > 0 {
+		models := make([]discoverModel, 0, len(arr))
+		for _, item := range arr {
+			name := item.Name
+			if name == "" {
+				name = item.ID
+			}
+			if name != "" {
+				models = append(models, discoverModel{ID: name, Name: name})
+			}
+		}
+		return models
+	}
+
+	return nil
+}
 
 type discoverRequest struct {
 	Type    string `json:"type"`
@@ -47,16 +89,13 @@ func (h *AdminHandler) HandleDiscoverModels(w http.ResponseWriter, r *http.Reque
 
 	switch req.Type {
 	case "google":
-		fetchURL = fmt.Sprintf(
-			"https://generativelanguage.googleapis.com/v1beta/openai/models?key=%s",
-			req.APIKey,
-		)
+		fetchURL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
 		fetchReq, err = http.NewRequestWithContext(r.Context(), "GET", fetchURL, nil)
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "failed to build request: " + err.Error()})
 			return
 		}
-		// No Authorization header for Google key-based auth.
+		fetchReq.Header.Set("Authorization", "Bearer "+req.APIKey)
 
 	case "ollama":
 		fetchURL = req.BaseURL + "/models"
@@ -93,27 +132,27 @@ func (h *AdminHandler) HandleDiscoverModels(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Parse OpenAI-compatible response: {"object":"list","data":[{"id":"..."},...]}
-	var body struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to parse provider response: " + err.Error()})
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": "failed to read response"})
 		return
 	}
 
-	models := make([]discoverModel, 0, len(body.Data))
-	for _, item := range body.Data {
-		if item.ID == "" {
-			continue
+	models := parseModelList(respBody)
+	if models == nil {
+		writeJSON(w, 502, map[string]string{"error": "failed to parse provider response"})
+		return
+	}
+
+	// For openrouter with free_only: keep only models with ":free" suffix.
+	if req.FreeOnly && req.Type == "openrouter" {
+		filtered := make([]discoverModel, 0)
+		for _, m := range models {
+			if strings.HasSuffix(m.ID, ":free") {
+				filtered = append(filtered, m)
+			}
 		}
-		// For openrouter with free_only: keep only models with ":free" suffix.
-		if req.FreeOnly && req.Type == "openrouter" && !strings.HasSuffix(item.ID, ":free") {
-			continue
-		}
-		models = append(models, discoverModel{ID: item.ID, Name: item.ID})
+		models = filtered
 	}
 
 	writeJSON(w, 200, map[string]any{"models": models})
@@ -158,11 +197,11 @@ func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Re
 
 	switch req.Type {
 	case "google":
-		fetchURL = fmt.Sprintf(
-			"https://generativelanguage.googleapis.com/v1beta/openai/models?key=%s",
-			req.APIKey,
-		)
+		fetchURL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
 		fetchReq, err = http.NewRequest("GET", fetchURL, nil)
+		if err == nil {
+			fetchReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+		}
 	case "ollama":
 		fetchURL = req.BaseURL + "/models"
 		fetchReq, err = http.NewRequest("GET", fetchURL, nil)
@@ -190,21 +229,16 @@ func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var body struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to parse response"})
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": "failed to read response"})
 		return
 	}
 
-	models := make([]discoverModel, 0, len(body.Data))
-	for _, item := range body.Data {
-		if item.ID != "" {
-			models = append(models, discoverModel{ID: item.ID, Name: item.ID})
-		}
+	models := parseModelList(respBody)
+	if models == nil {
+		writeJSON(w, 502, map[string]string{"error": "failed to parse response"})
+		return
 	}
 
 	writeJSON(w, 200, map[string]any{"models": models})

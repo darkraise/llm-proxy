@@ -18,6 +18,7 @@ type RequestLog struct {
 	Timestamp        time.Time `json:"timestamp"`
 	AccountID        *int64    `json:"account_id,omitempty"`
 	AccountName      string    `json:"account_name"`
+	ProviderType     string    `json:"provider_type"`
 	Model            string    `json:"model"`
 	Endpoint         string    `json:"endpoint"`
 	Status           string    `json:"status"`
@@ -67,9 +68,9 @@ type ModelStats struct {
 
 func (d *DB) InsertRequestLog(l RequestLog) error {
 	_, err := d.Exec(
-		`INSERT INTO request_logs (account_id, account_name, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		l.AccountID, l.AccountName, l.Model, l.Endpoint, l.Status, l.LatencyMs, l.PromptTokens, l.CompletionTokens, l.StatusCode, l.ErrorMessage,
+		`INSERT INTO request_logs (account_id, account_name, provider_type, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		l.AccountID, l.AccountName, l.ProviderType, l.Model, l.Endpoint, l.Status, l.LatencyMs, l.PromptTokens, l.CompletionTokens, l.StatusCode, l.ErrorMessage,
 	)
 	return err
 }
@@ -117,7 +118,7 @@ func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 		limit = 50
 	}
 	query := fmt.Sprintf(
-		"SELECT id, timestamp, account_id, account_name, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message FROM request_logs WHERE %s ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+		"SELECT id, timestamp, account_id, account_name, provider_type, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message FROM request_logs WHERE %s ORDER BY timestamp DESC LIMIT ? OFFSET ?",
 		whereClause,
 	)
 	args = append(args, limit, f.Offset)
@@ -131,7 +132,7 @@ func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 	var logs []RequestLog
 	for rows.Next() {
 		var l RequestLog
-		if err := rows.Scan(&l.ID, &l.Timestamp, &l.AccountID, &l.AccountName, &l.Model, &l.Endpoint, &l.Status, &l.LatencyMs, &l.PromptTokens, &l.CompletionTokens, &l.StatusCode, &l.ErrorMessage); err != nil {
+		if err := rows.Scan(&l.ID, &l.Timestamp, &l.AccountID, &l.AccountName, &l.ProviderType, &l.Model, &l.Endpoint, &l.Status, &l.LatencyMs, &l.PromptTokens, &l.CompletionTokens, &l.StatusCode, &l.ErrorMessage); err != nil {
 			return nil, 0, err
 		}
 		logs = append(logs, l)

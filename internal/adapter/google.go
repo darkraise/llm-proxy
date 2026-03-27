@@ -3,6 +3,7 @@ package adapter
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -94,12 +95,14 @@ func OpenAIToGoogle(req ChatCompletionRequest, apiKey string) (string, []byte, e
 		return "", nil, err
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", googleBaseURL, req.Model, apiKey)
+	modelName := strings.TrimPrefix(req.Model, "models/")
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", googleBaseURL, modelName, apiKey)
 	return url, body, nil
 }
 
 func GoogleStreamURL(model, apiKey string) string {
-	return fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse&key=%s", googleBaseURL, model, apiKey)
+	modelName := strings.TrimPrefix(model, "models/")
+	return fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse&key=%s", googleBaseURL, modelName, apiKey)
 }
 
 func GoogleToOpenAI(data []byte, model string) (ChatCompletionResponse, error) {

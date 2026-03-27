@@ -35,6 +35,8 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 
 		logEntry.AccountName = prov.Name
 		logEntry.AccountID = &prov.ID
+		logEntry.ProviderType = prov.Type
+		logEntry.Model = firstModel(prov, req.Model)
 		t0 := time.Now()
 
 		var streamResp *http.Response
@@ -117,7 +119,8 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequest("POST", prov.BaseURL+"/chat/completions", bytes.NewReader(data))
+	baseURL := resolveBaseURL(prov)
+	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}

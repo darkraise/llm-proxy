@@ -161,6 +161,7 @@ export interface RequestLog {
   timestamp: string
   account_id?: number
   account_name: string
+  provider_type: string
   model: string
   endpoint: string
   status: string
@@ -196,6 +197,10 @@ export interface TestResult {
 
 export const api = {
   auth: {
+    setupStatus: () =>
+      request<{ setup_required: boolean }>('GET', '/auth/setup-status'),
+    setup: (password: string) =>
+      request<void>('POST', '/auth/setup', { password }),
     login: (password: string) =>
       request<void>('POST', '/auth/login', { password }),
     logout: () => request<void>('POST', '/auth/logout'),

@@ -126,6 +126,29 @@ func New(cfg Config) (*Server, error) {
 	rateLimitChan := make(chan proxy.RateLimitUpdate, 500)
 	proxyHandler.SetRateLimitChan(rateLimitChan)
 
+	// Load proxy config from settings
+	if retries, _ := db.GetSetting("max_retries"); retries != "" {
+		var r int
+		fmt.Sscanf(retries, "%d", &r)
+		if r > 0 {
+			t := 15 * time.Second
+			if ts, _ := db.GetSetting("request_timeout"); ts != "" {
+				var sec int
+				fmt.Sscanf(ts, "%d", &sec)
+				if sec > 0 {
+					t = time.Duration(sec) * time.Second
+				}
+			}
+			proxyHandler.SetConfig(r, t)
+		}
+	} else if ts, _ := db.GetSetting("request_timeout"); ts != "" {
+		var sec int
+		fmt.Sscanf(ts, "%d", &sec)
+		if sec > 0 {
+			proxyHandler.SetConfig(3, time.Duration(sec)*time.Second)
+		}
+	}
+
 	// Load fallback config from settings
 	fallbackEnabled, _ := db.GetSetting("fallback_enabled")
 	if fallbackEnabled == "true" {
@@ -175,6 +198,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/", s.handleRoot)
 
 	// Admin auth (no session required)
+	s.mux.HandleFunc("GET /admin/api/auth/setup-status", s.auth.HandleSetupStatus)
+	s.mux.HandleFunc("POST /admin/api/auth/setup", s.auth.HandleSetup)
 	s.mux.HandleFunc("POST /admin/api/auth/login", s.auth.HandleLogin)
 	s.mux.HandleFunc("POST /admin/api/auth/logout", s.auth.HandleLogout)
 

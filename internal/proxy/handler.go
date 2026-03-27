@@ -168,6 +168,8 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 
 		logEntry.AccountName = prov.Name
 		logEntry.AccountID = &prov.ID
+		logEntry.ProviderType = prov.Type
+		logEntry.Model = firstModel(prov, req.Model)
 		t0 := time.Now()
 
 		var resp *adapter.ChatCompletionResponse
@@ -272,7 +274,8 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 		return nil, 0, nil, err
 	}
 
-	httpReq, err := http.NewRequest("POST", prov.BaseURL+"/chat/completions", bytes.NewReader(data))
+	baseURL := resolveBaseURL(prov)
+	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, nil, err
 	}
@@ -328,6 +331,24 @@ func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatComplet
 
 	parsed, err := adapter.GoogleToOpenAI(respBody, req.Model)
 	return &parsed, 200, err
+}
+
+// knownProviderURLs maps provider types to their canonical API base URLs.
+// For these providers, the stored base_url is ignored.
+var knownProviderURLs = map[string]string{
+	"groq":       "https://api.groq.com/openai/v1",
+	"openrouter": "https://openrouter.ai/api/v1",
+	"cerebras":   "https://api.cerebras.ai/v1",
+	"mistral":    "https://api.mistral.ai/v1",
+	"github":     "https://models.inference.ai.azure.com",
+}
+
+// resolveBaseURL returns the canonical URL for known providers, or falls back to the stored base URL.
+func resolveBaseURL(prov *provider.AccountInfo) string {
+	if url, ok := knownProviderURLs[prov.Type]; ok {
+		return url
+	}
+	return prov.BaseURL
 }
 
 // firstModel resolves the actual model name to send to a provider.
