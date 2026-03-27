@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { AccountLimit } from '../lib/api'
+import { AccountLimit, MODEL_CATEGORIES } from '../lib/api'
 import { ModelName } from './ui/ModelName'
+import { Badge } from './ui/Badge'
+import { Select } from './ui/Select'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,13 @@ function matrixToLimits(matrix: Matrix): AccountLimit[] {
   return limits
 }
 
+// ─── Category badge variant mapping ──────────────────────────────────────────
+
+const CATEGORY_VARIANT: Record<string, 'accent' | 'warning' | 'neutral'> = {
+  chat: 'accent',
+  embedding: 'warning',
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export interface RateLimitTableProps {
@@ -74,6 +83,10 @@ export interface RateLimitTableProps {
   readOnly?: boolean
   /** Max height of the scrollable container (e.g. '400px', '100%'). Default: none. */
   maxHeight?: string
+  /** Optional map of model name -> category for the category column. */
+  modelCategories?: Record<string, string>
+  /** Called when user changes a model's category in edit mode. */
+  onCategoryChange?: (model: string, category: string) => void
 }
 
 // ─── Editable cell: shows compact format, raw number on focus ────────────────
@@ -143,10 +156,14 @@ export function RateLimitTable({
   defaultRowLabel = 'Default (shared across all models)',
   readOnly = false,
   maxHeight,
+  modelCategories,
+  onCategoryChange,
 }: RateLimitTableProps) {
   const matrix = limitsToMatrix(limits)
   // Ensure the default row entry exists in matrix
   if (!matrix['']) matrix[''] = {}
+
+  const showCategoryCol = !!modelCategories
 
   function getCellValue(model: string, metric: string): number | null {
     return matrix[model]?.[metric] ?? null
@@ -193,6 +210,11 @@ export function RateLimitTable({
             <th className="text-left px-3 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised sticky top-0 z-10" style={{ width: '180px', maxWidth: '180px' }}>
               Model
             </th>
+            {showCategoryCol && (
+              <th className="px-2 py-2 text-xs font-medium text-text-secondary uppercase tracking-wide border-b border-border bg-surface-raised text-center whitespace-nowrap sticky top-0 z-10" style={{ width: '80px' }}>
+                Cat
+              </th>
+            )}
             {METRIC_DEFS.map((m) => (
               <th
                 key={m.key}
@@ -208,6 +230,7 @@ export function RateLimitTable({
         <tbody>
             {rows.map((model) => {
               const isDefault = model === ''
+              const category = !isDefault && modelCategories ? (modelCategories[model] ?? 'chat') : ''
               return (
                 <tr
                   key={model === '' ? '__default__' : model}
@@ -221,6 +244,24 @@ export function RateLimitTable({
                       <ModelName name={model} className="block truncate text-sm" />
                     )}
                   </td>
+
+                  {/* Category cell */}
+                  {showCategoryCol && (
+                    <td className="px-1 py-1.5 border-b border-border-muted text-center">
+                      {isDefault ? (
+                        <span className="text-text-muted">&mdash;</span>
+                      ) : onCategoryChange && !readOnly ? (
+                        <Select
+                          value={category}
+                          onChange={(v) => onCategoryChange(model, v)}
+                          options={MODEL_CATEGORIES.map((c) => ({ value: c, label: c }))}
+                          className="text-xs h-7"
+                        />
+                      ) : (
+                        <Badge variant={CATEGORY_VARIANT[category] ?? 'neutral'}>{category}</Badge>
+                      )}
+                    </td>
+                  )}
 
                   {/* Metric cells */}
                   {METRIC_DEFS.map((m) => {

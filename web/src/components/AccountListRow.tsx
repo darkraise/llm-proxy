@@ -2,6 +2,7 @@ import { ProviderBadge } from './ui/Badge';
 import { StatusDot } from './ui/StatusDot';
 import { ModelName } from './ui/ModelName';
 import type { Account } from '../lib/api';
+import { parseCategorizedModels, parseDefaultModels } from '../lib/api';
 
 function getAccountStatus(account: Account): 'healthy' | 'rate-limited' | 'error' | 'disabled' {
   if (!account.enabled) return 'disabled';
@@ -16,11 +17,14 @@ function formatCompact(n: number): string {
   return n.toString();
 }
 
-function countModels(modelsJson: string): number {
-  try { return (JSON.parse(modelsJson) as string[]).length; } catch { return 0; }
+function formatCategoryCounts(categorized: Record<string, string[]>): string {
+  return Object.entries(categorized)
+    .filter(([, models]) => models.length > 0)
+    .map(([cat, models]) => `${models.length} ${cat}`)
+    .join(' \u00b7 ');
 }
 
-export const LIST_GRID_COLS = '28px 1.5fr 0.8fr 0.8fr 0.8fr 0.6fr 1.2fr 0.5fr';
+export const LIST_GRID_COLS = '28px 1.5fr 0.8fr 0.8fr 0.8fr 0.6fr 1.2fr 0.8fr';
 
 interface AccountListRowProps {
   account: Account;
@@ -30,7 +34,10 @@ interface AccountListRowProps {
 
 export function AccountListRow({ account, selected, onClick }: AccountListRowProps) {
   const status = getAccountStatus(account);
-  const totalModels = countModels(account.models);
+  const categorized = parseCategorizedModels(account.models);
+  const defaults = parseDefaultModels(account.default_models);
+  const defaultChat = defaults.chat ?? '';
+  const categorySummary = formatCategoryCounts(categorized);
 
   return (
     <div
@@ -47,11 +54,13 @@ export function AccountListRow({ account, selected, onClick }: AccountListRowPro
       <div className="text-sm text-text-primary text-right tabular-nums">{formatCompact(account.total_tokens)}</div>
       <div className="text-sm text-text-primary text-center">{account.priority}</div>
       <div className="text-xs text-text-secondary truncate">
-        {account.default_model
-          ? <ModelName name={account.default_model} className="truncate" />
+        {defaultChat
+          ? <ModelName name={defaultChat} className="truncate" />
           : '\u2014'}
       </div>
-      <div className="text-xs text-accent-light text-center">{totalModels > 0 ? totalModels : '\u2014'}</div>
+      <div className="text-xs text-accent-light text-center">
+        {categorySummary || '\u2014'}
+      </div>
     </div>
   );
 }

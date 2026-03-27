@@ -61,6 +61,45 @@ async function request<T>(
   return res.text() as unknown as T
 }
 
+// ─── Model Categories ────────────────────────────────────────────────────────
+
+export const MODEL_CATEGORIES = ['chat', 'embedding'] as const
+export type ModelCategory = typeof MODEL_CATEGORIES[number]
+
+export function parseCategorizedModels(raw: string): Record<string, string[]> {
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return { chat: parsed } // legacy flat array
+    return parsed
+  } catch {
+    return {}
+  }
+}
+
+export function parseDefaultModels(raw: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(raw)
+    if (typeof parsed === 'string') return { chat: parsed } // legacy single string
+    return parsed
+  } catch {
+    return {}
+  }
+}
+
+/** Flatten a categorized model map into a single array of model names. */
+export function flattenModels(categorized: Record<string, string[]>): string[] {
+  return Object.values(categorized).flat()
+}
+
+/** Build a reverse lookup: model name -> category. */
+export function buildModelCategoryMap(categorized: Record<string, string[]>): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const [cat, models] of Object.entries(categorized)) {
+    for (const m of models) map[m] = cat
+  }
+  return map
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 export interface AccountLimit {
@@ -87,10 +126,10 @@ export interface Account {
   name: string
   type: string
   base_url: string
-  models: string // JSON array string
+  models: string // JSON string: Record<string, string[]> (or legacy string[])
   priority: number
   enabled: boolean
-  default_model: string
+  default_models: string // JSON string: Record<string, string> (or legacy string)
   created_at: string
   updated_at: string
   limits: AccountLimit[]
@@ -104,10 +143,10 @@ export interface AccountInput {
   type: string
   base_url: string
   api_key: string
-  models: string[]
+  models: Record<string, string[]>
   priority: number
   enabled: boolean
-  default_model: string
+  default_models: Record<string, string>
   limits: AccountLimit[]
 }
 

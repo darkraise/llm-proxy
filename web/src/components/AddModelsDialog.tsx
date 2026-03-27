@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { RefreshCw, X } from 'lucide-react'
-import { api, Account, AccountLimit } from '../lib/api'
+import { api, Account, AccountLimit, MODEL_CATEGORIES, ModelCategory } from '../lib/api'
 import { ToggleSwitch } from './ui/ToggleSwitch'
 import { RateLimitTable } from './RateLimitTable'
+import { Select } from './ui/Select'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -13,7 +14,7 @@ interface AddModelsDialogProps {
   account: Account
   existingModels: string[]
   existingLimits: AccountLimit[]
-  onFinish: (newModels: string[], newLimits: AccountLimit[]) => Promise<void>
+  onFinish: (newModels: string[], newLimits: AccountLimit[], modelCategories?: Record<string, string>) => Promise<void>
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ export function AddModelsDialog({
   // Step 1 state
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
+  const [modelCategories, setModelCategories] = useState<Record<string, ModelCategory>>({})
   const [freeOnly, setFreeOnly] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -47,6 +49,7 @@ export function AddModelsDialog({
       setStep(1)
       setAvailableModels([])
       setSelectedModels(new Set())
+      setModelCategories({})
       setFreeOnly(false)
       setSearch('')
       setLoading(false)
@@ -92,7 +95,15 @@ export function AddModelsDialog({
       }
 
       setAvailableModels(ids)
-      if (!isRefresh) setSelectedModels(new Set())
+      if (!isRefresh) {
+        setSelectedModels(new Set())
+        // Default all discovered models to 'chat' category
+        const cats: Record<string, ModelCategory> = {}
+        for (const id of ids) {
+          cats[id] = id.includes('embed') ? 'embedding' : 'chat'
+        }
+        setModelCategories(cats)
+      }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to fetch models')
     } finally {
@@ -130,7 +141,12 @@ export function AddModelsDialog({
     try {
       // Only pass non-default limits (model-specific ones the user set)
       const newLimits = limits.filter((l) => l.model !== '')
-      await onFinish(Array.from(selectedModels), newLimits)
+      // Build category map for selected models only
+      const selectedCats: Record<string, string> = {}
+      for (const m of selectedModels) {
+        selectedCats[m] = modelCategories[m] ?? 'chat'
+      }
+      await onFinish(Array.from(selectedModels), newLimits, selectedCats)
       onClose()
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to add models')
@@ -146,6 +162,12 @@ export function AddModelsDialog({
     : availableModels
 
   const selectedList = Array.from(selectedModels)
+
+  // Build category map for rate limit table
+  const selectedCategoryMap: Record<string, string> = {}
+  for (const m of selectedList) {
+    selectedCategoryMap[m] = modelCategories[m] ?? 'chat'
+  }
 
   if (!open) return null
 
@@ -253,7 +275,13 @@ export function AddModelsDialog({
                           checked={selectedModels.has(id)}
                           onChange={() => toggleModel(id)}
                         />
-                        <span className="text-text-primary font-mono text-sm truncate">{id}</span>
+                        <span className="text-text-primary font-mono text-sm truncate flex-1">{id}</span>
+                        <Select
+                          value={modelCategories[id] ?? 'chat'}
+                          onChange={(v) => setModelCategories((prev) => ({ ...prev, [id]: v as ModelCategory }))}
+                          options={MODEL_CATEGORIES.map((c) => ({ value: c, label: c }))}
+                          className="w-28 text-xs h-7 flex-shrink-0"
+                        />
                       </label>
                     ))}
                   </div>
@@ -295,6 +323,7 @@ export function AddModelsDialog({
                   models={selectedList}
                   limits={limits}
                   onChange={setLimits}
+                  modelCategories={selectedCategoryMap}
                 />
               </div>
 

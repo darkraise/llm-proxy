@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
-import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api'
+import {
+  api, Account, AccountInput, AccountLimit, TestResult,
+  MODEL_CATEGORIES, parseCategorizedModels, parseDefaultModels,
+  flattenModels, buildModelCategoryMap,
+} from '../lib/api'
 import { Drawer } from './ui/Drawer'
 import { ProviderBadge } from './ui/Badge'
 import { ToggleSwitch } from './ui/ToggleSwitch'
@@ -12,14 +16,6 @@ import { AddModelsDialog } from './AddModelsDialog'
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'google'])
-
-function parseAccountModels(modelsJSON: string): string[] {
-  try {
-    return JSON.parse(modelsJSON) as string[]
-  } catch {
-    return []
-  }
-}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,20 +62,25 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
   // Non-null binding for use in closures (TS can't narrow the prop across nested functions)
   const acct = account
 
-  const models = parseAccountModels(acct.models)
+  const categorizedModels = parseCategorizedModels(acct.models)
+  const allModels = flattenModels(categorizedModels)
+  const modelCategoryMap = buildModelCategoryMap(categorizedModels)
+  const defaultModels = parseDefaultModels(acct.default_models)
 
   // ─── Edit helpers ────────────────────────────────────────────────────────
 
   function startEditing() {
+    const catModels = parseCategorizedModels(acct.models)
+    const defModels = parseDefaultModels(acct.default_models)
     setEditData({
       name: acct.name,
       type: acct.type,
       base_url: acct.base_url,
       api_key: '',
-      models: parseAccountModels(acct.models),
+      models: catModels,
       priority: acct.priority,
       enabled: acct.enabled,
-      default_model: acct.default_model ?? '',
+      default_models: defModels,
       limits: acct.limits ?? [],
     })
     setEditedLimits(acct.limits ?? [])
@@ -122,9 +123,16 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
     onClose()
   }
 
-  async function handleAddModels(newModels: string[], newLimits: AccountLimit[]) {
-    const currentModels = parseAccountModels(acct.models)
-    const updatedModels = [...currentModels, ...newModels]
+  async function handleAddModels(newModels: string[], newLimits: AccountLimit[], newModelCategories?: Record<string, string>) {
+    const currentCategorized = parseCategorizedModels(acct.models)
+    // Merge new models into categorized map
+    for (const model of newModels) {
+      const cat = newModelCategories?.[model] ?? 'chat'
+      if (!currentCategorized[cat]) currentCategorized[cat] = []
+      if (!currentCategorized[cat].includes(model)) {
+        currentCategorized[cat].push(model)
+      }
+    }
     const updatedLimits = [...(acct.limits ?? []), ...newLimits]
 
     await api.accounts.update(acct.id, {
@@ -132,10 +140,10 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
       type: acct.type,
       base_url: acct.base_url,
       api_key: '',
-      models: updatedModels,
+      models: currentCategorized,
       priority: acct.priority,
       enabled: acct.enabled,
-      default_model: acct.default_model ?? '',
+      default_models: parseDefaultModels(acct.default_models),
       limits: updatedLimits,
     })
     onUpdate()
@@ -144,17 +152,33 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
   // ─── Header ──────────────────────────────────────────────────────────────
 
   const ed = isEditing && editData ? editData : null
+  const editAllModels = ed ? flattenModels(ed.models) : allModels
+  const editModelCategoryMap = ed ? buildModelCategoryMap(ed.models) : modelCategoryMap
 
   async function handleToggleEnabled(enabled: boolean) {
     try {
       await api.accounts.update(acct.id, {
         name: acct.name, type: acct.type, base_url: acct.base_url, api_key: '',
-        models: parseAccountModels(acct.models), priority: acct.priority,
-        enabled, default_model: acct.default_model ?? '', limits: acct.limits ?? [],
+        models: parseCategorizedModels(acct.models), priority: acct.priority,
+        enabled, default_models: parseDefaultModels(acct.default_models), limits: acct.limits ?? [],
       })
       if (ed) setEditField('enabled', enabled)
       onUpdate()
     } catch { /* silent */ }
+  }
+
+  function handleCategoryChange(model: string, newCategory: string) {
+    if (!editData) return
+    const updated = { ...editData.models }
+    // Remove from old category
+    for (const cat of Object.keys(updated)) {
+      updated[cat] = updated[cat].filter((m) => m !== model)
+      if (updated[cat].length === 0) delete updated[cat]
+    }
+    // Add to new category
+    if (!updated[newCategory]) updated[newCategory] = []
+    updated[newCategory].push(model)
+    setEditField('models', updated)
   }
 
   const title = (
@@ -215,7 +239,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
   // ─── Tab content ─────────────────────────────────────────────────────────
 
   function renderOverview() {
-    const editModels = ed ? ed.models : models
+    const currentDefaults = ed ? ed.default_models : defaultModels
 
     return (
       <div className="flex flex-col h-full">
@@ -252,25 +276,42 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
                 <div className="text-sm text-text-primary">{acct.priority}</div>
               )}
             </div>
-            <div>
-              <div className="text-xs uppercase tracking-wider text-text-muted mb-0.5">Default Model</div>
-              {ed ? (
-                <Select
-                  value={ed.default_model}
-                  onChange={(v) => setEditField('default_model', v)}
-                  options={[
-                    { value: '', label: '(none)' },
-                    ...editModels.map((m) => ({ value: m, label: m })),
-                  ]}
-                />
-              ) : (
-                <div className="text-sm text-text-primary">
-                  {acct.default_model
-                    ? <ModelName name={acct.default_model} />
-                    : '(none)'}
+          </div>
+
+          {/* Per-category default model selectors */}
+          <div className="space-y-3">
+            {MODEL_CATEGORIES.map((cat) => {
+              const catModels = ed ? (ed.models[cat] ?? []) : (categorizedModels[cat] ?? [])
+              if (catModels.length === 0 && !ed) return null
+              const currentDefault = currentDefaults[cat] ?? ''
+              return (
+                <div key={cat}>
+                  <div className="text-xs uppercase tracking-wider text-text-muted mb-0.5">
+                    Default {cat} model
+                  </div>
+                  {ed ? (
+                    <Select
+                      value={currentDefault}
+                      onChange={(v) => {
+                        const updated = { ...ed.default_models, [cat]: v }
+                        if (!v) delete updated[cat]
+                        setEditField('default_models', updated)
+                      }}
+                      options={[
+                        { value: '', label: '(none)' },
+                        ...catModels.map((m) => ({ value: m, label: m })),
+                      ]}
+                    />
+                  ) : (
+                    <div className="text-sm text-text-primary">
+                      {currentDefault
+                        ? <ModelName name={currentDefault} />
+                        : '(none)'}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              )
+            })}
           </div>
 
           {/* Base URL — only for ollama and openai-compatible */}
@@ -340,10 +381,12 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
           </div>
           <div className="flex-1 min-h-0">
             <RateLimitTable
-              models={models}
+              models={editAllModels}
               limits={ed ? editedLimits : (acct.limits ?? [])}
               onChange={setEditedLimits}
               readOnly={!isEditing}
+              modelCategories={editModelCategoryMap}
+              onCategoryChange={ed ? handleCategoryChange : undefined}
             />
           </div>
         </div>
@@ -362,7 +405,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
         open={addModelsOpen}
         onClose={() => setAddModelsOpen(false)}
         account={acct}
-        existingModels={models}
+        existingModels={allModels}
         existingLimits={acct.limits ?? []}
         onFinish={handleAddModels}
       />

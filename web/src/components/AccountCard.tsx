@@ -2,6 +2,7 @@ import { ProviderBadge } from './ui/Badge';
 import { StatusDot } from './ui/StatusDot';
 import { ModelName } from './ui/ModelName';
 import type { Account } from '../lib/api';
+import { parseCategorizedModels, parseDefaultModels } from '../lib/api';
 
 function getAccountStatus(account: Account): 'healthy' | 'rate-limited' | 'error' | 'disabled' {
   if (!account.enabled) return 'disabled';
@@ -16,8 +17,11 @@ function formatCompact(n: number): string {
   return n.toString();
 }
 
-function countModels(modelsJson: string): number {
-  try { return (JSON.parse(modelsJson) as string[]).length; } catch { return 0; }
+function formatCategoryCounts(categorized: Record<string, string[]>): string {
+  return Object.entries(categorized)
+    .filter(([, models]) => models.length > 0)
+    .map(([cat, models]) => `${models.length} ${cat}`)
+    .join(' \u00b7 ');
 }
 
 interface AccountCardProps {
@@ -28,8 +32,10 @@ interface AccountCardProps {
 
 export function AccountCard({ account, selected, onClick }: AccountCardProps) {
   const status = getAccountStatus(account);
-  const totalModels = countModels(account.models);
-  const extraModels = totalModels - (account.default_model ? 1 : 0);
+  const categorized = parseCategorizedModels(account.models);
+  const defaults = parseDefaultModels(account.default_models);
+  const defaultChat = defaults.chat ?? '';
+  const categorySummary = formatCategoryCounts(categorized);
 
   return (
     <div
@@ -61,16 +67,16 @@ export function AccountCard({ account, selected, onClick }: AccountCardProps) {
 
       {/* Model row */}
       <div className="flex items-center gap-1.5">
-        {account.default_model ? (
+        {defaultChat ? (
           <span className="bg-[rgba(255,255,255,0.05)] text-text-primary text-xs px-2 py-0.5 rounded truncate">
-            <ModelName name={account.default_model} />
+            <ModelName name={defaultChat} />
           </span>
         ) : (
           <span className="text-text-muted text-xs">No default model</span>
         )}
-        {extraModels > 0 && (
+        {categorySummary && (
           <span className="bg-accent-muted text-accent-light text-xs px-2 py-0.5 rounded flex-shrink-0">
-            +{extraModels} models
+            {categorySummary}
           </span>
         )}
       </div>

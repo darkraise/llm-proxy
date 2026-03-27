@@ -1,6 +1,10 @@
 import React, { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { api, Account, AccountInput, AccountLimit, TestResult } from '../lib/api'
+import {
+  api, Account, AccountInput, AccountLimit, TestResult,
+  MODEL_CATEGORIES, ModelCategory,
+  parseCategorizedModels, parseDefaultModels, flattenModels, buildModelCategoryMap,
+} from '../lib/api'
 import { RateLimitTable } from '../components/RateLimitTable'
 import { AccountCard } from '../components/AccountCard'
 import { AccountListRow, LIST_GRID_COLS } from '../components/AccountListRow'
@@ -27,25 +31,6 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
 // Providers with hardcoded base URLs — no need to show base URL field
 const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'google'])
 
-function parseModels(raw: string): string[] {
-  return raw
-    .split(/[\n,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
-function formatModels(models: string[]): string {
-  return models.join('\n')
-}
-
-function parseAccountModels(modelsJSON: string): string[] {
-  try {
-    return JSON.parse(modelsJSON) as string[]
-  } catch {
-    return []
-  }
-}
-
 // ─── Edit Modal (existing accounts) ──────────────────────────────────────────
 
 interface AccountModalProps {
@@ -55,18 +40,20 @@ interface AccountModalProps {
 }
 
 function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): React.ReactNode {
+  const initialCategorized = parseCategorizedModels(initial.models)
+  const initialDefaults = parseDefaultModels(initial.default_models)
+
   const [form, setForm] = useState<AccountInput>(() => ({
     name: initial.name,
     type: initial.type,
     base_url: initial.base_url,
     api_key: '',
-    models: parseAccountModels(initial.models),
+    models: initialCategorized,
     priority: initial.priority,
     enabled: initial.enabled,
-    default_model: initial.default_model ?? '',
+    default_models: initialDefaults,
     limits: initial.limits ?? [],
   }))
-  const [modelsRaw, setModelsRaw] = useState(formatModels(parseAccountModels(initial.models)))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -89,9 +76,8 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
     e.preventDefault()
     setSaving(true)
     setError('')
-    const payload: AccountInput = { ...form, models: parseModels(modelsRaw) }
     try {
-      await api.accounts.update(initial.id, payload)
+      await api.accounts.update(initial.id, form)
       onSave()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
@@ -100,7 +86,8 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
     }
   }
 
-  const parsedModels = parseModels(modelsRaw)
+  const currentFlat = flattenModels(form.models)
+  const currentCategoryMap = buildModelCategoryMap(form.models)
 
   const hasChanges = (() => {
     if (form.api_key) return true
@@ -109,11 +96,22 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
     if (form.base_url !== initial.base_url) return true
     if (form.priority !== initial.priority) return true
     if (form.enabled !== initial.enabled) return true
-    if (form.default_model !== (initial.default_model ?? '')) return true
-    if (JSON.stringify(parsedModels) !== JSON.stringify(parseAccountModels(initial.models))) return true
+    if (JSON.stringify(form.default_models) !== JSON.stringify(initialDefaults)) return true
+    if (JSON.stringify(form.models) !== JSON.stringify(initialCategorized)) return true
     if (JSON.stringify(form.limits) !== JSON.stringify(initial.limits ?? [])) return true
     return false
   })()
+
+  function handleCategoryChange(model: string, newCategory: string) {
+    const updated = { ...form.models }
+    for (const cat of Object.keys(updated)) {
+      updated[cat] = updated[cat].filter((m) => m !== model)
+      if (updated[cat].length === 0) delete updated[cat]
+    }
+    if (!updated[newCategory]) updated[newCategory] = []
+    updated[newCategory].push(model)
+    set('models', updated)
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -164,29 +162,31 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
               </div>
             </div>
 
-            <div>
-              <label className="label">Models (one per line or comma-separated)</label>
-              <textarea
-                className="input font-mono resize-none"
-                rows={2}
-                value={modelsRaw}
-                onChange={(e) => setModelsRaw(e.target.value)}
-                placeholder="gpt-4o&#10;gpt-4o-mini"
-              />
+            {/* Per-category default model selectors */}
+            <div className="grid grid-cols-2 gap-4">
+              {MODEL_CATEGORIES.map((cat) => {
+                const catModels = form.models[cat] ?? []
+                return (
+                  <div key={cat}>
+                    <label className="label">Default {cat} model</label>
+                    <Select
+                      value={form.default_models[cat] ?? ''}
+                      onChange={(v) => {
+                        const updated = { ...form.default_models, [cat]: v }
+                        if (!v) delete updated[cat]
+                        set('default_models', updated)
+                      }}
+                      options={[
+                        { value: '', label: '(none)' },
+                        ...catModels.map((m) => ({ value: m, label: m })),
+                      ]}
+                    />
+                  </div>
+                )
+              })}
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="label">Default Model</label>
-                <Select
-                  value={form.default_model}
-                  onChange={(v) => set('default_model', v)}
-                  options={[
-                    { value: '', label: '(none)' },
-                    ...parsedModels.map((m) => ({ value: m, label: m })),
-                  ]}
-                />
-              </div>
               <div>
                 <label className="label">Priority</label>
                 <input
@@ -214,9 +214,11 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
             <div>
               <label className="label mb-2">Rate Limits</label>
               <RateLimitTable
-                models={parsedModels}
+                models={currentFlat}
                 limits={form.limits}
                 onChange={(newLimits) => set('limits', newLimits)}
+                modelCategories={currentCategoryMap}
+                onCategoryChange={handleCategoryChange}
               />
             </div>
 
@@ -269,7 +271,8 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   const [discoverError, setDiscoverError] = useState('')
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
-  const [defaultModel, setDefaultModel] = useState('')
+  const [modelCategories, setModelCategories] = useState<Record<string, ModelCategory | 'skip'>>({})
+  const [defaultModels, setDefaultModels] = useState<Record<string, string>>({})
   const [discovered, setDiscovered] = useState(false)
 
   // Step 3 state
@@ -323,7 +326,19 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
       const ids = [...new Set(result.models.map((m) => m.id))]
       setAvailableModels(ids)
       setSelectedModels(new Set(ids))
-      setDefaultModel(ids[0] ?? '')
+      // Auto-assign categories: embedding for embed-like names, chat for everything else
+      const cats: Record<string, ModelCategory | 'skip'> = {}
+      for (const id of ids) {
+        cats[id] = id.includes('embed') ? 'embedding' : 'chat'
+      }
+      setModelCategories(cats)
+      // Auto-set default models per category
+      const chatModels = ids.filter((id) => cats[id] === 'chat')
+      const embeddingModels = ids.filter((id) => cats[id] === 'embedding')
+      const defs: Record<string, string> = {}
+      if (chatModels.length > 0) defs.chat = chatModels[0]
+      if (embeddingModels.length > 0) defs.embedding = embeddingModels[0]
+      setDefaultModels(defs)
       setDiscovered(true)
     } catch (err) {
       setDiscoverError(err instanceof Error ? err.message : 'Discovery failed')
@@ -333,7 +348,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   }
 
   async function goToStep3() {
-    const models = Array.from(selectedModels)
+    const models = Array.from(selectedModels).filter((m) => modelCategories[m] !== 'skip')
     setLoadingDefaults(true)
     try {
       const defaults = await api.ratelimits.defaults(s1.type, models)
@@ -351,7 +366,6 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
       const next = new Set(prev)
       if (next.has(id)) {
         next.delete(id)
-        if (defaultModel === id) setDefaultModel('')
       } else {
         next.add(id)
       }
@@ -362,27 +376,60 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   function toggleAll() {
     setSelectedModels((prev) => {
       if (prev.size === availableModels.length) {
-        setDefaultModel('')
         return new Set<string>()
       } else {
-        if (!defaultModel && availableModels.length > 0) setDefaultModel(availableModels[0])
         return new Set(availableModels)
       }
     })
   }
 
+  // Build models map from categories
+  function buildModelsMap(): Record<string, string[]> {
+    const modelsMap: Record<string, string[]> = {}
+    for (const [model, cat] of Object.entries(modelCategories)) {
+      if (cat !== 'skip' && selectedModels.has(model)) {
+        if (!modelsMap[cat]) modelsMap[cat] = []
+        modelsMap[cat].push(model)
+      }
+    }
+    // Remove empty categories
+    for (const k of Object.keys(modelsMap)) {
+      if (modelsMap[k].length === 0) delete modelsMap[k]
+    }
+    return modelsMap
+  }
+
+  // Build category map for active models (for rate limit table)
+  function buildActiveCategoryMap(): Record<string, string> {
+    const map: Record<string, string> = {}
+    for (const [model, cat] of Object.entries(modelCategories)) {
+      if (cat !== 'skip' && selectedModels.has(model)) {
+        map[model] = cat
+      }
+    }
+    return map
+  }
+
   async function handleSave() {
     setSaving(true)
     setSaveError('')
+    const modelsMap = buildModelsMap()
+    // Clean defaultModels to only include categories that have models
+    const cleanDefaults: Record<string, string> = {}
+    for (const [cat, def] of Object.entries(defaultModels)) {
+      if (def && modelsMap[cat]?.includes(def)) {
+        cleanDefaults[cat] = def
+      }
+    }
     const payload: AccountInput = {
       name: s1.name,
       type: s1.type,
       base_url: s1.base_url,
       api_key: s1.api_key,
-      models: Array.from(selectedModels),
+      models: modelsMap,
       priority,
       enabled,
-      default_model: defaultModel,
+      default_models: cleanDefaults,
       limits,
     }
     try {
@@ -395,7 +442,17 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
     }
   }
 
-  const selectedList = Array.from(selectedModels)
+  const activeModels = Array.from(selectedModels).filter((m) => modelCategories[m] !== 'skip')
+  const activeCategoryMap = buildActiveCategoryMap()
+
+  // Category counts for summary
+  const categoryCounts: Record<string, number> = {}
+  for (const m of activeModels) {
+    const cat = modelCategories[m] ?? 'chat'
+    if (cat !== 'skip') {
+      categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1
+    }
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -551,22 +608,47 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                             onChange={() => toggleModel(id)}
                             className="checkbox flex-shrink-0"
                           />
-                          <span className="text-text-primary font-mono truncate">{id}</span>
+                          <span className="text-text-primary font-mono truncate flex-1">{id}</span>
+                          <Select
+                            value={modelCategories[id] ?? 'chat'}
+                            onChange={(v) => setModelCategories((prev) => ({ ...prev, [id]: v as ModelCategory | 'skip' }))}
+                            options={[
+                              ...MODEL_CATEGORIES.map((c) => ({ value: c, label: c })),
+                              { value: 'skip', label: 'skip' },
+                            ]}
+                            className="w-28 text-xs h-7 flex-shrink-0"
+                          />
                         </label>
                       ))}
                     </div>
                   </div>
 
-                  <div>
-                    <label className="label">Default Model</label>
-                    <Select
-                      value={defaultModel}
-                      onChange={setDefaultModel}
-                      options={[
-                        { value: '', label: '(none)' },
-                        ...selectedList.map((m) => ({ value: m, label: m })),
-                      ]}
-                    />
+                  {/* Per-category default model selectors */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {MODEL_CATEGORIES.map((cat) => {
+                      const catModels = availableModels.filter(
+                        (m) => selectedModels.has(m) && modelCategories[m] === cat,
+                      )
+                      if (catModels.length === 0) return null
+                      return (
+                        <div key={cat}>
+                          <label className="label">Default {cat} model</label>
+                          <Select
+                            value={defaultModels[cat] ?? ''}
+                            onChange={(v) => setDefaultModels((prev) => {
+                              const next = { ...prev }
+                              if (v) next[cat] = v
+                              else delete next[cat]
+                              return next
+                            })}
+                            options={[
+                              { value: '', label: '(none)' },
+                              ...catModels.map((m) => ({ value: m, label: m })),
+                            ]}
+                          />
+                        </div>
+                      )
+                    })}
                   </div>
                 </>
               )}
@@ -617,17 +699,23 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
               <div>
                 <label className="label mb-2">Rate Limits</label>
                 <RateLimitTable
-                  models={selectedList}
+                  models={activeModels}
                   limits={limits}
                   onChange={setLimits}
                   maxHeight="400px"
+                  modelCategories={activeCategoryMap}
                 />
               </div>
 
               {/* Summary */}
               <div className="text-xs text-text-muted">
-                {selectedList.length} model{selectedList.length !== 1 ? 's' : ''} selected
-                {defaultModel && <> &middot; Default: <span className="font-mono text-text-secondary">{defaultModel}</span></>}
+                {Object.entries(categoryCounts)
+                  .map(([cat, count]) => `${count} ${cat}`)
+                  .join(' \u00b7 ')}
+                {' '}model{activeModels.length !== 1 ? 's' : ''} selected
+                {Object.entries(defaultModels).filter(([, v]) => v).map(([cat, v]) => (
+                  <span key={cat}> &middot; Default {cat}: <span className="font-mono text-text-secondary">{v}</span></span>
+                ))}
               </div>
 
               {saveError && (
