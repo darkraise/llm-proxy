@@ -191,6 +191,7 @@ func (s *Server) routes() {
 	proxyAuth := proxy.ProxyAuthMiddleware(s.db)
 	s.mux.Handle("POST /v1/chat/completions", proxyAuth(http.HandlerFunc(s.proxy.HandleChatCompletions)))
 	s.mux.Handle("POST /v1/messages", proxyAuth(http.HandlerFunc(s.proxy.HandleAnthropicMessages)))
+	s.mux.Handle("POST /v1/embeddings", proxyAuth(http.HandlerFunc(s.proxy.HandleEmbeddings)))
 	s.mux.Handle("GET /v1/models", proxyAuth(http.HandlerFunc(s.proxy.HandleListModels)))
 
 	// Health

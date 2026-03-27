@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -151,6 +152,142 @@ func (h *Handler) handleNonStreaming(w http.ResponseWriter, req adapter.ChatComp
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
+
+// ─── Embeddings ──────────────────────────────────────────────────────────────
+
+func (h *Handler) HandleEmbeddings(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, 400, "failed to read request body")
+		return
+	}
+
+	req, err := adapter.ParseEmbeddingRequest(body)
+	if err != nil {
+		writeError(w, 400, "invalid request: "+err.Error())
+		return
+	}
+
+	if req.Model == "" {
+		writeError(w, 400, "model is required")
+		return
+	}
+
+	resp, logEntry := h.forwardEmbedding(req)
+	logEntry.Endpoint = "embeddings"
+
+	if h.logFunc != nil {
+		h.logFunc(logEntry)
+	}
+
+	if resp == nil {
+		writeError(w, 503, "all providers exhausted")
+		return
+	}
+
+	data, _ := json.Marshal(resp)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, store.RequestLog) {
+	logEntry := store.RequestLog{
+		Model:  req.Model,
+		Status: "error",
+	}
+
+	for attempt := 0; attempt < h.maxRetries; attempt++ {
+		prov, err := h.pool.Select(req.Model, h.maxRetries)
+		if err != nil {
+			break
+		}
+
+		logEntry.AccountName = prov.Name
+		logEntry.AccountID = &prov.ID
+		logEntry.ProviderType = prov.Type
+		logEntry.Model = firstModel(prov, req.Model)
+		t0 := time.Now()
+
+		resp, statusCode, err := h.callOpenAIEmbedding(prov, req)
+
+		latency := time.Since(t0)
+		logEntry.LatencyMs = int(latency.Milliseconds())
+		logEntry.StatusCode = statusCode
+
+		if err != nil {
+			slog.Warn("embedding provider error", "provider", prov.Name, "error", err)
+			h.pool.RecordError(prov.Name, 15*time.Second)
+			continue
+		}
+
+		if statusCode == 429 {
+			slog.Warn("embedding rate limited", "provider", prov.Name)
+			h.pool.RecordRateLimit(prov.Name, 60*time.Second)
+			continue
+		}
+
+		if statusCode >= 500 {
+			slog.Warn("embedding server error", "provider", prov.Name, "status", statusCode)
+			h.pool.RecordError(prov.Name, 10*time.Second)
+			continue
+		}
+
+		if statusCode >= 400 {
+			logEntry.StatusCode = statusCode
+			logEntry.ErrorMessage = fmt.Sprintf("provider returned status %d", statusCode)
+			break
+		}
+
+		// Success
+		if resp != nil {
+			logEntry.PromptTokens = resp.Usage.PromptTokens
+			h.pool.RecordSuccess(prov.Name, resp.Usage.TotalTokens)
+			logEntry.Model = resp.Model
+		}
+		logEntry.Status = "success"
+		slog.Info("embedding ok", "provider", prov.Name, "model", logEntry.Model, "latency_ms", latency.Milliseconds())
+		return resp, logEntry
+	}
+
+	logEntry.ErrorMessage = "all providers exhausted"
+	return nil, logEntry
+}
+
+func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
+	req.Model = firstModel(prov, req.Model)
+	data, err := adapter.FormatEmbeddingRequest(req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	baseURL := resolveBaseURL(prov)
+	httpReq, err := http.NewRequest("POST", baseURL+"/embeddings", bytes.NewReader(data))
+	if err != nil {
+		return nil, 0, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
+
+	resp, err := h.client.Do(httpReq)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, resp.StatusCode, nil
+	}
+
+	parsed, err := adapter.ParseEmbeddingResponse(body)
+	return &parsed, 200, err
+}
+
+// ─── Chat Completions ────────────────────────────────────────────────────────
 
 func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, store.RequestLog) {
 	logEntry := store.RequestLog{
