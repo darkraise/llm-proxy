@@ -11,7 +11,7 @@ import { AddModelsDialog } from './AddModelsDialog'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'google'])
+const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'google'])
 
 function parseAccountModels(modelsJSON: string): string[] {
   try {

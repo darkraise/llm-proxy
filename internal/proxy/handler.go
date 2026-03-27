@@ -341,6 +341,7 @@ var knownProviderURLs = map[string]string{
 	"cerebras":   "https://api.cerebras.ai/v1",
 	"mistral":    "https://api.mistral.ai/v1",
 	"github":     "https://models.inference.ai.azure.com",
+	"cohere":     "https://api.cohere.ai/compatibility/v1",
 }
 
 // resolveBaseURL returns the canonical URL for known providers, or falls back to the stored base URL.

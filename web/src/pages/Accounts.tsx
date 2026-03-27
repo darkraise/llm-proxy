@@ -10,7 +10,7 @@ import { LayoutGrid, List, Plus, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 
-const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'ollama', 'openai-compatible']
+const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'ollama', 'openai-compatible']
 
 const PROVIDER_TYPE_URLS: Record<string, string> = {
   groq: 'https://api.groq.com/openai/v1',
@@ -18,13 +18,14 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   cerebras: 'https://api.cerebras.ai/v1',
   mistral: 'https://api.mistral.ai/v1',
   github: 'https://models.inference.ai.azure.com',
+  cohere: 'https://api.cohere.ai/compatibility/v1',
   ollama: 'http://localhost:11434/v1',
   google: '',
   'openai-compatible': '',
 }
 
 // Providers with hardcoded base URLs — no need to show base URL field
-const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'google'])
+const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'google'])
 
 function parseModels(raw: string): string[] {
   return raw

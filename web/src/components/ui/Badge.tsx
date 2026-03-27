@@ -33,6 +33,7 @@ const providerColors: Record<string, string> = {
   cerebras: "bg-[rgba(229,75,75,0.12)] text-[#e54b4b]",
   mistral: "bg-[rgba(255,122,0,0.12)] text-[#ff7a00]",
   github: "bg-[rgba(200,200,210,0.12)] text-[#c8c8d2]",
+  cohere: "bg-[rgba(57,92,223,0.12)] text-[#395cdf]",
   ollama: "bg-[rgba(255,255,255,0.08)] text-[#e0e0e8]",
   "openai-compatible": "bg-[rgba(16,163,127,0.12)] text-[#10a37f]",
 };

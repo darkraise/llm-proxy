@@ -10,6 +10,7 @@ const PROVIDER_TYPES = [
   'cerebras',
   'mistral',
   'github',
+  'cohere',
   'ollama',
   'openai-compatible',
 ]
