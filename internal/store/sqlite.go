@@ -163,8 +163,8 @@ func (d *DB) migrate() error {
 				created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 			)`,
-			`INSERT INTO accounts_new (id, name, type, base_url, api_key_enc, models, priority, enabled, created_at, updated_at)
-			 SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, created_at, updated_at FROM accounts`,
+			`INSERT INTO accounts_new (id, name, type, base_url, api_key_enc, models, priority, enabled, default_models, created_at, updated_at)
+			 SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, default_models, created_at, updated_at FROM accounts`,
 			`DROP TABLE accounts`,
 			`ALTER TABLE accounts_new RENAME TO accounts`,
 		}
