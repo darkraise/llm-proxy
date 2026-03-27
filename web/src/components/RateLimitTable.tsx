@@ -19,9 +19,11 @@ export function formatCompact(n: number): string {
 export const METRIC_DEFS: { key: string; label: string; short: string; window: number }[] = [
   { key: 'rps',  label: 'Requests per second', short: 'RPS',    window: 1 },
   { key: 'rpm',  label: 'Requests per minute', short: 'RPM',    window: 60 },
+  { key: 'rph',  label: 'Requests per hour',   short: 'RPH',    window: 3600 },
   { key: 'rpd',  label: 'Requests per day',    short: 'RPD',    window: 86400 },
   { key: 'rpmo', label: 'Requests per month',  short: 'RPM/mo', window: 2592000 },
   { key: 'tpm',  label: 'Tokens per minute',   short: 'TPM',    window: 60 },
+  { key: 'tph',  label: 'Tokens per hour',     short: 'TPH',    window: 3600 },
   { key: 'tpd',  label: 'Tokens per day',      short: 'TPD',    window: 86400 },
   { key: 'tpmo', label: 'Tokens per month',    short: 'TPM/mo', window: 2592000 },
 ]
@@ -87,6 +89,8 @@ export interface RateLimitTableProps {
   modelCategories?: Record<string, string>
   /** Called when user changes a model's category in edit mode. */
   onCategoryChange?: (model: string, category: string) => void
+  /** When set, only these metric keys are rendered as columns. */
+  visibleMetrics?: string[]
 }
 
 // ─── Editable cell: shows compact format, raw number on focus ────────────────
@@ -158,7 +162,12 @@ export function RateLimitTable({
   maxHeight,
   modelCategories,
   onCategoryChange,
+  visibleMetrics,
 }: RateLimitTableProps) {
+  const activeMetrics = visibleMetrics
+    ? METRIC_DEFS.filter(m => visibleMetrics.includes(m.key))
+    : METRIC_DEFS
+
   const matrix = limitsToMatrix(limits)
   // Ensure the default row entry exists in matrix
   if (!matrix['']) matrix[''] = {}
@@ -215,7 +224,7 @@ export function RateLimitTable({
                 Cat
               </th>
             )}
-            {METRIC_DEFS.map((m) => (
+            {activeMetrics.map((m) => (
               <th
                 key={m.key}
                 title={m.label}
@@ -264,7 +273,7 @@ export function RateLimitTable({
                   )}
 
                   {/* Metric cells */}
-                  {METRIC_DEFS.map((m) => {
+                  {activeMetrics.map((m) => {
                     const value = getCellValue(model, m.key)
                     const defaultVal = isDefault ? null : getDefaultValue(m.key)
                     const isOverride = !isDefault && value !== null

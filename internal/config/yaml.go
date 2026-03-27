@@ -118,6 +118,8 @@ func metricToWindow(metric string) int {
 		return 86400
 	case "rpmo", "tpmo":
 		return 2592000
+	case "rph", "tph":
+		return 3600
 	case "rps":
 		return 1
 	default:

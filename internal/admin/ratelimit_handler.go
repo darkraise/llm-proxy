@@ -72,6 +72,42 @@ func (h *AdminHandler) HandleDeleteRateLimitDef(w http.ResponseWriter, r *http.R
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
+// HandleGetProviderMetrics returns the supported metric keys for a provider.
+//
+// GET /admin/api/provider-metrics/{provider}
+func (h *AdminHandler) HandleGetProviderMetrics(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	raw, _ := h.db.GetSetting("ratelimit_metrics:" + provider)
+	if raw == "" {
+		writeJSON(w, 200, []string{"rpm", "rpd", "tpm", "tpd"})
+		return
+	}
+	var metrics []string
+	if err := json.Unmarshal([]byte(raw), &metrics); err != nil {
+		writeJSON(w, 200, []string{"rpm", "rpd", "tpm", "tpd"})
+		return
+	}
+	writeJSON(w, 200, metrics)
+}
+
+// HandleSetProviderMetrics saves the supported metric keys for a provider.
+//
+// PUT /admin/api/provider-metrics/{provider}
+func (h *AdminHandler) HandleSetProviderMetrics(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	var metrics []string
+	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	data, _ := json.Marshal(metrics)
+	if err := h.db.SetSetting("ratelimit_metrics:"+provider, string(data)); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
 // HandleGetDefaultLimits returns merged default limits for a provider+models
 // combination, suitable for pre-populating a new account's rate limits.
 //

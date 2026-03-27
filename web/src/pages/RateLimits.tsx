@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, Account, AccountLimit, RateLimitDef } from '../lib/api'
-import { RateLimitTable } from '../components/RateLimitTable'
+import { RateLimitTable, METRIC_DEFS } from '../components/RateLimitTable'
 import { Select } from '../components/ui/Select'
+import { X } from 'lucide-react'
 
 const PROVIDER_TYPES = [
   'groq',
@@ -31,6 +32,9 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
+  // Provider metrics
+  const [providerMetrics, setProviderMetrics] = useState<string[]>(['rpm', 'rpd', 'tpm', 'tpd'])
+
   // Model refresh
   const [refreshAccountId, setRefreshAccountId] = useState<number | ''>('')
   const [refreshing, setRefreshing] = useState(false)
@@ -55,7 +59,10 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
 
   useEffect(() => {
     fetchDefs()
-  }, [fetchDefs])
+    api.ratelimits.metrics(provider)
+      .then((m) => setProviderMetrics(m ?? ['rpm', 'rpd', 'tpm', 'tpd']))
+      .catch(() => setProviderMetrics(['rpm', 'rpd', 'tpm', 'tpd']))
+  }, [fetchDefs, provider])
 
   // Convert RateLimitDef[] → AccountLimit[] for RateLimitTable
   function defsToLimits(defList: RateLimitDef[]): AccountLimit[] {
@@ -148,6 +155,55 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
         </div>
       )}
 
+      {/* ── Supported Metrics ── */}
+      <div className="card p-4">
+        <h3 className="font-semibold text-text-primary mb-3">Supported Metrics</h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          {providerMetrics.map((key) => {
+            const def = METRIC_DEFS.find((m) => m.key === key)
+            return (
+              <span
+                key={key}
+                className="inline-flex items-center gap-1 bg-surface border border-border rounded-full px-2.5 py-1 text-xs text-text-primary"
+              >
+                {def?.short ?? key}
+                <button
+                  type="button"
+                  className="text-text-muted hover:text-error transition-colors"
+                  onClick={() => {
+                    const next = providerMetrics.filter((m) => m !== key)
+                    setProviderMetrics(next)
+                    api.ratelimits.setMetrics(provider, next)
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            )
+          })}
+          {(() => {
+            const available = METRIC_DEFS.filter((m) => !providerMetrics.includes(m.key))
+            if (available.length === 0) return null
+            return (
+              <Select
+                value=""
+                onChange={(v) => {
+                  if (!v) return
+                  const next = [...providerMetrics, v]
+                  setProviderMetrics(next)
+                  api.ratelimits.setMetrics(provider, next)
+                }}
+                options={[
+                  { value: '', label: '+ Add metric' },
+                  ...available.map((m) => ({ value: m.key, label: m.short })),
+                ]}
+                className="text-xs h-7"
+              />
+            )
+          })()}
+        </div>
+      </div>
+
       {/* ── Spreadsheet table ── */}
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
@@ -174,6 +230,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
           limits={pendingLimits ?? limitsForTable}
           onChange={handleLimitsChange}
           defaultRowLabel="Provider Default"
+          visibleMetrics={providerMetrics}
         />
         {saveError && (
           <p className="text-xs text-error mt-2">{saveError}</p>

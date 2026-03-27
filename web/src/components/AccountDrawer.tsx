@@ -45,6 +45,9 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
   // Rate limit edit state
   const [editedLimits, setEditedLimits] = useState<AccountLimit[]>([])
 
+  // Provider metrics for visible columns
+  const [providerMetrics, setProviderMetrics] = useState<string[] | undefined>()
+
   // Reset state when account changes
   useEffect(() => {
     setIsEditing(false)
@@ -53,7 +56,17 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
     setEditData(null)
     setEditedLimits([])
     setSaveError('')
+    setProviderMetrics(undefined)
   }, [account?.id])
+
+  // Fetch provider metrics when account is available
+  useEffect(() => {
+    if (account) {
+      api.ratelimits.metrics(account.type)
+        .then((m) => setProviderMetrics(m))
+        .catch(() => setProviderMetrics(undefined))
+    }
+  }, [account?.id, account?.type])
 
   if (!account) {
     return <Drawer open={false} onClose={onClose} title=""><span /></Drawer>
@@ -387,6 +400,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
               readOnly={!isEditing}
               modelCategories={editModelCategoryMap}
               onCategoryChange={ed ? handleCategoryChange : undefined}
+              visibleMetrics={providerMetrics}
             />
           </div>
         </div>

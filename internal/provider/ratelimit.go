@@ -84,9 +84,9 @@ func newProviderState(limits []LimitConfig) *providerState {
 	for _, l := range limits {
 		mc := &metricCounter{config: l, windowStart: now}
 		switch l.Metric {
-		case "rpm", "rpd", "rps", "rpmo":
+		case "rpm", "rpd", "rps", "rpmo", "rph":
 			state.requestMetrics[l.Metric] = mc
-		case "tpm", "tpd", "tpmo":
+		case "tpm", "tpd", "tpmo", "tph":
 			state.tokenMetrics[l.Metric] = mc
 		}
 	}

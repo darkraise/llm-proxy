@@ -227,6 +227,10 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /admin/api/config/import", protected(s.admin.HandleConfigImport))
 	s.mux.Handle("GET /admin/api/config/export", protected(s.admin.HandleConfigExport))
 
+	// Provider metric configuration (separate prefix to avoid wildcard conflicts)
+	s.mux.Handle("GET /admin/api/provider-metrics/{provider}", protected(s.admin.HandleGetProviderMetrics))
+	s.mux.Handle("PUT /admin/api/provider-metrics/{provider}", protected(s.admin.HandleSetProviderMetrics))
+
 	// Rate limit definitions — more-specific sub-paths must be registered before
 	// /{provider} so the exact patterns win over the wildcard.
 	s.mux.Handle("GET /admin/api/ratelimits/{provider}/defaults", protected(s.admin.HandleGetDefaultLimits))

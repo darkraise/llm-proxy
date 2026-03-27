@@ -57,6 +57,13 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
   }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [providerMetrics, setProviderMetrics] = useState<string[] | undefined>()
+
+  useEffect(() => {
+    api.ratelimits.metrics(initial.type)
+      .then((m) => setProviderMetrics(m))
+      .catch(() => setProviderMetrics(undefined))
+  }, [initial.type])
 
   function set<K extends keyof AccountInput>(k: K, v: AccountInput[K]) {
     setForm((f) => {
@@ -220,6 +227,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
                 onChange={(newLimits) => set('limits', newLimits)}
                 modelCategories={currentCategoryMap}
                 onCategoryChange={handleCategoryChange}
+                visibleMetrics={providerMetrics}
               />
             </div>
 
@@ -284,6 +292,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [s1Errors, setS1Errors] = useState<Partial<Record<keyof WizardStep1, string>>>({})
+  const [providerMetrics, setProviderMetrics] = useState<string[] | undefined>()
 
   function validateStep1(): boolean {
     const errors: Partial<Record<keyof WizardStep1, string>> = {}
@@ -352,8 +361,12 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
     const models = Array.from(selectedModels).filter((m) => modelCategories[m] !== 'skip')
     setLoadingDefaults(true)
     try {
-      const defaults = await api.ratelimits.defaults(s1.type, models)
+      const [defaults, metrics] = await Promise.all([
+        api.ratelimits.defaults(s1.type, models),
+        api.ratelimits.metrics(s1.type).catch(() => undefined),
+      ])
       setLimits(defaults ?? [])
+      setProviderMetrics(metrics)
     } catch {
       setLimits([])
     } finally {
@@ -705,6 +718,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                   onChange={setLimits}
                   maxHeight="400px"
                   modelCategories={activeCategoryMap}
+                  visibleMetrics={providerMetrics}
                 />
               </div>
 

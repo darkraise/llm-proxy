@@ -35,6 +35,7 @@ export function AddModelsDialog({
   const [modelCategories, setModelCategories] = useState<Record<string, ModelCategory>>({})
   const [freeOnly, setFreeOnly] = useState(false)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [fetchError, setFetchError] = useState('')
 
@@ -42,6 +43,9 @@ export function AddModelsDialog({
   const [limits, setLimits] = useState<AccountLimit[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  // Provider metrics for visible columns
+  const [providerMetrics, setProviderMetrics] = useState<string[] | undefined>()
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -52,12 +56,17 @@ export function AddModelsDialog({
       setModelCategories({})
       setFreeOnly(false)
       setSearch('')
+      setDebouncedSearch('')
       setLoading(false)
       setFetchError('')
       setLimits([])
       setSaving(false)
       setSaveError('')
+      setProviderMetrics(undefined)
       fetchModels(false)
+      api.ratelimits.metrics(account.type)
+        .then((m) => setProviderMetrics(m))
+        .catch(() => setProviderMetrics(undefined))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -155,9 +164,15 @@ export function AddModelsDialog({
     }
   }
 
-  // Filter models by search term
-  const searchLower = search.toLowerCase()
-  const filteredModels = search
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // Filter models by debounced search term
+  const searchLower = debouncedSearch.toLowerCase()
+  const filteredModels = debouncedSearch
     ? availableModels.filter((m) => m.toLowerCase().includes(searchLower))
     : availableModels
 
@@ -173,7 +188,7 @@ export function AddModelsDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-surface-overlay border border-border rounded-xl max-w-2xl w-full mx-4 max-h-[85vh] flex flex-col">
+      <div className="bg-surface-overlay border border-border rounded-xl max-w-4xl w-full mx-4 max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <div>
@@ -324,6 +339,7 @@ export function AddModelsDialog({
                   limits={limits}
                   onChange={setLimits}
                   modelCategories={selectedCategoryMap}
+                  visibleMetrics={providerMetrics}
                 />
               </div>
 

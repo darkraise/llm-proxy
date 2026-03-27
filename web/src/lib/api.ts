@@ -277,6 +277,10 @@ export const api = {
         'GET',
         `/ratelimits/${provider}/defaults${models.length > 0 ? '?models=' + models.join(',') : ''}`,
       ),
+    metrics: (provider: string) =>
+      request<string[]>('GET', `/provider-metrics/${provider}`),
+    setMetrics: (provider: string, metrics: string[]) =>
+      request<{ status: string }>('PUT', `/provider-metrics/${provider}`, metrics),
   },
 
   // ─── Stats ───────────────────────────────────────────────────────────────
