@@ -208,7 +208,15 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		logEntry.Model = firstModel(prov, req.Model, store.CategoryEmbedding)
 		t0 := time.Now()
 
-		resp, statusCode, err := h.callOpenAIEmbedding(prov, req)
+		var resp *adapter.EmbeddingResponse
+		var statusCode int
+
+		switch prov.Type {
+		case "cohere":
+			resp, statusCode, err = h.callCohereEmbedding(prov, req)
+		default:
+			resp, statusCode, err = h.callOpenAIEmbedding(prov, req)
+		}
 
 		latency := time.Since(t0)
 		logEntry.LatencyMs = int(latency.Milliseconds())
@@ -284,6 +292,40 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 	}
 
 	parsed, err := adapter.ParseEmbeddingResponse(body)
+	return &parsed, 200, err
+}
+
+func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
+	req.Model = firstModel(prov, req.Model, store.CategoryEmbedding)
+	data, err := adapter.OpenAIToCohereEmbed(req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Cohere native embed endpoint: https://api.cohere.ai/v2/embed
+	httpReq, err := http.NewRequest("POST", "https://api.cohere.ai/v2/embed", bytes.NewReader(data))
+	if err != nil {
+		return nil, 0, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
+
+	resp, err := h.client.Do(httpReq)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, resp.StatusCode, nil
+	}
+
+	parsed, err := adapter.CohereEmbedToOpenAI(body, req.Model)
 	return &parsed, 200, err
 }
 
