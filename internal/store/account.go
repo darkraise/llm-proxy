@@ -14,7 +14,7 @@ type Account struct {
 	Models       string         `json:"models"`
 	Priority     int            `json:"priority"`
 	Enabled      bool           `json:"enabled"`
-	DefaultModel string         `json:"default_model"`
+	DefaultModels string         `json:"default_models"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	Limits       []AccountLimit `json:"limits"`
@@ -35,9 +35,9 @@ func (d *DB) CreateAccount(p Account) (int64, error) {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO accounts (name, type, base_url, api_key_enc, models, priority, enabled, default_model)
+		`INSERT INTO accounts (name, type, base_url, api_key_enc, models, priority, enabled, default_models)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Type, p.BaseURL, p.APIKey, p.Models, p.Priority, p.Enabled, p.DefaultModel,
+		p.Name, p.Type, p.BaseURL, p.APIKey, p.Models, p.Priority, p.Enabled, p.DefaultModels,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert account: %w", err)
@@ -65,9 +65,9 @@ func (d *DB) GetAccount(id int64) (Account, error) {
 	var p Account
 	var enabled int
 	err := d.QueryRow(
-		`SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, default_model, created_at, updated_at
+		`SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, default_models, created_at, updated_at
 		 FROM accounts WHERE id = ?`, id,
-	).Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.Models, &p.Priority, &enabled, &p.DefaultModel, &p.CreatedAt, &p.UpdatedAt)
+	).Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.Models, &p.Priority, &enabled, &p.DefaultModels, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return p, err
 	}
@@ -83,7 +83,7 @@ func (d *DB) GetAccount(id int64) (Account, error) {
 
 func (d *DB) ListAccounts() ([]Account, error) {
 	rows, err := d.Query(
-		`SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, default_model, created_at, updated_at
+		`SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, default_models, created_at, updated_at
 		 FROM accounts ORDER BY priority, name`,
 	)
 	if err != nil {
@@ -95,7 +95,7 @@ func (d *DB) ListAccounts() ([]Account, error) {
 	for rows.Next() {
 		var p Account
 		var enabled int
-		if err := rows.Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.Models, &p.Priority, &enabled, &p.DefaultModel, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.Models, &p.Priority, &enabled, &p.DefaultModels, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Enabled = enabled == 1
@@ -117,9 +117,9 @@ func (d *DB) UpdateAccount(id int64, p Account) error {
 	defer tx.Rollback()
 
 	_, err = tx.Exec(
-		`UPDATE accounts SET name=?, type=?, base_url=?, api_key_enc=?, models=?, priority=?, enabled=?, default_model=?, updated_at=CURRENT_TIMESTAMP
+		`UPDATE accounts SET name=?, type=?, base_url=?, api_key_enc=?, models=?, priority=?, enabled=?, default_models=?, updated_at=CURRENT_TIMESTAMP
 		 WHERE id=?`,
-		p.Name, p.Type, p.BaseURL, p.APIKey, p.Models, p.Priority, p.Enabled, p.DefaultModel, id,
+		p.Name, p.Type, p.BaseURL, p.APIKey, p.Models, p.Priority, p.Enabled, p.DefaultModels, id,
 	)
 	if err != nil {
 		return fmt.Errorf("update account: %w", err)

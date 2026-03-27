@@ -65,7 +65,7 @@ accounts:
 func TestExportYAML(t *testing.T) {
 	accounts := []store.Account{
 		{Name: "groq", Type: "groq", BaseURL: "https://api.groq.com/openai/v1", APIKey: []byte("gsk_test"),
-			Models: `["llama-3.3-70b"]`, Enabled: true,
+			Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
 			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}}},
 	}
 	settings := map[string]string{

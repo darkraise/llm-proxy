@@ -46,7 +46,7 @@ func TestHandleChatCompletions_Streaming(t *testing.T) {
 
 	providers := []store.Account{{
 		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: mock.URL,
-		APIKey: []byte("test-key"), Models: `["test-model"]`, Enabled: true,
+		APIKey: []byte("test-key"), Models: `{"chat":["test-model"]}`, Enabled: true,
 	}}
 
 	pool := provider.NewPool(providers)

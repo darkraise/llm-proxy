@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"strconv"
 
 	"github.com/darkraise/llm-proxy/internal/store"
@@ -52,7 +51,8 @@ func ParseYAML(data []byte) (*Config, error) {
 func (c *Config) ToAccounts() []store.Account {
 	accounts := make([]store.Account, len(c.Accounts))
 	for i, p := range c.Accounts {
-		modelsJSON, _ := json.Marshal(p.Models)
+		// Treat imported flat model arrays as chat models.
+		categorized := map[string][]string{store.CategoryChat: p.Models}
 		var limits []store.AccountLimit
 		for _, l := range p.Limits {
 			windowSecs := metricToWindow(l.Metric)
@@ -65,7 +65,7 @@ func (c *Config) ToAccounts() []store.Account {
 			Type:    p.Type,
 			BaseURL: p.BaseURL,
 			APIKey:  []byte(p.APIKey),
-			Models:  string(modelsJSON),
+			Models:  store.FormatCategorizedModels(categorized),
 			Enabled: p.Enabled,
 			Limits:  limits,
 		}
@@ -88,8 +88,8 @@ func ExportYAML(accounts []store.Account, settings map[string]string) ([]byte, e
 	}
 
 	for _, p := range accounts {
-		var models []string
-		json.Unmarshal([]byte(p.Models), &models)
+		parsed := store.ParseCategorizedModels(p.Models)
+		models := store.AllModels(parsed)
 
 		var limits []LimitYAML
 		for _, l := range p.Limits {

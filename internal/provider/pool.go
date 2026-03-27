@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -11,8 +10,8 @@ import (
 
 type AccountInfo struct {
 	store.Account
-	DecryptedKey string
-	DefaultModel string
+	DecryptedKey  string
+	DefaultModels map[string]string
 }
 
 type Pool struct {
@@ -31,9 +30,9 @@ func NewPool(accounts []store.Account) *Pool {
 			continue
 		}
 		infos = append(infos, AccountInfo{
-			Account:      p,
-			DecryptedKey: string(p.APIKey),
-			DefaultModel: p.DefaultModel,
+			Account:       p,
+			DecryptedKey:  string(p.APIKey),
+			DefaultModels: store.ParseDefaultModels(p.DefaultModels),
 		})
 
 		var limits []LimitConfig
@@ -51,26 +50,33 @@ func NewPool(accounts []store.Account) *Pool {
 	}
 }
 
-func (p *Pool) Select(model string, maxRetries int) (*AccountInfo, error) {
+func (p *Pool) Select(model string, category string, maxRetries int) (*AccountInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if model == "auto" {
-		return p.selectAuto(maxRetries)
+		return p.selectAuto(category, maxRetries)
 	}
 	return p.selectByModel(model, maxRetries)
 }
 
-func (p *Pool) selectAuto(maxRetries int) (*AccountInfo, error) {
+func (p *Pool) selectAuto(category string, maxRetries int) (*AccountInfo, error) {
 	n := len(p.accounts)
 	for i := 0; i < min(maxRetries, n); i++ {
 		account := &p.accounts[p.index%n]
 		p.index = (p.index + 1) % n
 
+		// Only consider accounts that have models in the requested category.
+		parsed := store.ParseCategorizedModels(account.Models)
+		catModels := store.ModelsForCategory(parsed, category)
+		if len(catModels) == 0 {
+			continue
+		}
+
 		// Determine which model will actually be used for this account.
-		effectiveModel := account.DefaultModel
-		if effectiveModel == "" {
-			effectiveModel = firstModelFromJSON(account.Models)
+		effectiveModel := account.DefaultModels[category]
+		if effectiveModel == "" && len(catModels) > 0 {
+			effectiveModel = catModels[0]
 		}
 
 		if p.rateLimiter.AllowForModel(account.Name, effectiveModel) {
@@ -103,25 +109,13 @@ func (p *Pool) selectByModel(model string, maxRetries int) (*AccountInfo, error)
 }
 
 func accountHasModel(p *AccountInfo, model string) bool {
-	var models []string
-	if err := json.Unmarshal([]byte(p.Models), &models); err != nil {
-		return false
-	}
-	for _, m := range models {
+	parsed := store.ParseCategorizedModels(p.Models)
+	for _, m := range store.AllModels(parsed) {
 		if m == model {
 			return true
 		}
 	}
 	return false
-}
-
-// firstModelFromJSON returns the first model from a JSON array string, or "" on error.
-func firstModelFromJSON(modelsJSON string) string {
-	var models []string
-	if err := json.Unmarshal([]byte(modelsJSON), &models); err == nil && len(models) > 0 {
-		return models[0]
-	}
-	return ""
 }
 
 func (p *Pool) RecordSuccess(name string, tokens int) {
@@ -169,9 +163,8 @@ func (p *Pool) ListModels() []string {
 	seen := map[string]bool{"auto": true}
 	models := []string{"auto"}
 	for _, acc := range p.accounts {
-		var ms []string
-		json.Unmarshal([]byte(acc.Models), &ms)
-		for _, m := range ms {
+		parsed := store.ParseCategorizedModels(acc.Models)
+		for _, m := range store.AllModels(parsed) {
 			if !seen[m] {
 				seen[m] = true
 				models = append(models, m)

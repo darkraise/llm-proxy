@@ -110,14 +110,14 @@ func TestAccountCRUD_CascadeDeleteLimits(t *testing.T) {
 	}
 }
 
-func TestAccountCRUD_DefaultModel(t *testing.T) {
+func TestAccountCRUD_DefaultModels(t *testing.T) {
 	db := newTestDB(t)
 
 	p := Account{
-		Name:         "groq-default-model",
-		Type:         "groq",
-		APIKey:       []byte("k"),
-		DefaultModel: "llama-3.3-70b",
+		Name:          "groq-default-model",
+		Type:          "groq",
+		APIKey:        []byte("k"),
+		DefaultModels: `{"chat":"llama-3.3-70b"}`,
 	}
 	id, err := db.CreateAccount(p)
 	if err != nil {
@@ -128,17 +128,17 @@ func TestAccountCRUD_DefaultModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAccount: %v", err)
 	}
-	if got.DefaultModel != "llama-3.3-70b" {
-		t.Errorf("default_model: got %q, want %q", got.DefaultModel, "llama-3.3-70b")
+	if got.DefaultModels != `{"chat":"llama-3.3-70b"}` {
+		t.Errorf("default_models: got %q, want %q", got.DefaultModels, `{"chat":"llama-3.3-70b"}`)
 	}
 
-	p.DefaultModel = "mixtral-8x7b"
+	p.DefaultModels = `{"chat":"mixtral-8x7b"}`
 	if err := db.UpdateAccount(id, p); err != nil {
 		t.Fatalf("UpdateAccount: %v", err)
 	}
 	got, _ = db.GetAccount(id)
-	if got.DefaultModel != "mixtral-8x7b" {
-		t.Errorf("default_model after update: got %q, want %q", got.DefaultModel, "mixtral-8x7b")
+	if got.DefaultModels != `{"chat":"mixtral-8x7b"}` {
+		t.Errorf("default_models after update: got %q, want %q", got.DefaultModels, `{"chat":"mixtral-8x7b"}`)
 	}
 }
 

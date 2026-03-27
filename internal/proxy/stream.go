@@ -17,7 +17,7 @@ import (
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
-func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req adapter.ChatCompletionRequest, endpoint string) {
+func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req adapter.ChatCompletionRequest, endpoint string, category string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, 500, "streaming not supported")
@@ -28,7 +28,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 	logEntry := store.RequestLog{Model: req.Model, Endpoint: endpoint, Status: "error"}
 
 	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.Select(req.Model, h.maxRetries)
+		prov, err := h.pool.Select(req.Model, category, h.maxRetries)
 		if err != nil {
 			break
 		}
@@ -36,7 +36,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		logEntry.AccountName = prov.Name
 		logEntry.AccountID = &prov.ID
 		logEntry.ProviderType = prov.Type
-		logEntry.Model = firstModel(prov, req.Model)
+		logEntry.Model = firstModel(prov, req.Model, category)
 		t0 := time.Now()
 
 		var streamResp *http.Response
@@ -67,7 +67,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 
 		// Connected — parse rate limit headers before consuming the body.
 		if h.rateLimitChan != nil {
-			model := firstModel(prov, req.Model)
+			model := firstModel(prov, req.Model, category)
 			if defs := ratelimit.ParseRateLimitHeaders(prov.Type, streamResp.Header, model); len(defs) > 0 {
 				select {
 				case h.rateLimitChan <- RateLimitUpdate{Provider: prov.Type, Model: model, Defs: defs}:
@@ -113,7 +113,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 }
 
 func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
-	req.Model = firstModel(prov, req.Model)
+	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 }
 
 func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
-	req.Model = firstModel(prov, req.Model)
+	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	url := adapter.GoogleStreamURL(req.Model, prov.DecryptedKey)
 
 	_, body, err := adapter.OpenAIToGoogle(req, prov.DecryptedKey)
@@ -226,7 +226,7 @@ func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, 
 			ID:      fmt.Sprintf("chatcmpl-google-%d", time.Now().UnixMilli()),
 			Object:  "chat.completion.chunk",
 			Created: time.Now().Unix(),
-			Model:   firstModel(prov, ""),
+			Model:   firstModel(prov, "", store.CategoryChat),
 			Choices: []adapter.StreamDelta{{
 				Index: 0,
 				Delta: adapter.Delta{Content: text},

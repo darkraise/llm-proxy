@@ -28,15 +28,15 @@ func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKe
 }
 
 type accountRequest struct {
-	Name         string               `json:"name"`
-	Type         string               `json:"type"`
-	BaseURL      string               `json:"base_url"`
-	APIKey       string               `json:"api_key"`
-	Models       []string             `json:"models"`
-	Priority     int                  `json:"priority"`
-	Enabled      *bool                `json:"enabled"`
-	DefaultModel string               `json:"default_model"`
-	Limits       []store.AccountLimit `json:"limits"`
+	Name          string               `json:"name"`
+	Type          string               `json:"type"`
+	BaseURL       string               `json:"base_url"`
+	APIKey        string               `json:"api_key"`
+	Models        map[string][]string  `json:"models"`
+	Priority      int                  `json:"priority"`
+	Enabled       *bool                `json:"enabled"`
+	DefaultModels map[string]string    `json:"default_models"`
+	Limits        []store.AccountLimit `json:"limits"`
 }
 
 func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +80,6 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	modelsJSON, _ := json.Marshal(req.Models)
 	apiKeyEnc := []byte(req.APIKey) // encrypt when encryption key is available
 	if h.encryptionKey != nil {
 		enc, err := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
@@ -97,15 +96,15 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	p := store.Account{
-		Name:         req.Name,
-		Type:         req.Type,
-		BaseURL:      req.BaseURL,
-		APIKey:       apiKeyEnc,
-		Models:       string(modelsJSON),
-		Priority:     req.Priority,
-		Enabled:      enabled,
-		DefaultModel: req.DefaultModel,
-		Limits:       req.Limits,
+		Name:          req.Name,
+		Type:          req.Type,
+		BaseURL:       req.BaseURL,
+		APIKey:        apiKeyEnc,
+		Models:        store.FormatCategorizedModels(req.Models),
+		Priority:      req.Priority,
+		Enabled:       enabled,
+		DefaultModels: store.FormatDefaultModels(req.DefaultModels),
+		Limits:        req.Limits,
 	}
 
 	id, err := h.db.CreateAccount(p)
@@ -149,8 +148,6 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	modelsJSON, _ := json.Marshal(req.Models)
-
 	// If API key is blank, preserve existing key (blank = keep current)
 	var apiKeyEnc []byte
 	if req.APIKey != "" {
@@ -174,15 +171,15 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	p := store.Account{
-		Name:         req.Name,
-		Type:         req.Type,
-		BaseURL:      req.BaseURL,
-		APIKey:       apiKeyEnc,
-		Models:       string(modelsJSON),
-		Priority:     req.Priority,
-		Enabled:      enabled,
-		DefaultModel: req.DefaultModel,
-		Limits:       req.Limits,
+		Name:          req.Name,
+		Type:          req.Type,
+		BaseURL:       req.BaseURL,
+		APIKey:        apiKeyEnc,
+		Models:        store.FormatCategorizedModels(req.Models),
+		Priority:      req.Priority,
+		Enabled:       enabled,
+		DefaultModels: store.FormatDefaultModels(req.DefaultModels),
+		Limits:        req.Limits,
 	}
 
 	if err := h.db.UpdateAccount(id, p); err != nil {
@@ -276,10 +273,10 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 }
 
 func adminFirstModel(modelsJSON string) string {
-	var models []string
-	json.Unmarshal([]byte(modelsJSON), &models)
-	if len(models) > 0 {
-		return models[0]
+	parsed := store.ParseCategorizedModels(modelsJSON)
+	all := store.AllModels(parsed)
+	if len(all) > 0 {
+		return all[0]
 	}
 	return "test"
 }

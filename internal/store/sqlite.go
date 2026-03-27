@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,10 +59,10 @@ func (d *DB) migrate() error {
 			type          TEXT NOT NULL,
 			base_url      TEXT NOT NULL DEFAULT '',
 			api_key_enc   BLOB NOT NULL DEFAULT '',
-			models        TEXT NOT NULL DEFAULT '[]',
+			models        TEXT NOT NULL DEFAULT '{}',
 			priority      INTEGER NOT NULL DEFAULT 0,
 			enabled       INTEGER NOT NULL DEFAULT 1,
-			default_model TEXT NOT NULL DEFAULT '',
+			default_models TEXT NOT NULL DEFAULT '{}',
 			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -125,10 +126,15 @@ func (d *DB) migrate() error {
 	// Column additions (idempotent — ignore "duplicate column" errors)
 	alterMigrations := []string{
 		`ALTER TABLE request_logs ADD COLUMN provider_type TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE accounts RENAME COLUMN default_model TO default_models`,
 	}
 	for _, m := range alterMigrations {
-		d.Exec(m) // ignore errors (column already exists)
+		d.Exec(m) // ignore errors (column already exists / already renamed)
 	}
+
+	// Migrate legacy flat model arrays to categorized format and plain
+	// default_model strings to default_models JSON maps.
+	d.migrateModelCategories()
 
 	// Remove CHECK constraint on accounts.type (allows adding new providers)
 	// SQLite doesn't support ALTER CHECK, so recreate the table if needed.
@@ -150,14 +156,15 @@ func (d *DB) migrate() error {
 				type          TEXT NOT NULL,
 				base_url      TEXT NOT NULL DEFAULT '',
 				api_key_enc   BLOB NOT NULL DEFAULT '',
-				models        TEXT NOT NULL DEFAULT '[]',
+				models        TEXT NOT NULL DEFAULT '{}',
 				priority      INTEGER NOT NULL DEFAULT 0,
 				enabled       BOOLEAN NOT NULL DEFAULT 1,
-				default_model TEXT NOT NULL DEFAULT '',
+				default_models TEXT NOT NULL DEFAULT '{}',
 				created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 			)`,
-			`INSERT INTO accounts_new SELECT * FROM accounts`,
+			`INSERT INTO accounts_new (id, name, type, base_url, api_key_enc, models, priority, enabled, created_at, updated_at)
+			 SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, created_at, updated_at FROM accounts`,
 			`DROP TABLE accounts`,
 			`ALTER TABLE accounts_new RENAME TO accounts`,
 		}
@@ -171,4 +178,59 @@ func (d *DB) migrate() error {
 	}
 
 	return nil
+}
+
+// migrateModelCategories converts legacy flat model arrays (e.g. '["m1","m2"]')
+// to categorized format (e.g. '{"chat":["m1","m2"]}') and plain default_model
+// strings to default_models JSON maps (e.g. '{"chat":"m1"}').
+func (d *DB) migrateModelCategories() {
+	rows, err := d.Query("SELECT id, models, default_models FROM accounts")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type row struct {
+		id            int64
+		models        string
+		defaultModels string
+	}
+	var toUpdate []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.models, &r.defaultModels); err != nil {
+			continue
+		}
+		toUpdate = append(toUpdate, r)
+	}
+	rows.Close()
+
+	for _, r := range toUpdate {
+		changed := false
+
+		// Migrate models: if starts with '[', it's a flat array — wrap in {"chat": ...}
+		if strings.HasPrefix(strings.TrimSpace(r.models), "[") {
+			var flat []string
+			if json.Unmarshal([]byte(r.models), &flat) == nil {
+				categorized := map[string][]string{CategoryChat: flat}
+				data, _ := json.Marshal(categorized)
+				r.models = string(data)
+				changed = true
+			}
+		}
+
+		// Migrate default_models: if non-empty and doesn't start with '{', it's a plain string
+		trimmed := strings.TrimSpace(r.defaultModels)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "{") {
+			dm := map[string]string{CategoryChat: trimmed}
+			data, _ := json.Marshal(dm)
+			r.defaultModels = string(data)
+			changed = true
+		}
+
+		if changed {
+			d.Exec("UPDATE accounts SET models = ?, default_models = ? WHERE id = ?",
+				r.models, r.defaultModels, r.id)
+		}
+	}
 }

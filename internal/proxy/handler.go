@@ -84,11 +84,11 @@ func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if req.Stream {
-		h.handleStreaming(w, r, req, "openai")
+		h.handleStreaming(w, r, req, "openai", store.CategoryChat)
 		return
 	}
 
-	h.handleNonStreaming(w, req, "openai")
+	h.handleNonStreaming(w, req, "openai", store.CategoryChat)
 }
 
 func (h *Handler) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
@@ -105,11 +105,11 @@ func (h *Handler) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request
 	}
 
 	if req.Stream {
-		h.handleStreaming(w, r, req, "anthropic")
+		h.handleStreaming(w, r, req, "anthropic", store.CategoryChat)
 		return
 	}
 
-	resp, logEntry := h.forwardNonStreaming(req)
+	resp, logEntry := h.forwardNonStreaming(req, store.CategoryChat)
 	logEntry.Endpoint = "anthropic"
 
 	if resp == nil {
@@ -135,8 +135,8 @@ func (h *Handler) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request
 	w.Write(anthropicData)
 }
 
-func (h *Handler) handleNonStreaming(w http.ResponseWriter, req adapter.ChatCompletionRequest, endpoint string) {
-	resp, logEntry := h.forwardNonStreaming(req)
+func (h *Handler) handleNonStreaming(w http.ResponseWriter, req adapter.ChatCompletionRequest, endpoint string, category string) {
+	resp, logEntry := h.forwardNonStreaming(req, category)
 	logEntry.Endpoint = endpoint
 
 	if h.logFunc != nil {
@@ -197,7 +197,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 	}
 
 	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.Select(req.Model, h.maxRetries)
+		prov, err := h.pool.Select(req.Model, store.CategoryEmbedding, h.maxRetries)
 		if err != nil {
 			break
 		}
@@ -205,7 +205,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		logEntry.AccountName = prov.Name
 		logEntry.AccountID = &prov.ID
 		logEntry.ProviderType = prov.Type
-		logEntry.Model = firstModel(prov, req.Model)
+		logEntry.Model = firstModel(prov, req.Model, store.CategoryEmbedding)
 		t0 := time.Now()
 
 		resp, statusCode, err := h.callOpenAIEmbedding(prov, req)
@@ -254,7 +254,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 }
 
 func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
-	req.Model = firstModel(prov, req.Model)
+	req.Model = firstModel(prov, req.Model, store.CategoryEmbedding)
 	data, err := adapter.FormatEmbeddingRequest(req)
 	if err != nil {
 		return nil, 0, err
@@ -289,7 +289,7 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 
 // ─── Chat Completions ────────────────────────────────────────────────────────
 
-func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, store.RequestLog) {
+func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, category string) (*adapter.ChatCompletionResponse, store.RequestLog) {
 	logEntry := store.RequestLog{
 		Model:  req.Model,
 		Status: "error",
@@ -298,7 +298,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 	req.Stream = false
 
 	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.Select(req.Model, h.maxRetries)
+		prov, err := h.pool.Select(req.Model, category, h.maxRetries)
 		if err != nil {
 			break
 		}
@@ -306,7 +306,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 		logEntry.AccountName = prov.Name
 		logEntry.AccountID = &prov.ID
 		logEntry.ProviderType = prov.Type
-		logEntry.Model = firstModel(prov, req.Model)
+		logEntry.Model = firstModel(prov, req.Model, category)
 		t0 := time.Now()
 
 		var resp *adapter.ChatCompletionResponse
@@ -405,7 +405,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest) (*adapt
 }
 
 func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, http.Header, error) {
-	req.Model = firstModel(prov, req.Model)
+	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
 		return nil, 0, nil, err
@@ -439,7 +439,7 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 }
 
 func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
-	req.Model = firstModel(prov, req.Model)
+	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	url, body, err := adapter.OpenAIToGoogle(req, prov.DecryptedKey)
 	if err != nil {
 		return nil, 0, err
@@ -490,18 +490,19 @@ func resolveBaseURL(prov *provider.AccountInfo) string {
 }
 
 // firstModel resolves the actual model name to send to a provider.
-// For "auto" requests it prefers DefaultModel, then falls back to the first
-// model in the account's JSON list.
-func firstModel(prov *provider.AccountInfo, requested string) string {
+// For "auto" requests it prefers the category-specific default model, then
+// falls back to the first model in that category from the account's JSON map.
+func firstModel(prov *provider.AccountInfo, requested string, category string) string {
 	if requested != "auto" {
 		return requested
 	}
-	if prov.DefaultModel != "" {
-		return prov.DefaultModel
+	if dm, ok := prov.DefaultModels[category]; ok && dm != "" {
+		return dm
 	}
-	var models []string
-	if err := json.Unmarshal([]byte(prov.Models), &models); err == nil && len(models) > 0 {
-		return models[0]
+	parsed := store.ParseCategorizedModels(prov.Models)
+	catModels := store.ModelsForCategory(parsed, category)
+	if len(catModels) > 0 {
+		return catModels[0]
 	}
 	return requested
 }

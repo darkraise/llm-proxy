@@ -117,7 +117,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 			"type":     "openai-compatible",
 			"base_url": mockProvider.URL,
 			"api_key":  "test-key",
-			"models":   []string{"test-model"},
+			"models":   map[string][]string{"chat": {"test-model"}},
 			"priority": 1,
 		})
 		resp := mustPost(t, client, base+"/admin/api/accounts", string(payload))

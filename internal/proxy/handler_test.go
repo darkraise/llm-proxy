@@ -37,7 +37,7 @@ func TestHandleChatCompletions_NonStreaming(t *testing.T) {
 
 	providers := []store.Account{{
 		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: mock.URL,
-		APIKey: []byte("test-key"), Models: `["test-model"]`, Enabled: true,
+		APIKey: []byte("test-key"), Models: `{"chat":["test-model"]}`, Enabled: true,
 	}}
 
 	pool := provider.NewPool(providers)
@@ -69,7 +69,7 @@ func TestHandleChatCompletions_NonStreaming(t *testing.T) {
 func TestHandleChatCompletions_AllExhausted(t *testing.T) {
 	providers := []store.Account{{
 		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: "http://unreachable",
-		APIKey: []byte("k"), Models: `["m"]`, Enabled: true,
+		APIKey: []byte("k"), Models: `{"chat":["m"]}`, Enabled: true,
 		Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 0, WindowSecs: 60}},
 	}}
 
@@ -93,7 +93,7 @@ func TestHandleAnthropicMessages_NonStreaming(t *testing.T) {
 
 	providers := []store.Account{{
 		ID: 1, Name: "test", Type: "openai-compatible", BaseURL: mock.URL,
-		APIKey: []byte("test-key"), Models: `["test-model"]`, Enabled: true,
+		APIKey: []byte("test-key"), Models: `{"chat":["test-model"]}`, Enabled: true,
 	}}
 
 	pool := provider.NewPool(providers)
