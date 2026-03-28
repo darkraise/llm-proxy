@@ -134,44 +134,49 @@ func New(cfg Config) (*Server, error) {
 	proxyHandler.SetNotifier(notifier)
 	adminHandler.SetNotifier(notifier)
 
-	// Load proxy config from settings
-	if retries, _ := db.GetSetting("max_retries"); retries != "" {
-		var r int
-		fmt.Sscanf(retries, "%d", &r)
-		if r > 0 {
-			t := 15 * time.Second
-			if ts, _ := db.GetSetting("request_timeout"); ts != "" {
-				var sec int
-				fmt.Sscanf(ts, "%d", &sec)
-				if sec > 0 {
-					t = time.Duration(sec) * time.Second
-				}
+	// Load proxy config from settings (also called on settings change)
+	reloadProxyConfig := func() {
+		// Max retries + request timeout
+		maxRetries := 12
+		timeout := 15 * time.Second
+		if retries, _ := db.GetSetting("max_retries"); retries != "" {
+			var r int
+			fmt.Sscanf(retries, "%d", &r)
+			if r > 0 {
+				maxRetries = r
 			}
-			proxyHandler.SetConfig(r, t)
 		}
-	} else if ts, _ := db.GetSetting("request_timeout"); ts != "" {
-		var sec int
-		fmt.Sscanf(ts, "%d", &sec)
-		if sec > 0 {
-			proxyHandler.SetConfig(3, time.Duration(sec)*time.Second)
+		if ts, _ := db.GetSetting("request_timeout"); ts != "" {
+			var sec int
+			fmt.Sscanf(ts, "%d", &sec)
+			if sec > 0 {
+				timeout = time.Duration(sec) * time.Second
+			}
 		}
-	}
+		proxyHandler.SetConfig(maxRetries, timeout)
 
-	// Load fallback config from settings
-	fallbackEnabled, _ := db.GetSetting("fallback_enabled")
-	if fallbackEnabled == "true" {
-		fallbackURL, _ := db.GetSetting("fallback_url")
-		fallbackModel, _ := db.GetSetting("fallback_model")
-		fallbackTimeout, _ := db.GetSetting("fallback_timeout")
-		timeout := 30
-		fmt.Sscanf(fallbackTimeout, "%d", &timeout)
-		proxyHandler.SetFallback(proxy.FallbackConfig{
-			Enabled: true,
-			BaseURL: fallbackURL,
-			Model:   fallbackModel,
-			Timeout: time.Duration(timeout) * time.Second,
-		})
+		// Fallback config
+		fallbackEnabled, _ := db.GetSetting("fallback_enabled")
+		if fallbackEnabled == "true" {
+			fallbackURL, _ := db.GetSetting("fallback_url")
+			fallbackModel, _ := db.GetSetting("fallback_model")
+			fallbackTimeout, _ := db.GetSetting("fallback_timeout")
+			t := 30
+			fmt.Sscanf(fallbackTimeout, "%d", &t)
+			proxyHandler.SetFallback(proxy.FallbackConfig{
+				Enabled: true,
+				BaseURL: fallbackURL,
+				Model:   fallbackModel,
+				Timeout: time.Duration(t) * time.Second,
+			})
+		} else {
+			proxyHandler.SetFallback(proxy.FallbackConfig{Enabled: false})
+		}
+
+		slog.Info("proxy config reloaded from settings")
 	}
+	reloadProxyConfig()
+	adminHandler.SetOnSettingsChange(reloadProxyConfig)
 
 	notifyStop := make(chan struct{})
 	mux := http.NewServeMux()

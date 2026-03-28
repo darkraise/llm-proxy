@@ -18,11 +18,12 @@ import (
 )
 
 type AdminHandler struct {
-	db            *store.DB
-	auth          *Auth
-	pool          *provider.Pool
-	encryptionKey []byte
-	notifier      *notify.Notifier
+	db              *store.DB
+	auth            *Auth
+	pool            *provider.Pool
+	encryptionKey   []byte
+	notifier        *notify.Notifier
+	onSettingsChange func() // called after settings are saved to reload runtime config
 }
 
 func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKey []byte) *AdminHandler {
@@ -31,6 +32,10 @@ func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKe
 
 func (h *AdminHandler) SetNotifier(n *notify.Notifier) {
 	h.notifier = n
+}
+
+func (h *AdminHandler) SetOnSettingsChange(fn func()) {
+	h.onSettingsChange = fn
 }
 
 func (h *AdminHandler) HandleTestNotification(w http.ResponseWriter, r *http.Request) {
@@ -535,6 +540,10 @@ func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
+	}
+
+	if h.onSettingsChange != nil {
+		h.onSettingsChange()
 	}
 
 	writeJSON(w, 200, map[string]string{"status": "ok"})
