@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { ToggleSwitch } from '../components/ui/ToggleSwitch'
+import { Select } from '../components/ui/Select'
+import { DATE_FORMAT_PRESETS, DEFAULT_FORMAT } from '../lib/dateformat'
 
 interface SaveStatus {
   ok: boolean
@@ -61,6 +63,7 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
   const [timeout, setTimeout] = useState(settings.request_timeout ?? '30')
   const [retries, setRetries] = useState(settings.max_retries ?? '3')
   const [retention, setRetention] = useState(settings.log_retention_days ?? '30')
+  const [dateFormat, setDateFormat] = useState(settings.datetime_format ?? DEFAULT_FORMAT)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<SaveStatus | null>(null)
 
@@ -73,7 +76,9 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
         request_timeout: timeout,
         max_retries: retries,
         log_retention_days: retention,
+        datetime_format: dateFormat,
       })
+      window.dispatchEvent(new CustomEvent('datetime-format-changed', { detail: dateFormat }))
       setStatus({ ok: true, msg: 'Saved.' })
     } catch (err) {
       setStatus({ ok: false, msg: err instanceof Error ? err.message : 'Save failed' })
@@ -122,6 +127,19 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
             max={365}
             value={retention}
             onChange={(e) => setRetention(e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Date/Time Format"
+          hint="Display format for timestamps across the dashboard and logs."
+        >
+          <Select
+            value={dateFormat}
+            onChange={(v) => setDateFormat(v)}
+            options={DATE_FORMAT_PRESETS.map((p) => ({
+              value: p.key,
+              label: `${p.label} — ${p.example}`,
+            }))}
           />
         </Field>
         <SaveButton saving={saving} status={status} />
@@ -355,6 +373,319 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
   )
 }
 
+// ─── Notification Settings Section ───────────────────────────────────────────
+
+interface ChannelConfig {
+  email: {
+    enabled: boolean
+    smtp_host: string
+    smtp_port: number
+    smtp_user: string
+    smtp_password: string
+    from: string
+    to: string
+  }
+  telegram: {
+    enabled: boolean
+    bot_token: string
+    chat_id: string
+  }
+  discord: {
+    enabled: boolean
+    webhook_url: string
+  }
+}
+
+interface AlertConfig {
+  provider_unstable: { enabled: boolean; cooldown_min: number }
+  error_rate_exceeded: { enabled: boolean; cooldown_min: number; threshold_pct: number; window_minutes: number }
+  providers_exhausted: { enabled: boolean; cooldown_min: number }
+  account_auth_failure: { enabled: boolean; cooldown_min: number }
+  daily_summary: { enabled: boolean; cooldown_min: number; hour: number }
+  provider_recovered: { enabled: boolean; cooldown_min: number }
+}
+
+const DEFAULT_CHANNELS: ChannelConfig = {
+  email: { enabled: false, smtp_host: '', smtp_port: 587, smtp_user: '', smtp_password: '', from: '', to: '' },
+  telegram: { enabled: false, bot_token: '', chat_id: '' },
+  discord: { enabled: false, webhook_url: '' },
+}
+
+const DEFAULT_ALERTS: AlertConfig = {
+  provider_unstable: { enabled: true, cooldown_min: 30 },
+  error_rate_exceeded: { enabled: true, cooldown_min: 15, threshold_pct: 10, window_minutes: 5 },
+  providers_exhausted: { enabled: true, cooldown_min: 5 },
+  account_auth_failure: { enabled: true, cooldown_min: 60 },
+  daily_summary: { enabled: false, cooldown_min: 1440, hour: 8 },
+  provider_recovered: { enabled: true, cooldown_min: 30 },
+}
+
+const INPUT_CLS = 'bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full'
+
+function ChannelCard({
+  title,
+  enabled,
+  onToggle,
+  children,
+}: {
+  title: string
+  enabled: boolean
+  onToggle: (v: boolean) => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="border border-border rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-text-primary">{title}</span>
+        <ToggleSwitch checked={enabled} onChange={onToggle} label={`Enable ${title}`} />
+      </div>
+      {enabled && <div className="space-y-3 pt-1">{children}</div>}
+    </div>
+  )
+}
+
+function NotificationSettings({ settings }: { settings: Record<string, string> }) {
+  const [channels, setChannels] = useState<ChannelConfig>(() => {
+    try {
+      return { ...DEFAULT_CHANNELS, ...JSON.parse(settings.notification_channels ?? '{}') }
+    } catch {
+      return DEFAULT_CHANNELS
+    }
+  })
+
+  const [alerts, setAlerts] = useState<AlertConfig>(() => {
+    try {
+      const parsed = JSON.parse(settings.notification_alerts ?? '{}')
+      return { ...DEFAULT_ALERTS, ...parsed }
+    } catch {
+      return DEFAULT_ALERTS
+    }
+  })
+
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [status, setStatus] = useState<SaveStatus | null>(null)
+  const [testStatus, setTestStatus] = useState<SaveStatus | null>(null)
+
+  function setEmail<K extends keyof ChannelConfig['email']>(key: K, value: ChannelConfig['email'][K]) {
+    setChannels((prev) => ({ ...prev, email: { ...prev.email, [key]: value } }))
+  }
+
+  function setTelegram<K extends keyof ChannelConfig['telegram']>(key: K, value: ChannelConfig['telegram'][K]) {
+    setChannels((prev) => ({ ...prev, telegram: { ...prev.telegram, [key]: value } }))
+  }
+
+  function setDiscord<K extends keyof ChannelConfig['discord']>(key: K, value: ChannelConfig['discord'][K]) {
+    setChannels((prev) => ({ ...prev, discord: { ...prev.discord, [key]: value } }))
+  }
+
+  function setAlert<K extends keyof AlertConfig, F extends keyof AlertConfig[K]>(
+    key: K,
+    field: F,
+    value: AlertConfig[K][F],
+  ) {
+    setAlerts((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }))
+  }
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setStatus(null)
+    try {
+      await api.settings.update({
+        notification_channels: JSON.stringify(channels),
+        notification_alerts: JSON.stringify(alerts),
+      })
+      setStatus({ ok: true, msg: 'Saved.' })
+    } catch (err) {
+      setStatus({ ok: false, msg: err instanceof Error ? err.message : 'Save failed' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTest() {
+    setTesting(true)
+    setTestStatus(null)
+    try {
+      const res = await api.notifications.test()
+      setTestStatus(res.success ? { ok: true, msg: 'Test notification sent.' } : { ok: false, msg: res.error ?? 'Test failed.' })
+    } catch (err) {
+      setTestStatus({ ok: false, msg: err instanceof Error ? err.message : 'Test failed' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const ALERT_LABELS: Record<keyof AlertConfig, string> = {
+    provider_unstable: 'Provider Unstable',
+    error_rate_exceeded: 'Error Rate Exceeded',
+    providers_exhausted: 'All Providers Exhausted',
+    account_auth_failure: 'Account Auth Failure',
+    daily_summary: 'Daily Summary',
+    provider_recovered: 'Provider Recovered',
+  }
+
+  return (
+    <Section title="Notifications">
+      <form onSubmit={handleSave} className="space-y-6">
+
+        {/* Channels */}
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-wider text-text-secondary">Channels</p>
+
+          <ChannelCard
+            title="Email"
+            enabled={channels.email.enabled}
+            onToggle={(v) => setEmail('enabled', v)}
+          >
+            <Field label="SMTP Host">
+              <input className={INPUT_CLS} type="text" value={channels.email.smtp_host} onChange={(e) => setEmail('smtp_host', e.target.value)} placeholder="smtp.example.com" />
+            </Field>
+            <Field label="SMTP Port">
+              <input className={INPUT_CLS} type="number" value={channels.email.smtp_port} onChange={(e) => setEmail('smtp_port', Number(e.target.value))} min={1} max={65535} />
+            </Field>
+            <Field label="SMTP User">
+              <input className={INPUT_CLS} type="text" value={channels.email.smtp_user} onChange={(e) => setEmail('smtp_user', e.target.value)} placeholder="user@example.com" />
+            </Field>
+            <Field label="SMTP Password">
+              <input className={INPUT_CLS} type="password" value={channels.email.smtp_password} onChange={(e) => setEmail('smtp_password', e.target.value)} autoComplete="off" placeholder="••••••••" />
+            </Field>
+            <Field label="From">
+              <input className={INPUT_CLS} type="text" value={channels.email.from} onChange={(e) => setEmail('from', e.target.value)} placeholder="noreply@example.com" />
+            </Field>
+            <Field label="To (comma-separated)">
+              <input className={INPUT_CLS} type="text" value={channels.email.to} onChange={(e) => setEmail('to', e.target.value)} placeholder="admin@example.com, ops@example.com" />
+            </Field>
+          </ChannelCard>
+
+          <ChannelCard
+            title="Telegram"
+            enabled={channels.telegram.enabled}
+            onToggle={(v) => setTelegram('enabled', v)}
+          >
+            <Field label="Bot Token">
+              <input className={INPUT_CLS} type="password" value={channels.telegram.bot_token} onChange={(e) => setTelegram('bot_token', e.target.value)} autoComplete="off" placeholder="123456:ABC-..." />
+            </Field>
+            <Field label="Chat ID">
+              <input className={INPUT_CLS} type="text" value={channels.telegram.chat_id} onChange={(e) => setTelegram('chat_id', e.target.value)} placeholder="-100123456789" />
+            </Field>
+          </ChannelCard>
+
+          <ChannelCard
+            title="Discord"
+            enabled={channels.discord.enabled}
+            onToggle={(v) => setDiscord('enabled', v)}
+          >
+            <Field label="Webhook URL">
+              <input className={INPUT_CLS} type="password" value={channels.discord.webhook_url} onChange={(e) => setDiscord('webhook_url', e.target.value)} autoComplete="off" placeholder="https://discord.com/api/webhooks/..." />
+            </Field>
+          </ChannelCard>
+        </div>
+
+        {/* Alerts */}
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-wider text-text-secondary">Alert Rules</p>
+          <div className="space-y-2">
+            {(Object.keys(alerts) as (keyof AlertConfig)[]).map((key) => {
+              const alert = alerts[key]
+              return (
+                <div key={key} className="border border-border rounded-lg px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-text-primary">{ALERT_LABELS[key]}</span>
+                    <ToggleSwitch
+                      checked={alert.enabled}
+                      onChange={(v) => setAlert(key, 'enabled' as never, v as never)}
+                      label={ALERT_LABELS[key]}
+                    />
+                  </div>
+                  {alert.enabled && (
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-text-secondary whitespace-nowrap">Cooldown (min)</label>
+                        <input
+                          className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-1.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-20"
+                          type="number"
+                          min={1}
+                          value={alert.cooldown_min}
+                          onChange={(e) => setAlert(key, 'cooldown_min' as never, Number(e.target.value) as never)}
+                        />
+                      </div>
+                      {key === 'error_rate_exceeded' && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-text-secondary whitespace-nowrap">Threshold %</label>
+                            <input
+                              className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-1.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-20"
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={(alert as AlertConfig['error_rate_exceeded']).threshold_pct}
+                              onChange={(e) => setAlert(key, 'threshold_pct' as never, Number(e.target.value) as never)}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-text-secondary whitespace-nowrap">Window (min)</label>
+                            <input
+                              className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-1.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-20"
+                              type="number"
+                              min={1}
+                              value={(alert as AlertConfig['error_rate_exceeded']).window_minutes}
+                              onChange={(e) => setAlert(key, 'window_minutes' as never, Number(e.target.value) as never)}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {key === 'daily_summary' && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-text-secondary whitespace-nowrap">Hour (0–23)</label>
+                          <input
+                            className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-1.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-20"
+                            type="number"
+                            min={0}
+                            max={23}
+                            value={(alert as AlertConfig['daily_summary']).hour}
+                            onChange={(e) => setAlert(key, 'hour' as never, Number(e.target.value) as never)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-3 mt-3 border-t border-border">
+          <button
+            type="submit"
+            disabled={saving}
+            className="bg-accent-muted text-accent-light hover:bg-[rgba(124,91,240,0.2)] rounded-lg text-sm font-medium px-4 py-2 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing}
+            className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-sm font-medium px-4 py-2 disabled:opacity-50"
+          >
+            {testing ? 'Sending…' : 'Send Test'}
+          </button>
+          {status && (
+            <span className={`text-xs ${status.ok ? 'text-success' : 'text-error'}`}>{status.msg}</span>
+          )}
+          {testStatus && (
+            <span className={`text-xs ${testStatus.ok ? 'text-success' : 'text-error'}`}>{testStatus.msg}</span>
+          )}
+        </div>
+      </form>
+    </Section>
+  )
+}
+
 // ─── Config Section ───────────────────────────────────────────────────────────
 
 function ConfigSettings() {
@@ -463,6 +794,7 @@ export default function Settings() {
           <GeneralSettings settings={settings} />
           <SecuritySettings settings={settings} />
           <OllamaSettings settings={settings} />
+          <NotificationSettings settings={settings} />
           <ConfigSettings />
         </div>
       ) : null}

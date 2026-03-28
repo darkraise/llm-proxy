@@ -256,6 +256,8 @@ export const api = {
       request<{ status: string }>('PUT', `/accounts/${id}`, data),
     delete: (id: number) =>
       request<{ status: string }>('DELETE', `/accounts/${id}`),
+    bulkUpdate: (ids: number[], enabled: boolean) =>
+      request<{ status: string }>('PATCH', '/accounts/bulk', { ids, enabled }),
     test: (id: number) =>
       request<TestResult>('POST', `/accounts/${id}/test`),
     discover: (data: { type: string; base_url: string; api_key: string; free_only: boolean }) =>
@@ -349,6 +351,12 @@ export const api = {
     get: () => request<Record<string, string>>('GET', '/settings'),
     update: (data: Record<string, string>) =>
       request<{ status: string }>('PUT', '/settings', data),
+  },
+
+  // ─── Notifications ───────────────────────────────────────────────────────
+
+  notifications: {
+    test: () => request<{ success: boolean; error?: string }>('POST', '/notifications/test'),
   },
 
   // ─── Config ──────────────────────────────────────────────────────────────
