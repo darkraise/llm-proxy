@@ -50,7 +50,7 @@ func TestHandleChatCompletions_Streaming(t *testing.T) {
 	}}
 
 	pool := provider.NewPool(providers)
-	h := NewHandler(pool, nil)
+	h := NewHandler(pool, nil, nil)
 
 	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}],"stream":true}`
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body))

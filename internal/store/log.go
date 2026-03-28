@@ -204,15 +204,15 @@ func (d *DB) GetAccountStats(from, to time.Time) ([]AccountStats, error) {
 
 func (d *DB) GetProviderStats(from, to time.Time) ([]ProviderStats, error) {
 	rows, err := d.Query(`
-		SELECT a.type AS provider,
+		SELECT r.provider_type AS provider,
 		       COUNT(*) AS total_requests,
 		       COALESCE(SUM(r.prompt_tokens + r.completion_tokens), 0) AS total_tokens,
 		       SUM(CASE WHEN r.status = 'error' THEN 1 ELSE 0 END) AS error_count,
 		       COALESCE(AVG(CASE WHEN r.status = 'success' THEN r.latency_ms END), 0) AS avg_latency_ms
 		FROM request_logs r
-		JOIN accounts a ON r.account_id = a.id
 		WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)
-		GROUP BY a.type
+		  AND r.provider_type != ''
+		GROUP BY r.provider_type
 		ORDER BY total_requests DESC`,
 		sqliteTime(from), sqliteTime(to),
 	)
@@ -241,9 +241,8 @@ func (d *DB) GetModelStats(from, to time.Time, provider string) ([]ModelStats, e
 	args := []any{}
 
 	if provider != "" {
-		query += ` JOIN accounts a ON r.account_id = a.id
-		WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)
-		AND a.type = ?`
+		query += ` WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)
+		AND r.provider_type = ?`
 		args = append(args, sqliteTime(from), sqliteTime(to), provider)
 	} else {
 		query += ` WHERE datetime(r.timestamp) BETWEEN datetime(?) AND datetime(?)`

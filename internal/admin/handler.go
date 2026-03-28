@@ -207,6 +207,50 @@ func (h *AdminHandler) HandleDeleteAccount(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
+// HandleBulkUpdateAccounts sets enabled/disabled for multiple accounts in one request.
+// PATCH /admin/api/accounts/bulk
+func (h *AdminHandler) HandleBulkUpdateAccounts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs     []int64 `json:"ids"`
+		Enabled *bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Enabled == nil {
+		writeJSON(w, 400, map[string]string{"error": "enabled field is required"})
+		return
+	}
+
+	enabled := 0
+	if *req.Enabled {
+		enabled = 1
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	for _, id := range req.IDs {
+		if _, err := tx.Exec("UPDATE accounts SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", enabled, id); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.reloadPool()
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
 func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {

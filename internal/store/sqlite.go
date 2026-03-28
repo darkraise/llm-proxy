@@ -115,6 +115,12 @@ func (d *DB) migrate() error {
 			key   TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS provider_stability (
+			provider   TEXT PRIMARY KEY,
+			unstable   BOOLEAN NOT NULL DEFAULT 0,
+			reason     TEXT NOT NULL DEFAULT '',
+			marked_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 
 	for _, m := range migrations {

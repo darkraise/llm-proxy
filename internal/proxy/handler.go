@@ -29,6 +29,7 @@ type RateLimitUpdate struct {
 
 type Handler struct {
 	pool          *provider.Pool
+	db            *store.DB
 	logFunc       LogFunc
 	client        *http.Client
 	maxRetries    int
@@ -44,12 +45,13 @@ type FallbackConfig struct {
 	Timeout time.Duration
 }
 
-func NewHandler(pool *provider.Pool, logFunc LogFunc) *Handler {
+func NewHandler(pool *provider.Pool, db *store.DB, logFunc LogFunc) *Handler {
 	return &Handler{
 		pool:       pool,
+		db:         db,
 		logFunc:    logFunc,
 		client:     &http.Client{Timeout: 15 * time.Second},
-		maxRetries: 3,
+		maxRetries: 12,
 		timeout:    15 * time.Second,
 	}
 }
@@ -196,8 +198,11 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		Status: "error",
 	}
 
+	providerFailures := make(map[string]int)
+	skipProviders := make(map[string]bool)
+
 	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.Select(req.Model, store.CategoryEmbedding, h.maxRetries)
+		prov, err := h.pool.SelectExcluding(req.Model, store.CategoryEmbedding, h.maxRetries, skipProviders)
 		if err != nil {
 			break
 		}
@@ -222,28 +227,41 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		logEntry.LatencyMs = int(latency.Milliseconds())
 		logEntry.StatusCode = statusCode
 
+		isTimeout := err != nil && (latency >= h.timeout || isTimeoutError(err))
+
 		if err != nil {
-			slog.Warn("embedding provider error", "provider", prov.Name, "error", err)
+			slog.Warn("embedding provider error", "provider", prov.Name, "type", prov.Type, "error", err)
 			h.pool.RecordError(prov.Name, 15*time.Second)
+			providerFailures[prov.Type]++
+			if isTimeout || providerFailures[prov.Type] >= 3 {
+				reason := "consecutive failures"
+				if isTimeout { reason = "request timeout" }
+				h.markProviderUnstable(prov.Type, reason)
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
 		if statusCode == 429 {
-			slog.Warn("embedding rate limited", "provider", prov.Name)
+			slog.Warn("embedding rate limited", "provider", prov.Name, "type", prov.Type)
 			h.pool.RecordRateLimit(prov.Name, 60*time.Second)
-			continue
-		}
-
-		if statusCode >= 500 {
-			slog.Warn("embedding server error", "provider", prov.Name, "status", statusCode)
-			h.pool.RecordError(prov.Name, 10*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				h.markProviderUnstable(prov.Type, "rate limited across accounts")
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
 		if statusCode >= 400 {
-			logEntry.StatusCode = statusCode
-			logEntry.ErrorMessage = fmt.Sprintf("provider returned status %d", statusCode)
-			break
+			slog.Warn("embedding error", "provider", prov.Name, "type", prov.Type, "status", statusCode)
+			h.pool.RecordError(prov.Name, 15*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				h.markProviderUnstable(prov.Type, fmt.Sprintf("errors (status %d)", statusCode))
+				skipProviders[prov.Type] = true
+			}
+			continue
 		}
 
 		// Success
@@ -339,8 +357,12 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 
 	req.Stream = false
 
+	// Track failures per provider type during this request
+	providerFailures := make(map[string]int)
+	skipProviders := make(map[string]bool)
+
 	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.Select(req.Model, category, h.maxRetries)
+		prov, err := h.pool.SelectExcluding(req.Model, category, h.maxRetries, skipProviders)
 		if err != nil {
 			break
 		}
@@ -366,32 +388,62 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		logEntry.LatencyMs = int(latency.Milliseconds())
 		logEntry.StatusCode = statusCode
 
+		isTimeout := err != nil && (latency >= h.timeout || isTimeoutError(err))
+
 		if err != nil {
-			slog.Warn("provider error", "provider", prov.Name, "error", err)
+			slog.Warn("provider error", "provider", prov.Name, "type", prov.Type, "error", err)
 			h.pool.RecordError(prov.Name, 15*time.Second)
+			providerFailures[prov.Type]++
+			if isTimeout {
+				h.markProviderUnstable(prov.Type, "request timeout")
+				skipProviders[prov.Type] = true
+			} else if providerFailures[prov.Type] >= 3 {
+				h.markProviderUnstable(prov.Type, fmt.Sprintf("%d consecutive failures", providerFailures[prov.Type]))
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
 		if statusCode == 429 {
-			slog.Warn("rate limited", "provider", prov.Name)
+			slog.Warn("rate limited", "provider", prov.Name, "type", prov.Type)
 			h.pool.RecordRateLimit(prov.Name, 60*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				h.markProviderUnstable(prov.Type, "rate limited across accounts")
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
 		if statusCode >= 500 {
-			slog.Warn("server error", "provider", prov.Name, "status", statusCode)
+			slog.Warn("server error", "provider", prov.Name, "type", prov.Type, "status", statusCode)
 			h.pool.RecordError(prov.Name, 10*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				h.markProviderUnstable(prov.Type, fmt.Sprintf("server errors (status %d)", statusCode))
+				skipProviders[prov.Type] = true
+			}
+			continue
+		}
+
+		if statusCode >= 400 {
+			slog.Warn("client error", "provider", prov.Name, "type", prov.Type, "status", statusCode)
+			h.pool.RecordError(prov.Name, 15*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				h.markProviderUnstable(prov.Type, fmt.Sprintf("client errors (status %d)", statusCode))
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
 		// Success
-		tokens := 0
-		if resp != nil {
-			tokens = resp.Usage.TotalTokens
-			logEntry.PromptTokens = resp.Usage.PromptTokens
-			logEntry.CompletionTokens = resp.Usage.CompletionTokens
+		if resp == nil {
+			continue
 		}
-		h.pool.RecordSuccess(prov.Name, tokens)
+		logEntry.PromptTokens = resp.Usage.PromptTokens
+		logEntry.CompletionTokens = resp.Usage.CompletionTokens
+		h.pool.RecordSuccess(prov.Name, resp.Usage.TotalTokens)
 		logEntry.Status = "success"
 		logEntry.Model = resp.Model
 
@@ -514,6 +566,24 @@ func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatComplet
 
 // knownProviderURLs maps provider types to their canonical API base URLs.
 // For these providers, the stored base_url is ignored.
+func (h *Handler) markProviderUnstable(providerType, reason string) {
+	if h.db != nil {
+		if err := h.db.MarkProviderUnstable(providerType, reason); err != nil {
+			slog.Warn("failed to mark provider unstable", "provider", providerType, "error", err)
+		} else {
+			slog.Warn("provider marked unstable", "provider", providerType, "reason", reason)
+		}
+	}
+}
+
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "timeout") || strings.Contains(s, "deadline exceeded")
+}
+
 var knownProviderURLs = map[string]string{
 	"groq":       "https://api.groq.com/openai/v1",
 	"openrouter": "https://openrouter.ai/api/v1",
@@ -523,6 +593,7 @@ var knownProviderURLs = map[string]string{
 	"cohere":     "https://api.cohere.ai/compatibility/v1",
 	"llm7":       "https://api.llm7.io/v1",
 	"nvidia":     "https://integrate.api.nvidia.com/v1",
+	"openai":     "https://api.openai.com/v1",
 }
 
 // resolveBaseURL returns the canonical URL for known providers, or falls back to the stored base URL.

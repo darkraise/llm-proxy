@@ -119,7 +119,7 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
-	proxyHandler := proxy.NewHandler(pool, logFunc)
+	proxyHandler := proxy.NewHandler(pool, db, logFunc)
 	adminHandler := admin.NewAdminHandler(db, auth, pool, encryptionKey)
 
 	// Async rate limit header writer
@@ -196,6 +196,10 @@ func (s *Server) routes() {
 
 	// Health
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+	// Redirect /admin (no trailing slash) to /admin/
+	s.mux.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+	})
 	s.mux.HandleFunc("/", s.handleRoot)
 
 	// Admin auth (no session required)
@@ -210,6 +214,7 @@ func (s *Server) routes() {
 	}
 
 	s.mux.Handle("GET /admin/api/accounts", protected(s.admin.HandleListAccounts))
+	s.mux.Handle("PATCH /admin/api/accounts/bulk", protected(s.admin.HandleBulkUpdateAccounts))
 	s.mux.Handle("POST /admin/api/accounts", protected(s.admin.HandleCreateAccount))
 	s.mux.Handle("PUT /admin/api/accounts/{id}", protected(s.admin.HandleUpdateAccount))
 	s.mux.Handle("DELETE /admin/api/accounts/{id}", protected(s.admin.HandleDeleteAccount))

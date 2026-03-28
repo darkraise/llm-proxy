@@ -51,20 +51,33 @@ func NewPool(accounts []store.Account) *Pool {
 }
 
 func (p *Pool) Select(model string, category string, maxRetries int) (*AccountInfo, error) {
+	return p.SelectExcluding(model, category, maxRetries, nil)
+}
+
+func (p *Pool) SelectExcluding(model string, category string, maxRetries int, skipProviders map[string]bool) (*AccountInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if model == "auto" {
-		return p.selectAuto(category, maxRetries)
+		return p.selectAutoExcluding(category, maxRetries, skipProviders)
 	}
-	return p.selectByModel(model, maxRetries)
+	return p.selectByModelExcluding(model, maxRetries, skipProviders)
 }
 
 func (p *Pool) selectAuto(category string, maxRetries int) (*AccountInfo, error) {
+	return p.selectAutoExcluding(category, maxRetries, nil)
+}
+
+func (p *Pool) selectAutoExcluding(category string, maxRetries int, skipProviders map[string]bool) (*AccountInfo, error) {
 	n := len(p.accounts)
 	for i := 0; i < min(maxRetries, n); i++ {
 		account := &p.accounts[p.index%n]
 		p.index = (p.index + 1) % n
+
+		// Skip excluded provider types
+		if skipProviders != nil && skipProviders[account.Type] {
+			continue
+		}
 
 		// Only consider accounts that have models in the requested category.
 		parsed := store.ParseCategorizedModels(account.Models)
@@ -87,9 +100,15 @@ func (p *Pool) selectAuto(category string, maxRetries int) (*AccountInfo, error)
 }
 
 func (p *Pool) selectByModel(model string, maxRetries int) (*AccountInfo, error) {
-	// Find all accounts offering this model
+	return p.selectByModelExcluding(model, maxRetries, nil)
+}
+
+func (p *Pool) selectByModelExcluding(model string, maxRetries int, skipProviders map[string]bool) (*AccountInfo, error) {
 	var candidates []*AccountInfo
 	for i := range p.accounts {
+		if skipProviders != nil && skipProviders[p.accounts[i].Type] {
+			continue
+		}
 		if accountHasModel(&p.accounts[i], model) {
 			candidates = append(candidates, &p.accounts[i])
 		}

@@ -41,7 +41,7 @@ func TestHandleChatCompletions_NonStreaming(t *testing.T) {
 	}}
 
 	pool := provider.NewPool(providers)
-	h := NewHandler(pool, nil) // nil logger for now
+	h := NewHandler(pool, nil, nil) // nil logger for now
 
 	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}]}`
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body))
@@ -74,7 +74,7 @@ func TestHandleChatCompletions_AllExhausted(t *testing.T) {
 	}}
 
 	pool := provider.NewPool(providers)
-	h := NewHandler(pool, nil)
+	h := NewHandler(pool, nil, nil)
 
 	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}]}`
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body))
@@ -97,7 +97,7 @@ func TestHandleAnthropicMessages_NonStreaming(t *testing.T) {
 	}}
 
 	pool := provider.NewPool(providers)
-	h := NewHandler(pool, nil)
+	h := NewHandler(pool, nil, nil)
 
 	body := `{"model":"auto","max_tokens":1024,"messages":[{"role":"user","content":"Hi"}]}`
 	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
