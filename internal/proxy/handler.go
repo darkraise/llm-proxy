@@ -518,7 +518,11 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		req.Stream = false
 		data, _ := adapter.FormatOpenAIRequest(req)
 
-		httpReq, err := http.NewRequest("POST", h.fallback.BaseURL+"/chat/completions", bytes.NewReader(data))
+		fallbackURL := strings.TrimRight(h.fallback.BaseURL, "/")
+		if !strings.HasSuffix(fallbackURL, "/v1") {
+			fallbackURL += "/v1"
+		}
+		httpReq, err := http.NewRequest("POST", fallbackURL+"/chat/completions", bytes.NewReader(data))
 		if err == nil {
 			httpReq.Header.Set("Content-Type", "application/json")
 			resp, err := fallbackClient.Do(httpReq)
