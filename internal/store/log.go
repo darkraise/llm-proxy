@@ -268,6 +268,31 @@ func (d *DB) GetModelStats(from, to time.Time, provider string) ([]ModelStats, e
 	return stats, rows.Err()
 }
 
+type ErrorRateResult struct {
+	TotalRequests int
+	ErrorCount    int
+	ErrorRate     float64 // 0.0 to 100.0
+}
+
+func (d *DB) GetErrorRate(from, to time.Time) (ErrorRateResult, error) {
+	var r ErrorRateResult
+	err := d.QueryRow(`
+		SELECT
+			COUNT(*) AS total,
+			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errors
+		FROM request_logs
+		WHERE datetime(timestamp) BETWEEN datetime(?) AND datetime(?)`,
+		sqliteTime(from), sqliteTime(to),
+	).Scan(&r.TotalRequests, &r.ErrorCount)
+	if err != nil {
+		return r, err
+	}
+	if r.TotalRequests > 0 {
+		r.ErrorRate = float64(r.ErrorCount) / float64(r.TotalRequests) * 100
+	}
+	return r, nil
+}
+
 // AccountTotals holds lifetime aggregate counts for a single account.
 type AccountTotals struct {
 	AccountName   string `json:"account_name"`
