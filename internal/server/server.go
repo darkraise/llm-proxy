@@ -16,6 +16,7 @@ import (
 	"github.com/darkraise/llm-proxy/internal/admin"
 	"github.com/darkraise/llm-proxy/internal/config"
 	cryptopkg "github.com/darkraise/llm-proxy/internal/crypto"
+	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
 	"github.com/darkraise/llm-proxy/internal/proxy"
 	"github.com/darkraise/llm-proxy/internal/store"
@@ -41,6 +42,8 @@ type Server struct {
 	auth          *admin.Auth
 	logChan       chan store.RequestLog
 	rateLimitChan chan proxy.RateLimitUpdate
+	notifier      *notify.Notifier
+	notifyStop    chan struct{}
 }
 
 func New(cfg Config) (*Server, error) {
@@ -126,6 +129,11 @@ func New(cfg Config) (*Server, error) {
 	rateLimitChan := make(chan proxy.RateLimitUpdate, 500)
 	proxyHandler.SetRateLimitChan(rateLimitChan)
 
+	// Notification system
+	notifier := notify.NewNotifier(db)
+	proxyHandler.SetNotifier(notifier)
+	adminHandler.SetNotifier(notifier)
+
 	// Load proxy config from settings
 	if retries, _ := db.GetSetting("max_retries"); retries != "" {
 		var r int
@@ -165,6 +173,7 @@ func New(cfg Config) (*Server, error) {
 		})
 	}
 
+	notifyStop := make(chan struct{})
 	mux := http.NewServeMux()
 	s := &Server{
 		cfg:           cfg,
@@ -176,6 +185,8 @@ func New(cfg Config) (*Server, error) {
 		auth:          auth,
 		logChan:       logChan,
 		rateLimitChan: rateLimitChan,
+		notifier:      notifier,
+		notifyStop:    notifyStop,
 		http: &http.Server{
 			Addr:    fmt.Sprintf(":%d", cfg.Port),
 			Handler: mux,
@@ -246,6 +257,9 @@ func (s *Server) routes() {
 	// Account model discovery
 	s.mux.Handle("POST /admin/api/accounts/discover", protected(s.admin.HandleDiscoverModels))
 	s.mux.Handle("POST /admin/api/accounts/{id}/discover", protected(s.admin.HandleDiscoverByAccount))
+
+	// Notifications
+	s.mux.Handle("POST /admin/api/notifications/test", protected(s.admin.HandleTestNotification))
 
 	// Admin UI: dev proxy or embedded SPA
 	if s.cfg.Dev && s.cfg.UIProxy != "" {
@@ -340,12 +354,14 @@ func (s *Server) StartBackgroundWorkers() {
 	go s.logWriter()
 	go s.rateLimitWriter()
 	go s.logPruner()
+	go s.notifier.Run(s.notifyStop)
 }
 
 func (s *Server) Start() error {
 	go s.logWriter()
 	go s.rateLimitWriter()
 	go s.logPruner()
+	go s.notifier.Run(s.notifyStop)
 
 	slog.Info("server started",
 		"port", s.cfg.Port,
@@ -356,6 +372,7 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	close(s.notifyStop)
 	close(s.logChan)
 	close(s.rateLimitChan)
 	s.db.Close()

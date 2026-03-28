@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/darkraise/llm-proxy/internal/adapter"
+	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
 	"github.com/darkraise/llm-proxy/internal/ratelimit"
 	"github.com/darkraise/llm-proxy/internal/store"
@@ -60,6 +61,9 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		}
 
 		if streamResp.StatusCode >= 400 {
+			if (streamResp.StatusCode == 401 || streamResp.StatusCode == 403) && h.notifier != nil {
+				h.notifier.Alert(notify.NewAccountAuthFailureAlert(prov.Name, streamResp.StatusCode))
+			}
 			streamResp.Body.Close()
 			h.pool.RecordError(prov.Name, 10*time.Second)
 			continue
@@ -104,6 +108,9 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 	}
 
 	// All providers exhausted
+	if h.notifier != nil {
+		h.notifier.Alert(notify.NewProvidersExhaustedAlert(req.Model))
+	}
 	logEntry.Status = "error"
 	logEntry.ErrorMessage = "all providers exhausted"
 	if h.logFunc != nil {

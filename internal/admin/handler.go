@@ -12,6 +12,7 @@ import (
 
 	"github.com/darkraise/llm-proxy/internal/config"
 	"github.com/darkraise/llm-proxy/internal/crypto"
+	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
@@ -21,10 +22,27 @@ type AdminHandler struct {
 	auth          *Auth
 	pool          *provider.Pool
 	encryptionKey []byte
+	notifier      *notify.Notifier
 }
 
 func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKey []byte) *AdminHandler {
 	return &AdminHandler{db: db, auth: auth, pool: pool, encryptionKey: encryptionKey}
+}
+
+func (h *AdminHandler) SetNotifier(n *notify.Notifier) {
+	h.notifier = n
+}
+
+func (h *AdminHandler) HandleTestNotification(w http.ResponseWriter, r *http.Request) {
+	if h.notifier == nil {
+		writeJSON(w, 500, map[string]string{"error": "notifier not configured"})
+		return
+	}
+	if err := h.notifier.SendTest(); err != nil {
+		writeJSON(w, 200, map[string]any{"success": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"success": true})
 }
 
 type accountRequest struct {

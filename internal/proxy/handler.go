@@ -12,6 +12,7 @@ import (
 
 	"github.com/darkraise/llm-proxy/internal/adapter"
 	"github.com/darkraise/llm-proxy/internal/crypto"
+	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
 	"github.com/darkraise/llm-proxy/internal/ratelimit"
 	"github.com/darkraise/llm-proxy/internal/store"
@@ -36,6 +37,7 @@ type Handler struct {
 	timeout       time.Duration
 	fallback      *FallbackConfig
 	rateLimitChan chan RateLimitUpdate
+	notifier      *notify.Notifier
 }
 
 type FallbackConfig struct {
@@ -70,6 +72,10 @@ func (h *Handler) SetConfig(maxRetries int, timeout time.Duration) {
 	h.maxRetries = maxRetries
 	h.timeout = timeout
 	h.client.Timeout = timeout
+}
+
+func (h *Handler) SetNotifier(n *notify.Notifier) {
+	h.notifier = n
 }
 
 func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -235,8 +241,13 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 			providerFailures[prov.Type]++
 			if isTimeout || providerFailures[prov.Type] >= 3 {
 				reason := "consecutive failures"
-				if isTimeout { reason = "request timeout" }
+				if isTimeout {
+					reason = "request timeout"
+				}
 				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -247,7 +258,11 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 			h.pool.RecordRateLimit(prov.Name, 60*time.Second)
 			providerFailures[prov.Type]++
 			if providerFailures[prov.Type] >= 3 {
-				h.markProviderUnstable(prov.Type, "rate limited across accounts")
+				reason := "rate limited across accounts"
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -256,9 +271,16 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		if statusCode >= 400 {
 			slog.Warn("embedding error", "provider", prov.Name, "type", prov.Type, "status", statusCode)
 			h.pool.RecordError(prov.Name, 15*time.Second)
+			if (statusCode == 401 || statusCode == 403) && h.notifier != nil {
+				h.notifier.Alert(notify.NewAccountAuthFailureAlert(prov.Name, statusCode))
+			}
 			providerFailures[prov.Type]++
 			if providerFailures[prov.Type] >= 3 {
-				h.markProviderUnstable(prov.Type, fmt.Sprintf("errors (status %d)", statusCode))
+				reason := fmt.Sprintf("errors (status %d)", statusCode)
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -275,6 +297,9 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		return resp, logEntry
 	}
 
+	if h.notifier != nil {
+		h.notifier.Alert(notify.NewProvidersExhaustedAlert(req.Model))
+	}
 	logEntry.ErrorMessage = "all providers exhausted"
 	return nil, logEntry
 }
@@ -395,10 +420,18 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 			h.pool.RecordError(prov.Name, 15*time.Second)
 			providerFailures[prov.Type]++
 			if isTimeout {
-				h.markProviderUnstable(prov.Type, "request timeout")
+				reason := "request timeout"
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			} else if providerFailures[prov.Type] >= 3 {
-				h.markProviderUnstable(prov.Type, fmt.Sprintf("%d consecutive failures", providerFailures[prov.Type]))
+				reason := fmt.Sprintf("%d consecutive failures", providerFailures[prov.Type])
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -409,7 +442,11 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 			h.pool.RecordRateLimit(prov.Name, 60*time.Second)
 			providerFailures[prov.Type]++
 			if providerFailures[prov.Type] >= 3 {
-				h.markProviderUnstable(prov.Type, "rate limited across accounts")
+				reason := "rate limited across accounts"
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -420,7 +457,11 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 			h.pool.RecordError(prov.Name, 10*time.Second)
 			providerFailures[prov.Type]++
 			if providerFailures[prov.Type] >= 3 {
-				h.markProviderUnstable(prov.Type, fmt.Sprintf("server errors (status %d)", statusCode))
+				reason := fmt.Sprintf("server errors (status %d)", statusCode)
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -429,9 +470,16 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		if statusCode >= 400 {
 			slog.Warn("client error", "provider", prov.Name, "type", prov.Type, "status", statusCode)
 			h.pool.RecordError(prov.Name, 15*time.Second)
+			if (statusCode == 401 || statusCode == 403) && h.notifier != nil {
+				h.notifier.Alert(notify.NewAccountAuthFailureAlert(prov.Name, statusCode))
+			}
 			providerFailures[prov.Type]++
 			if providerFailures[prov.Type] >= 3 {
-				h.markProviderUnstable(prov.Type, fmt.Sprintf("client errors (status %d)", statusCode))
+				reason := fmt.Sprintf("client errors (status %d)", statusCode)
+				h.markProviderUnstable(prov.Type, reason)
+				if h.notifier != nil {
+					h.notifier.Alert(notify.NewProviderUnstableAlert(prov.Type, reason))
+				}
 				skipProviders[prov.Type] = true
 			}
 			continue
@@ -493,6 +541,9 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		slog.Error("Ollama fallback also failed")
 	}
 
+	if h.notifier != nil {
+		h.notifier.Alert(notify.NewProvidersExhaustedAlert(req.Model))
+	}
 	logEntry.Status = "error"
 	logEntry.ErrorMessage = "all providers exhausted"
 	return nil, logEntry
