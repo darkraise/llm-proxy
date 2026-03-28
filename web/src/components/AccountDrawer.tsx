@@ -15,7 +15,7 @@ import { AddModelsDialog } from './AddModelsDialog'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
+const FIXED_URL_PROVIDERS = new Set(['openai', 'groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -192,6 +192,25 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
     if (!updated[newCategory]) updated[newCategory] = []
     updated[newCategory].push(model)
     setEditField('models', updated)
+  }
+
+  function handleRemoveModel(model: string) {
+    if (!editData) return
+    // Remove from models map
+    const updated = { ...editData.models }
+    for (const cat of Object.keys(updated)) {
+      updated[cat] = updated[cat].filter((m) => m !== model)
+      if (updated[cat].length === 0) delete updated[cat]
+    }
+    setEditField('models', updated)
+    // Remove from default_models if it was a default
+    const updatedDefaults = { ...editData.default_models }
+    for (const [cat, dm] of Object.entries(updatedDefaults)) {
+      if (dm === model) delete updatedDefaults[cat]
+    }
+    setEditField('default_models', updatedDefaults)
+    // Remove model-specific limits
+    setEditedLimits((prev) => prev.filter((l) => l.model !== model))
   }
 
   const title = (
@@ -401,6 +420,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
               modelCategories={editModelCategoryMap}
               onCategoryChange={ed ? handleCategoryChange : undefined}
               visibleMetrics={providerMetrics}
+              onRemoveModel={ed ? handleRemoveModel : undefined}
             />
           </div>
         </div>

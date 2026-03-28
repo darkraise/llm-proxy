@@ -3,6 +3,7 @@ import { api, Account, RequestLog } from '../lib/api'
 import { Badge } from '../components/ui/Badge'
 import { ModelName } from '../components/ui/ModelName'
 import { LogDrawer } from '../components/LogDrawer'
+import { useDateFormat } from '../hooks/useDateFormat'
 import { Select } from '../components/ui/Select'
 
 const PAGE_SIZES = [25, 50, 100]
@@ -13,15 +14,7 @@ const DATE_PRESETS = [
   { label: 'Last 30d', hours: 24 * 30 },
 ] as const
 
-function formatTs(ts: string): string {
-  const d = new Date(ts)
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const min = String(d.getMinutes()).padStart(2, '0')
-  const ss = String(d.getSeconds()).padStart(2, '0')
-  return `${mm}-${dd} ${hh}:${min}:${ss}`
-}
+// formatTs is now handled by useDateFormat hook — see usage below
 
 function statusVariant(code: number, status: string) {
   if (code >= 200 && code < 300) return 'success' as const
@@ -36,6 +29,7 @@ function statusLabel(code: number, status: string) {
 }
 
 export default function UsageLogs() {
+  const { fmt } = useDateFormat()
   const [logs, setLogs] = useState<RequestLog[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -240,7 +234,7 @@ export default function UsageLogs() {
                     }`}
                   >
                     <td className="px-4 py-2.5 text-xs text-text-muted whitespace-nowrap font-mono">
-                      {formatTs(log.timestamp)}
+                      {fmt(log.timestamp)}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-primary">
                       {log.account_name

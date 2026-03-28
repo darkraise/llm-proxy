@@ -5,6 +5,7 @@ import { Select } from '../components/ui/Select'
 import { X } from 'lucide-react'
 
 const PROVIDER_TYPES = [
+  'openai',
   'groq',
   'google',
   'openrouter',

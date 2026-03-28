@@ -1,15 +1,8 @@
-import { ProviderBadge } from './ui/Badge';
-import { StatusDot } from './ui/StatusDot';
+import { ProviderBadge, providerHexColors } from './ui/Badge';
+import { ToggleSwitch } from './ui/ToggleSwitch';
 import { ModelName } from './ui/ModelName';
 import type { Account } from '../lib/api';
 import { parseCategorizedModels, parseDefaultModels } from '../lib/api';
-
-function getAccountStatus(account: Account): 'healthy' | 'rate-limited' | 'error' | 'disabled' {
-  if (!account.enabled) return 'disabled';
-  if (account.status?.reason?.includes('exhausted')) return 'rate-limited';
-  if (account.status && !account.status.available) return 'error';
-  return 'healthy';
-}
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -28,29 +21,46 @@ interface AccountCardProps {
   account: Account;
   selected?: boolean;
   onClick: () => void;
+  onToggleEnabled?: (id: number, enabled: boolean) => void;
 }
 
-export function AccountCard({ account, selected, onClick }: AccountCardProps) {
-  const status = getAccountStatus(account);
+export function AccountCard({ account, selected, onClick, onToggleEnabled }: AccountCardProps) {
   const categorized = parseCategorizedModels(account.models);
   const defaults = parseDefaultModels(account.default_models);
   const defaultChat = defaults.chat ?? '';
   const categorySummary = formatCategoryCounts(categorized);
+  const hexColor = providerHexColors[account.type] ?? '#a78bfa';
 
   return (
     <div
       onClick={onClick}
-      className={`bg-surface-raised border rounded-xl p-4 cursor-pointer transition-colors hover:border-[rgba(124,91,240,0.3)] ${selected ? 'border-accent-light ring-1 ring-accent-light' : 'border-border'} ${!account.enabled ? 'opacity-50' : ''}`}
+      className={`rounded-xl cursor-pointer transition-all ${!account.enabled ? 'opacity-50' : ''}`}
+      style={{
+        backgroundColor: `${hexColor}08`,
+        borderTop: `${selected ? 3 : 1}px solid ${selected ? hexColor : hexColor + '30'}`,
+        borderRight: `${selected ? 3 : 1}px solid ${selected ? hexColor : hexColor + '30'}`,
+        borderBottom: `${selected ? 3 : 1}px solid ${selected ? hexColor : hexColor + '30'}`,
+        borderLeft: `3px solid ${hexColor}`,
+        paddingTop: selected ? 18 : 20,
+        paddingRight: selected ? 18 : 20,
+        paddingBottom: selected ? 18 : 20,
+        paddingLeft: 20,
+      }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <StatusDot status={status} />
+      <div className="flex items-center gap-2 mb-4">
+        <div onClick={(e) => e.stopPropagation()}>
+          <ToggleSwitch
+            checked={account.enabled}
+            onChange={(v) => onToggleEnabled?.(account.id, v)}
+          />
+        </div>
         <span className="text-base font-semibold text-text-primary truncate flex-1">{account.name}</span>
         <ProviderBadge provider={account.type} />
       </div>
 
       {/* Stats row */}
-      <div className="flex gap-3 py-2 border-y border-border-muted mb-3">
+      <div className="flex gap-4 py-3 border-y border-border-muted mb-4">
         <div className="flex-1 text-center">
           <div className="text-xs uppercase tracking-wider text-text-muted">Requests</div>
           <div className="text-sm font-semibold text-text-primary">{formatCompact(account.total_requests)}</div>

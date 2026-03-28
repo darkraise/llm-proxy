@@ -20,8 +20,8 @@ import {
 } from '../lib/api'
 import BreakdownTabs from '../components/BreakdownTabs'
 import { ToggleSwitch } from '../components/ui/ToggleSwitch'
-import { ProviderBadge } from '../components/ui/Badge'
-import { StatusDot } from '../components/ui/StatusDot'
+import { useDateFormat } from '../hooks/useDateFormat'
+import { ProviderBadge, providerHexColors } from '../components/ui/Badge'
 
 // ─── Provider chart colors (hex values extracted from Badge providerColors) ──
 
@@ -118,7 +118,7 @@ function buildProviderBuckets(
   const bucketMap = new Map<number, ChartBucket>()
   for (let t = fromMs; t <= toMs; t += interval) {
     const d = new Date(t)
-    bucketMap.set(t, { label: formatBucketLabel(d, preset) })
+    bucketMap.set(t, { label: formatBucketLabel(d, preset), _ts: d.toISOString() })
   }
 
   // Fill buckets
@@ -157,6 +157,7 @@ const TICK_STYLE = { fill: '#8b949e', fontSize: 11 }
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { fmt } = useDateFormat()
   const [accountStats, setAccountStats] = useState<AccountStats[]>([])
   const [providerStats, setProviderStats] = useState<ProviderStats[]>([])
   const [modelStats, setModelStats] = useState<ModelStats[]>([])
@@ -348,93 +349,125 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Per-Provider Stats Table + Provider Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* Per-Provider Stats Table */}
-        <div className="bg-surface border border-border rounded-xl p-4 lg:col-span-2 overflow-x-auto">
-          <p className="text-sm font-medium text-text-primary mb-3">
-            Provider Stats
-          </p>
-          {providerStats.length === 0 ? (
-            <p className="text-text-muted text-xs text-center py-6">No data yet</p>
-          ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-text-secondary border-b border-border">
-                  <th className="text-left py-2 pr-3 font-medium">Provider</th>
-                  <th className="text-right py-2 px-3 font-medium">Requests</th>
-                  <th className="text-right py-2 px-3 font-medium">Tokens</th>
-                  <th className="text-right py-2 px-3 font-medium">Errors</th>
-                  <th className="text-right py-2 px-3 font-medium">Avg Latency</th>
-                  <th className="text-right py-2 pl-3 font-medium">Accounts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {providerStats.map((ps) => {
-                  const summary = providerSummary.find((s) => s.provider === ps.provider)
-                  return (
-                    <tr key={ps.provider} className="border-b border-border-muted last:border-0">
-                      <td className="py-2 pr-3">
-                        <ProviderBadge provider={ps.provider} />
-                      </td>
-                      <td className="text-right py-2 px-3 text-text-primary tabular-nums">
-                        {ps.total_requests.toLocaleString()}
-                      </td>
-                      <td className="text-right py-2 px-3 text-text-primary tabular-nums">
-                        {formatCompact(ps.total_tokens)}
-                      </td>
-                      <td className="text-right py-2 px-3 tabular-nums">
-                        <span className={ps.error_count > 0 ? 'text-error' : 'text-text-muted'}>
-                          {ps.error_count.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="text-right py-2 px-3 text-text-primary tabular-nums">
-                        {ps.avg_latency_ms > 0 ? `${ps.avg_latency_ms.toFixed(0)}ms` : '\u2014'}
-                      </td>
-                      <td className="text-right py-2 pl-3 text-text-secondary tabular-nums">
-                        {summary ? `${summary.active}/${summary.total} active` : '\u2014'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
+      {/* Summary Stats */}
+      {providerStats.length > 0 && (() => {
+        const totalRequests = providerStats.reduce((s, p) => s + p.total_requests, 0)
+        const totalTokens = providerStats.reduce((s, p) => s + p.total_tokens, 0)
+        const totalErrors = providerStats.reduce((s, p) => s + p.error_count, 0)
+        const avgLatency = providerStats.filter(p => p.avg_latency_ms > 0).length > 0
+          ? providerStats.reduce((s, p) => s + p.avg_latency_ms * p.total_requests, 0) / totalRequests
+          : 0
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="text-xs text-text-muted uppercase tracking-wider mb-1">Total Requests</div>
+              <div className="text-2xl font-semibold text-text-primary tabular-nums">{totalRequests.toLocaleString()}</div>
+            </div>
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="text-xs text-text-muted uppercase tracking-wider mb-1">Total Tokens</div>
+              <div className="text-2xl font-semibold text-text-primary tabular-nums">{formatCompact(totalTokens)}</div>
+            </div>
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="text-xs text-text-muted uppercase tracking-wider mb-1">Total Errors</div>
+              <div className={`text-2xl font-semibold tabular-nums ${totalErrors > 0 ? 'text-error' : 'text-text-primary'}`}>{totalErrors.toLocaleString()}</div>
+            </div>
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="text-xs text-text-muted uppercase tracking-wider mb-1">Avg Latency</div>
+              <div className="text-2xl font-semibold text-text-primary tabular-nums">{avgLatency > 0 ? `${avgLatency.toFixed(0)}ms` : '\u2014'}</div>
+            </div>
+          </div>
+        )
+      })()}
 
-        {/* Provider Account Summary */}
-        <div className="bg-surface border border-border rounded-xl p-4 flex flex-col">
-          <p className="text-sm font-medium text-text-primary mb-3 flex-shrink-0">
-            Provider Status
-          </p>
-          {providerSummary.length === 0 ? (
-            <p className="text-text-muted text-xs text-center py-8">
-              No accounts configured
-            </p>
-          ) : (
-            <div className="space-y-2.5 overflow-y-auto flex-1" style={{ maxHeight: '220px' }}>
-              {providerSummary.map((ps) => {
-                const status: 'healthy' | 'rate-limited' | 'error' | 'disabled' =
-                  ps.active === ps.total
-                    ? 'healthy'
-                    : ps.active > 0
-                      ? 'rate-limited'
-                      : 'disabled'
-                return (
-                  <div key={ps.provider} className="flex items-center gap-2.5 py-1.5">
-                    <StatusDot status={status} />
-                    <ProviderBadge provider={ps.provider} />
-                    <span className="flex-1" />
-                    <span className="text-xs text-text-secondary tabular-nums flex-shrink-0">
-                      {ps.active}/{ps.total} active
+      {/* Per-Provider Stats Cards */}
+      {providerStats.length === 0 ? (
+        <div className="bg-surface border border-border rounded-xl p-6 text-center">
+          <p className="text-text-muted text-sm">No provider data yet</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {providerStats.map((ps) => {
+            const summary = providerSummary.find((s) => s.provider === ps.provider)
+            const totalRequests = providerStats.reduce((sum, p) => sum + p.total_requests, 0)
+            const requestPct = totalRequests > 0 ? (ps.total_requests / totalRequests) * 100 : 0
+            const acctStatus: 'healthy' | 'rate-limited' | 'disabled' =
+              summary
+                ? summary.active === summary.total ? 'healthy'
+                  : summary.active > 0 ? 'rate-limited' : 'disabled'
+                : 'disabled'
+            const statusColor = acctStatus === 'healthy' ? 'bg-success' : acctStatus === 'rate-limited' ? 'bg-warning' : 'bg-text-muted'
+
+            const hexColor = providerHexColors[ps.provider] ?? '#a78bfa'
+
+            return (
+              <div key={ps.provider} className="rounded-xl p-4 space-y-3 overflow-hidden" style={{ borderLeft: `3px solid ${hexColor}`, border: `1px solid ${hexColor}30`, backgroundColor: `${hexColor}08` }}>
+                {/* Header: provider badge + account status */}
+                <div className="flex items-center justify-between">
+                  <ProviderBadge provider={ps.provider} />
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-2 h-2 rounded-full ${statusColor}`} />
+                    <span className="text-xs text-text-secondary tabular-nums">
+                      {summary ? `${summary.active}/${summary.total}` : '0/0'}
                     </span>
                   </div>
-                )
-              })}
-            </div>
-          )}
+                </div>
+
+                {/* Usage bar */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-text-muted">Usage share</span>
+                    <span className="text-xs text-text-secondary tabular-nums">{requestPct.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(requestPct, 1)}%`, backgroundColor: hexColor }} />
+                  </div>
+                </div>
+
+                {/* Stats grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-surface-raised rounded-lg px-3 py-2">
+                    <div className="text-xs text-text-muted">Requests</div>
+                    <div className="text-sm font-semibold text-text-primary tabular-nums">{ps.total_requests.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-surface-raised rounded-lg px-3 py-2">
+                    <div className="text-xs text-text-muted">Tokens</div>
+                    <div className="text-sm font-semibold text-text-primary tabular-nums">{formatCompact(ps.total_tokens)}</div>
+                  </div>
+                  <div className="bg-surface-raised rounded-lg px-3 py-2">
+                    <div className="text-xs text-text-muted">Errors</div>
+                    <div className={`text-sm font-semibold tabular-nums ${ps.error_count > 0 ? 'text-error' : 'text-text-primary'}`}>{ps.error_count.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-surface-raised rounded-lg px-3 py-2">
+                    <div className="text-xs text-text-muted">Avg Latency</div>
+                    <div className="text-sm font-semibold text-text-primary tabular-nums">{ps.avg_latency_ms > 0 ? `${ps.avg_latency_ms.toFixed(0)}ms` : '\u2014'}</div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
-      </div>
+      )}
+
+      {/* Provider Status (only show providers with no stats but have accounts) */}
+      {(() => {
+        const statsProviders = new Set(providerStats.map((p) => p.provider))
+        const noStatsProviders = providerSummary.filter((p) => !statsProviders.has(p.provider))
+        if (noStatsProviders.length === 0) return null
+        return (
+          <div className="flex flex-wrap gap-2">
+            {noStatsProviders.map((ps) => {
+              const statusColor = ps.active === ps.total ? 'bg-success' : ps.active > 0 ? 'bg-warning' : 'bg-text-muted'
+              return (
+                <div key={ps.provider} className="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2">
+                  <div className={`w-2 h-2 rounded-full ${statusColor}`} />
+                  <ProviderBadge provider={ps.provider} />
+                  <span className="text-xs text-text-muted tabular-nums">{ps.active}/{ps.total}</span>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* Request Volume Chart — Full Width */}
       <div className="bg-surface border border-border rounded-xl p-4">
@@ -467,6 +500,10 @@ export default function Dashboard() {
                 fontSize: 12,
               }}
               cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+              labelFormatter={(_, payload) => {
+                const ts = payload?.[0]?.payload?._ts
+                return ts ? fmt(ts) : String(_)
+              }}
             />
             <Legend content={() => null} />
             {chartProviders.map((provider, idx) =>

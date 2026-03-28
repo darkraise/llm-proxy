@@ -26,7 +26,23 @@ export function Badge({
   );
 }
 
+export const providerHexColors: Record<string, string> = {
+  openai: "#10a37f",
+  google: "#5b9cf5",
+  groq: "#f4932a",
+  openrouter: "#6ecfb0",
+  cerebras: "#e54b4b",
+  mistral: "#ff7a00",
+  github: "#c8c8d2",
+  cohere: "#395cdf",
+  nvidia: "#76b900",
+  llm7: "#00c8ff",
+  ollama: "#e0e0e8",
+  "openai-compatible": "#9696a0",
+};
+
 export const providerColors: Record<string, string> = {
+  openai: "bg-[rgba(16,163,127,0.12)] text-[#10a37f]",
   google: "bg-[rgba(66,133,244,0.12)] text-[#5b9cf5]",
   groq: "bg-[rgba(244,147,40,0.12)] text-[#f4932a]",
   openrouter: "bg-[rgba(110,207,176,0.12)] text-[#6ecfb0]",
@@ -37,7 +53,7 @@ export const providerColors: Record<string, string> = {
   nvidia: "bg-[rgba(118,185,0,0.12)] text-[#76b900]",
   llm7: "bg-[rgba(0,200,255,0.12)] text-[#00c8ff]",
   ollama: "bg-[rgba(255,255,255,0.08)] text-[#e0e0e8]",
-  "openai-compatible": "bg-[rgba(16,163,127,0.12)] text-[#10a37f]",
+  "openai-compatible": "bg-[rgba(150,150,160,0.12)] text-[#9696a0]",
 };
 
 export function ProviderBadge({ provider }: { provider: string }) {

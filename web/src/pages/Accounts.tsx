@@ -14,7 +14,7 @@ import { LayoutGrid, List, Plus, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 
-const PROVIDER_TYPES = ['groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'ollama', 'openai-compatible']
+const PROVIDER_TYPES = ['openai', 'groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'ollama', 'openai-compatible']
 
 const PROVIDER_TYPE_URLS: Record<string, string> = {
   groq: 'https://api.groq.com/openai/v1',
@@ -24,6 +24,7 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   github: 'https://models.inference.ai.azure.com',
   cohere: 'https://api.cohere.ai/compatibility/v1',
   llm7: 'https://api.llm7.io/v1',
+  openai: 'https://api.openai.com/v1',
   nvidia: 'https://integrate.api.nvidia.com/v1',
   ollama: 'http://localhost:11434/v1',
   google: '',
@@ -31,7 +32,7 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
 }
 
 // Providers with hardcoded base URLs — no need to show base URL field
-const FIXED_URL_PROVIDERS = new Set(['groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
+const FIXED_URL_PROVIDERS = new Set(['openai', 'groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
 
 // ─── Edit Modal (existing accounts) ──────────────────────────────────────────
 
@@ -802,6 +803,32 @@ export default function Accounts() {
     fetchAccounts()
   }, [fetchAccounts])
 
+  async function handleBulkEnable(accts: Account[], enabled: boolean) {
+    const ids = accts.filter((a) => a.enabled !== enabled).map((a) => a.id)
+    if (ids.length === 0) return
+    try {
+      await api.accounts.bulkUpdate(ids, enabled)
+    } catch { /* silent */ }
+    fetchAccounts()
+  }
+
+  function handleEnableAll() { handleBulkEnable(filteredAccounts, true) }
+  function handleDisableAll() { handleBulkEnable(filteredAccounts, false) }
+
+  async function handleToggleEnabled(id: number, enabled: boolean) {
+    const acct = accounts.find((a) => a.id === id)
+    if (!acct) return
+    try {
+      await api.accounts.update(id, {
+        name: acct.name, type: acct.type, base_url: acct.base_url, api_key: '',
+        models: parseCategorizedModels(acct.models), priority: acct.priority,
+        enabled, default_models: parseDefaultModels(acct.default_models),
+        limits: acct.limits ?? [],
+      })
+      fetchAccounts()
+    } catch { /* silent */ }
+  }
+
   async function handleDelete(id: number) {
     try {
       await api.accounts.delete(id)
@@ -908,6 +935,24 @@ export default function Accounts() {
           ))}
             </div>
           ) : <div />}
+          {/* Bulk actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleEnableAll}
+              disabled={filteredAccounts.every((a) => a.enabled)}
+              className="btn-secondary text-xs px-2.5 py-1.5"
+            >
+              Enable All
+            </button>
+            <button
+              onClick={handleDisableAll}
+              disabled={filteredAccounts.every((a) => !a.enabled)}
+              className="btn-secondary text-xs px-2.5 py-1.5"
+            >
+              Disable All
+            </button>
+          </div>
+
           {/* View toggle */}
           <div className="flex bg-[rgba(255,255,255,0.04)] border border-border rounded-lg overflow-hidden">
             <button
@@ -944,13 +989,14 @@ export default function Accounts() {
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 340px))' }}>
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           {filteredAccounts.map((a) => (
             <AccountCard
               key={a.id}
               account={a}
               selected={selectedAccountId === a.id}
               onClick={() => setSelectedAccountId(a.id)}
+              onToggleEnabled={handleToggleEnabled}
             />
           ))}
         </div>
