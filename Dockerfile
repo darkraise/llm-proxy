@@ -8,12 +8,13 @@ RUN npm run build
 
 # Stage 2: Build Go binary
 FROM golang:1.23-alpine AS build
+ARG VERSION=dev
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /app/web/dist ./web/dist
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /llm-proxy ./cmd/llm-proxy
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o /llm-proxy ./cmd/llm-proxy
 
 # Stage 3: Final image
 FROM gcr.io/distroless/static-debian12

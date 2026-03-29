@@ -9,8 +9,13 @@ if [ "$1" = "--no-push" ]; then
   TAG="latest"
 fi
 
-echo "=== Building ${IMAGE}:${TAG} ==="
-docker build -t "${IMAGE}:${TAG}" .
+VERSION="${TAG}"
+if [ "$VERSION" = "latest" ]; then
+  VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+fi
+
+echo "=== Building ${IMAGE}:${TAG} (version: ${VERSION}) ==="
+docker build --build-arg VERSION="${VERSION}" -t "${IMAGE}:${TAG}" .
 [ "$TAG" != "latest" ] && docker tag "${IMAGE}:${TAG}" "${IMAGE}:latest"
 
 if [ "$NO_PUSH" = true ]; then

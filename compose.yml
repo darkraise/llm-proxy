@@ -8,7 +8,7 @@ services:
       - ./data:/data
       - ./config.yml:/app/seed.yml:ro
     environment:
-      - ADMIN_PASSWORD=changeme
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/llm-proxy", "--healthcheck"]
@@ -16,3 +16,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '1.0'
