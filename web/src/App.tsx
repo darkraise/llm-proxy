@@ -39,7 +39,7 @@ export default function App() {
   return (
     <DateFormatContext.Provider value={{ formatKey, fmt }}>
       <ToastProvider>
-        <BrowserRouter basename="/admin">
+        <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<Layout />}>

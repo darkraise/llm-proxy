@@ -25,11 +25,13 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		return
 	}
 
+	maxRetries, _, _, fallback := h.config()
+
 	req.Stream = true
 	logEntry := store.RequestLog{Model: req.Model, Endpoint: endpoint, Status: "error"}
 
-	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.Select(req.Model, category, h.maxRetries)
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		prov, err := h.pool.SelectExcluding(req.Model, category, maxRetries, nil)
 		if err != nil {
 			break
 		}
@@ -107,6 +109,49 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		return
 	}
 
+	// All providers exhausted — try Ollama streaming fallback
+	if fallback != nil && fallback.Enabled && fallback.ChatModel != "" {
+		slog.Warn("all streaming providers exhausted, trying Ollama fallback")
+		t0 := time.Now()
+		req.Model = fallback.ChatModel
+		req.Stream = true
+		data, _ := adapter.FormatOpenAIRequest(req)
+
+		fallbackURL := strings.TrimRight(fallback.BaseURL, "/")
+		if !strings.HasSuffix(fallbackURL, "/v1") {
+			fallbackURL += "/v1"
+		}
+		httpReq, err := http.NewRequest("POST", fallbackURL+"/chat/completions", bytes.NewReader(data))
+		if err == nil {
+			httpReq.Header.Set("Content-Type", "application/json")
+			fallbackClient := &http.Client{Timeout: fallback.Timeout}
+			streamResp, err := fallbackClient.Do(httpReq)
+			if err == nil && streamResp.StatusCode == 200 {
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Connection", "keep-alive")
+
+				totalTokens := h.pipeOpenAIStream(w, flusher, streamResp.Body, endpoint)
+				streamResp.Body.Close()
+
+				logEntry.Status = "success"
+				logEntry.StatusCode = 200
+				logEntry.AccountName = "ollama-fallback"
+				logEntry.Model = fallback.ChatModel
+				logEntry.CompletionTokens = totalTokens
+				logEntry.LatencyMs = int(time.Since(t0).Milliseconds())
+				if h.logFunc != nil {
+					h.logFunc(logEntry)
+				}
+				return
+			}
+			if streamResp != nil {
+				streamResp.Body.Close()
+			}
+		}
+		slog.Error("Ollama streaming fallback also failed")
+	}
+
 	// All providers exhausted
 	if h.notifier != nil {
 		h.notifier.Alert(notify.NewProvidersExhaustedAlert(req.Model))
@@ -134,7 +179,7 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
 
-	return h.client.Do(httpReq)
+	return h.httpClient().Do(httpReq)
 }
 
 func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
@@ -152,11 +197,12 @@ func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatC
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	return h.client.Do(httpReq)
+	return h.httpClient().Do(httpReq)
 }
 
 func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, endpoint string) int {
 	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024)
 	var totalTokens int
 
 	for scanner.Scan() {
@@ -194,6 +240,7 @@ func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, 
 
 func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, prov *provider.AccountInfo, endpoint string) int {
 	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024)
 	var totalTokens int
 	chunkIdx := 0
 

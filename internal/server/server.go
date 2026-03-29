@@ -14,7 +14,6 @@ import (
 
 	llmproxy "github.com/darkraise/llm-proxy"
 	"github.com/darkraise/llm-proxy/internal/admin"
-	"github.com/darkraise/llm-proxy/internal/config"
 	cryptopkg "github.com/darkraise/llm-proxy/internal/crypto"
 	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
@@ -23,18 +22,20 @@ import (
 )
 
 type Config struct {
-	Port       int
-	DataDir    string
-	Dev        bool
-	UIProxy    string
-	SeedConfig string
-	Version    string
+	Port      int
+	AdminPort int
+	DataDir   string
+	Dev       bool
+	UIProxy   string
+	Version   string
 }
 
 type Server struct {
 	cfg           Config
 	http          *http.Server
 	mux           *http.ServeMux
+	adminHttp     *http.Server
+	adminMux      *http.ServeMux
 	db            *store.DB
 	pool          *provider.Pool
 	proxy         *proxy.Handler
@@ -55,8 +56,7 @@ func New(cfg Config) (*Server, error) {
 	// Initialize admin auth from ADMIN_PASSWORD_HASH env var
 	adminPasswordHash := os.Getenv("ADMIN_PASSWORD_HASH")
 	if adminPasswordHash == "" {
-		slog.Error("ADMIN_PASSWORD_HASH environment variable is required")
-		os.Exit(1)
+		return nil, fmt.Errorf("ADMIN_PASSWORD_HASH environment variable is required")
 	}
 	auth := admin.NewAuth(adminPasswordHash)
 
@@ -75,31 +75,6 @@ func New(cfg Config) (*Server, error) {
 	accounts, err := db.ListAccounts()
 	if err != nil {
 		return nil, fmt.Errorf("load accounts: %w", err)
-	}
-
-	// Seed from YAML if DB is empty
-	if len(accounts) == 0 && cfg.SeedConfig != "" {
-		if data, err := os.ReadFile(cfg.SeedConfig); err == nil {
-			slog.Info("seeding accounts from config", "path", cfg.SeedConfig)
-			if yamlCfg, err := config.ParseYAML(data); err == nil {
-				for _, p := range yamlCfg.ToAccounts() {
-					if _, err := db.CreateAccount(p); err != nil {
-						slog.Warn("seed account failed", "name", p.Name, "error", err)
-					}
-				}
-				// Store proxy settings
-				if yamlCfg.Proxy.RequestTimeout > 0 {
-					db.SetSetting("request_timeout", fmt.Sprintf("%d", yamlCfg.Proxy.RequestTimeout))
-				}
-				if yamlCfg.Proxy.MaxRetries > 0 {
-					db.SetSetting("max_retries", fmt.Sprintf("%d", yamlCfg.Proxy.MaxRetries))
-				}
-				// Reload accounts
-				accounts, _ = db.ListAccounts()
-			} else {
-				slog.Warn("failed to parse seed config", "error", err)
-			}
-		}
 	}
 
 	// Decrypt API keys before passing to pool
@@ -160,15 +135,17 @@ func New(cfg Config) (*Server, error) {
 		fallbackEnabled, _ := db.GetSetting("fallback_enabled")
 		if fallbackEnabled == "true" {
 			fallbackURL, _ := db.GetSetting("fallback_url")
-			fallbackModel, _ := db.GetSetting("fallback_model")
+			chatModel, _ := db.GetSetting("fallback_chat_model")
+			embeddingModel, _ := db.GetSetting("fallback_embedding_model")
 			fallbackTimeout, _ := db.GetSetting("fallback_timeout")
 			t := 30
 			fmt.Sscanf(fallbackTimeout, "%d", &t)
 			proxyHandler.SetFallback(proxy.FallbackConfig{
-				Enabled: true,
-				BaseURL: fallbackURL,
-				Model:   fallbackModel,
-				Timeout: time.Duration(t) * time.Second,
+				Enabled:        true,
+				BaseURL:        fallbackURL,
+				ChatModel:      chatModel,
+				EmbeddingModel: embeddingModel,
+				Timeout:        time.Duration(t) * time.Second,
 			})
 		} else {
 			proxyHandler.SetFallback(proxy.FallbackConfig{Enabled: false})
@@ -181,9 +158,11 @@ func New(cfg Config) (*Server, error) {
 
 	notifyStop := make(chan struct{})
 	mux := http.NewServeMux()
+	adminMux := http.NewServeMux()
 	s := &Server{
 		cfg:           cfg,
 		mux:           mux,
+		adminMux:      adminMux,
 		db:            db,
 		pool:          pool,
 		proxy:         proxyHandler,
@@ -197,88 +176,88 @@ func New(cfg Config) (*Server, error) {
 			Addr:    fmt.Sprintf(":%d", cfg.Port),
 			Handler: mux,
 		},
+		adminHttp: &http.Server{
+			Addr:    fmt.Sprintf(":%d", cfg.AdminPort),
+			Handler: adminMux,
+		},
 	}
 
-	s.routes()
+	s.proxyRoutes()
+	s.adminRoutes()
 	return s, nil
 }
 
-func (s *Server) routes() {
-	// Proxy endpoints (with optional API key gate)
+func (s *Server) proxyRoutes() {
 	proxyAuth := proxy.ProxyAuthMiddleware(s.db)
 	s.mux.Handle("POST /v1/chat/completions", proxyAuth(http.HandlerFunc(s.proxy.HandleChatCompletions)))
 	s.mux.Handle("POST /v1/messages", proxyAuth(http.HandlerFunc(s.proxy.HandleAnthropicMessages)))
 	s.mux.Handle("POST /v1/embeddings", proxyAuth(http.HandlerFunc(s.proxy.HandleEmbeddings)))
 	s.mux.Handle("GET /v1/models", proxyAuth(http.HandlerFunc(s.proxy.HandleListModels)))
 
-	// Health
 	s.mux.HandleFunc("GET /health", s.handleHealth)
-	// Redirect /admin (no trailing slash) to /admin/
-	s.mux.HandleFunc("GET /admin", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
-	})
 	s.mux.HandleFunc("/", s.handleRoot)
+}
 
-	// Admin auth (no session required)
-	s.mux.HandleFunc("POST /admin/api/auth/login", s.auth.HandleLogin)
-	s.mux.HandleFunc("POST /admin/api/auth/logout", s.auth.HandleLogout)
+func (s *Server) adminRoutes() {
+	m := s.adminMux
+
+	// Auth (no session required)
+	m.HandleFunc("POST /api/auth/login", s.auth.HandleLogin)
+	m.HandleFunc("POST /api/auth/logout", s.auth.HandleLogout)
 
 	// Admin API (session required)
 	protected := func(handler http.HandlerFunc) http.Handler {
 		return s.auth.RequireAuth(handler)
 	}
 
-	s.mux.Handle("GET /admin/api/accounts", protected(s.admin.HandleListAccounts))
-	s.mux.Handle("PATCH /admin/api/accounts/bulk", protected(s.admin.HandleBulkUpdateAccounts))
-	s.mux.Handle("POST /admin/api/accounts", protected(s.admin.HandleCreateAccount))
-	s.mux.Handle("PUT /admin/api/accounts/{id}", protected(s.admin.HandleUpdateAccount))
-	s.mux.Handle("DELETE /admin/api/accounts/{id}", protected(s.admin.HandleDeleteAccount))
-	s.mux.Handle("POST /admin/api/accounts/{id}/test", protected(s.admin.HandleTestAccount))
+	m.Handle("GET /api/accounts", protected(s.admin.HandleListAccounts))
+	m.Handle("PATCH /api/accounts/bulk", protected(s.admin.HandleBulkUpdateAccounts))
+	m.Handle("POST /api/accounts", protected(s.admin.HandleCreateAccount))
+	m.Handle("PUT /api/accounts/{id}", protected(s.admin.HandleUpdateAccount))
+	m.Handle("DELETE /api/accounts/{id}", protected(s.admin.HandleDeleteAccount))
+	m.Handle("POST /api/accounts/{id}/test", protected(s.admin.HandleTestAccount))
 
-	s.mux.Handle("GET /admin/api/stats/overview", protected(s.admin.HandleStatsOverview))
-	s.mux.Handle("GET /admin/api/stats/requests", protected(s.admin.HandleStatsRequests))
-	s.mux.Handle("GET /admin/api/stats/accounts", protected(s.admin.HandleStatsAccounts))
-	s.mux.Handle("GET /admin/api/stats/providers", protected(s.admin.HandleStatsProviders))
-	s.mux.Handle("GET /admin/api/stats/models", protected(s.admin.HandleStatsModels))
+	m.Handle("GET /api/stats/overview", protected(s.admin.HandleStatsOverview))
+	m.Handle("GET /api/stats/requests", protected(s.admin.HandleStatsRequests))
+	m.Handle("GET /api/stats/accounts", protected(s.admin.HandleStatsAccounts))
+	m.Handle("GET /api/stats/providers", protected(s.admin.HandleStatsProviders))
+	m.Handle("GET /api/stats/models", protected(s.admin.HandleStatsModels))
 
-	s.mux.Handle("GET /admin/api/settings", protected(s.admin.HandleGetSettings))
-	s.mux.Handle("PUT /admin/api/settings", protected(s.admin.HandleUpdateSettings))
+	m.Handle("GET /api/settings", protected(s.admin.HandleGetSettings))
+	m.Handle("PUT /api/settings", protected(s.admin.HandleUpdateSettings))
 
-	s.mux.Handle("POST /admin/api/config/import", protected(s.admin.HandleConfigImport))
-	s.mux.Handle("GET /admin/api/config/export", protected(s.admin.HandleConfigExport))
+	m.Handle("POST /api/config/import", protected(s.admin.HandleConfigImport))
+	m.Handle("GET /api/config/export", protected(s.admin.HandleConfigExport))
 
-	// Provider metric configuration (separate prefix to avoid wildcard conflicts)
-	s.mux.Handle("GET /admin/api/provider-metrics/{provider}", protected(s.admin.HandleGetProviderMetrics))
-	s.mux.Handle("PUT /admin/api/provider-metrics/{provider}", protected(s.admin.HandleSetProviderMetrics))
+	m.Handle("GET /api/provider-metrics/{provider}", protected(s.admin.HandleGetProviderMetrics))
+	m.Handle("PUT /api/provider-metrics/{provider}", protected(s.admin.HandleSetProviderMetrics))
 
-	// Rate limit definitions — more-specific sub-paths must be registered before
-	// /{provider} so the exact patterns win over the wildcard.
-	s.mux.Handle("GET /admin/api/ratelimits/{provider}/defaults", protected(s.admin.HandleGetDefaultLimits))
-	s.mux.Handle("GET /admin/api/ratelimits/{provider}", protected(s.admin.HandleListRateLimitDefs))
-	s.mux.Handle("PUT /admin/api/ratelimits", protected(s.admin.HandleSetRateLimitDef))
-	s.mux.Handle("DELETE /admin/api/ratelimits/{id}", protected(s.admin.HandleDeleteRateLimitDef))
+	m.Handle("GET /api/ratelimits/{provider}/defaults", protected(s.admin.HandleGetDefaultLimits))
+	m.Handle("GET /api/ratelimits/{provider}", protected(s.admin.HandleListRateLimitDefs))
+	m.Handle("PUT /api/ratelimits", protected(s.admin.HandleSetRateLimitDef))
+	m.Handle("DELETE /api/ratelimits/{id}", protected(s.admin.HandleDeleteRateLimitDef))
 
-	// Account model discovery
-	s.mux.Handle("POST /admin/api/accounts/discover", protected(s.admin.HandleDiscoverModels))
-	s.mux.Handle("POST /admin/api/accounts/{id}/discover", protected(s.admin.HandleDiscoverByAccount))
+	m.Handle("POST /api/accounts/discover", protected(s.admin.HandleDiscoverModels))
+	m.Handle("POST /api/accounts/{id}/discover", protected(s.admin.HandleDiscoverByAccount))
 
-	// Notifications
-	s.mux.Handle("POST /admin/api/notifications/test", protected(s.admin.HandleTestNotification))
+	m.Handle("POST /api/notifications/test", protected(s.admin.HandleTestNotification))
+
+	m.Handle("POST /api/ollama/discover", protected(s.admin.HandleDiscoverOllama))
 
 	// Admin UI: dev proxy or embedded SPA
 	if s.cfg.Dev && s.cfg.UIProxy != "" {
 		target, _ := url.Parse(s.cfg.UIProxy)
-		s.mux.Handle("/admin/", httputil.NewSingleHostReverseProxy(target))
+		m.Handle("/", httputil.NewSingleHostReverseProxy(target))
 	} else {
 		subFS, err := fs.Sub(llmproxy.WebAssets, "web/dist")
 		if err != nil {
 			slog.Error("failed to sub web assets FS", "error", err)
 		} else {
 			fileServer := http.FileServer(http.FS(subFS))
-			s.mux.Handle("/admin/", http.StripPrefix("/admin", &spaHandler{
+			m.Handle("/", &spaHandler{
 				fileServer: fileServer,
 				root:       subFS,
-			}))
+			})
 		}
 	}
 }
@@ -339,16 +318,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"service": "llm-proxy",
-		"version": s.cfg.Version,
-		"admin":   "/admin/",
+	json.NewEncoder(w).Encode(map[string]any{
+		"service":    "llm-proxy",
+		"version":    s.cfg.Version,
+		"admin_port": s.cfg.AdminPort,
 	})
 }
 
-// Handler returns the HTTP handler for the server (used in tests).
-func (s *Server) Handler() http.Handler {
+// ProxyHandler returns the proxy HTTP handler (used in tests).
+func (s *Server) ProxyHandler() http.Handler {
 	return s.mux
+}
+
+// AdminHandler returns the admin HTTP handler (used in tests).
+func (s *Server) AdminHandler() http.Handler {
+	return s.adminMux
 }
 
 // StartBackgroundWorkers launches the async log writer, rate limit writer, and
@@ -365,19 +349,37 @@ func (s *Server) Start() error {
 	s.StartBackgroundWorkers()
 
 	slog.Info("server started",
-		"port", s.cfg.Port,
+		"proxy_port", s.cfg.Port,
+		"admin_port", s.cfg.AdminPort,
 		"accounts", len(s.pool.Accounts()),
 		"version", s.cfg.Version,
 	)
-	return s.http.ListenAndServe()
+
+	errCh := make(chan error, 2)
+	go func() {
+		if err := s.adminHttp.ListenAndServe(); err != nil {
+			errCh <- fmt.Errorf("admin server: %w", err)
+		}
+	}()
+	go func() {
+		if err := s.http.ListenAndServe(); err != nil {
+			errCh <- fmt.Errorf("proxy server: %w", err)
+		}
+	}()
+
+	// First error (bind failure or shutdown) surfaces to caller.
+	return <-errCh
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	// Drain active requests before closing channels to avoid send-on-closed-channel panic.
+	_ = s.adminHttp.Shutdown(ctx)
+	_ = s.http.Shutdown(ctx)
 	close(s.notifyStop)
 	close(s.logChan)
 	close(s.rateLimitChan)
 	s.db.Close()
-	return s.http.Shutdown(ctx)
+	return nil
 }
 
 func (s *Server) logWriter() {

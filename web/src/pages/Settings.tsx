@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api'
+import { api, type OllamaModel } from '../lib/api'
 import { ToggleSwitch } from '../components/ui/ToggleSwitch'
 import { Select } from '../components/ui/Select'
+import { Button } from '../components/ui/Button'
 import { DATE_FORMAT_PRESETS, DEFAULT_FORMAT } from '../lib/dateformat'
 
 interface SaveStatus {
@@ -61,7 +62,7 @@ function SaveButton({ saving, status }: { saving: boolean; status: SaveStatus | 
 
 function GeneralSettings({ settings }: { settings: Record<string, string> }) {
   const [timeout, setTimeout] = useState(settings.request_timeout ?? '30')
-  const [retries, setRetries] = useState(settings.max_retries ?? '3')
+  const [retries, setRetries] = useState(settings.max_retries ?? '12')
   const [retention, setRetention] = useState(settings.log_retention_days ?? '30')
   const [dateFormat, setDateFormat] = useState(settings.datetime_format ?? DEFAULT_FORMAT)
   const [saving, setSaving] = useState(false)
@@ -110,8 +111,8 @@ function GeneralSettings({ settings }: { settings: Record<string, string> }) {
           <input
             type="number"
             className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
-            min={0}
-            max={10}
+            min={1}
+            max={50}
             value={retries}
             onChange={(e) => setRetries(e.target.value)}
           />
@@ -228,10 +229,27 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
 function OllamaSettings({ settings }: { settings: Record<string, string> }) {
   const [enabled, setEnabled] = useState(settings.fallback_enabled === 'true')
   const [url, setUrl] = useState(settings.fallback_url ?? 'http://localhost:11434')
-  const [model, setModel] = useState(settings.fallback_model ?? '')
+  const [chatModel, setChatModel] = useState(settings.fallback_chat_model ?? '')
+  const [embeddingModel, setEmbeddingModel] = useState(settings.fallback_embedding_model ?? '')
   const [timeout, setTimeout] = useState(settings.fallback_timeout ?? '60')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<SaveStatus | null>(null)
+  const [models, setModels] = useState<OllamaModel[]>([])
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState('')
+
+  async function fetchModels() {
+    setFetching(true)
+    setFetchError('')
+    try {
+      const result = await api.ollama.discover(url)
+      setModels(result)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to fetch models')
+    } finally {
+      setFetching(false)
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -241,7 +259,8 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
       await api.settings.update({
         fallback_enabled: enabled ? 'true' : 'false',
         fallback_url: url,
-        fallback_model: model,
+        fallback_chat_model: chatModel,
+        fallback_embedding_model: embeddingModel,
         fallback_timeout: timeout,
       })
       setStatus({ ok: true, msg: 'Saved.' })
@@ -251,6 +270,18 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
       setSaving(false)
     }
   }
+
+  const inputClass = 'bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full'
+
+  // Classify fetched models into likely embedding vs chat
+  const embeddingFamilies = ['bert', 'nomic-bert', 'nomic']
+  const embeddingKeywords = ['embed', 'bge', 'gte', 'e5', 'nomic']
+  const isLikelyEmbedding = (m: OllamaModel) =>
+    embeddingFamilies.includes(m.family.toLowerCase()) ||
+    embeddingKeywords.some((k) => m.name.toLowerCase().includes(k))
+
+  const chatModels = models.filter((m) => !isLikelyEmbedding(m))
+  const embeddingModels = models.filter((m) => isLikelyEmbedding(m))
 
   return (
     <Section title="Ollama Fallback">
@@ -271,26 +302,82 @@ function OllamaSettings({ settings }: { settings: Record<string, string> }) {
         {enabled && (
           <>
             <Field label="Ollama URL" hint="Base URL of your Ollama instance.">
-              <input
-                type="url"
-                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="http://localhost:11434"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  className={inputClass}
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="http://localhost:11434"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={fetchModels}
+                  disabled={fetching || !url}
+                  className="shrink-0"
+                >
+                  {fetching ? 'Fetching...' : 'Fetch Models'}
+                </Button>
+              </div>
+              {fetchError && (
+                <p className="text-xs text-red-400 mt-1">{fetchError}</p>
+              )}
+              {models.length > 0 && (
+                <p className="text-xs text-text-secondary mt-1">
+                  Found {models.length} model{models.length !== 1 ? 's' : ''}
+                </p>
+              )}
             </Field>
-            <Field label="Fallback Model" hint="Model to use when falling back to Ollama.">
-              <input
-                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent font-mono w-full"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="llama3.2"
-              />
+
+            <Field label="Chat Model" hint="Model for chat completions fallback.">
+              {models.length > 0 ? (
+                <Select
+                  value={chatModel}
+                  onChange={setChatModel}
+                  placeholder="Select chat model..."
+                  options={[
+                    { value: '', label: 'None (disabled)' },
+                    ...chatModels.map((m) => ({ value: m.name, label: m.name })),
+                    ...embeddingModels.map((m) => ({ value: m.name, label: `${m.name} (embedding)` })),
+                  ]}
+                />
+              ) : (
+                <input
+                  className={inputClass + ' font-mono'}
+                  value={chatModel}
+                  onChange={(e) => setChatModel(e.target.value)}
+                  placeholder="llama3.2"
+                />
+              )}
             </Field>
+
+            <Field label="Embedding Model" hint="Model for embeddings fallback. Leave empty to disable.">
+              {models.length > 0 ? (
+                <Select
+                  value={embeddingModel}
+                  onChange={setEmbeddingModel}
+                  placeholder="Select embedding model..."
+                  options={[
+                    { value: '', label: 'None (disabled)' },
+                    ...embeddingModels.map((m) => ({ value: m.name, label: m.name })),
+                    ...chatModels.map((m) => ({ value: m.name, label: `${m.name} (chat)` })),
+                  ]}
+                />
+              ) : (
+                <input
+                  className={inputClass + ' font-mono'}
+                  value={embeddingModel}
+                  onChange={(e) => setEmbeddingModel(e.target.value)}
+                  placeholder="nomic-embed-text"
+                />
+              )}
+            </Field>
+
             <Field label="Timeout (seconds)" hint="Request timeout for Ollama calls.">
               <input
                 type="number"
-                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
+                className={inputClass}
                 min={1}
                 max={600}
                 value={timeout}
@@ -389,7 +476,11 @@ function NotificationSettings({ settings }: { settings: Record<string, string> }
   const [alerts, setAlerts] = useState<AlertConfig>(() => {
     try {
       const parsed = JSON.parse(settings.notification_alerts ?? '{}')
-      return { ...DEFAULT_ALERTS, ...parsed }
+      const merged = { ...DEFAULT_ALERTS }
+      for (const key of Object.keys(DEFAULT_ALERTS) as (keyof AlertConfig)[]) {
+        if (parsed[key]) merged[key] = { ...DEFAULT_ALERTS[key], ...parsed[key] }
+      }
+      return merged
     } catch {
       return DEFAULT_ALERTS
     }

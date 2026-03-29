@@ -15,7 +15,8 @@ proxy:
 fallback:
   enabled: true
   base_url: http://localhost:11434/v1
-  model: llama3.1:8b
+  chat_model: llama3.1:8b
+  embedding_model: nomic-embed-text
   timeout: 30
 
 accounts:
@@ -71,10 +72,11 @@ func TestExportYAML(t *testing.T) {
 	settings := map[string]string{
 		"request_timeout":  "15",
 		"max_retries":      "3",
-		"fallback_enabled": "true",
-		"fallback_url":     "http://localhost:11434/v1",
-		"fallback_model":   "llama3.1:8b",
-		"fallback_timeout": "30",
+		"fallback_enabled":         "true",
+		"fallback_url":             "http://localhost:11434/v1",
+		"fallback_chat_model":      "llama3.1:8b",
+		"fallback_embedding_model": "nomic-embed-text",
+		"fallback_timeout":         "30",
 	}
 
 	data, err := ExportYAML(accounts, settings)

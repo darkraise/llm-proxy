@@ -64,10 +64,6 @@ func (p *Pool) SelectExcluding(model string, category string, maxRetries int, sk
 	return p.selectByModelExcluding(model, maxRetries, skipProviders)
 }
 
-func (p *Pool) selectAuto(category string, maxRetries int) (*AccountInfo, error) {
-	return p.selectAutoExcluding(category, maxRetries, nil)
-}
-
 func (p *Pool) selectAutoExcluding(category string, maxRetries int, skipProviders map[string]bool) (*AccountInfo, error) {
 	n := len(p.accounts)
 	for i := 0; i < min(maxRetries, n); i++ {
@@ -97,10 +93,6 @@ func (p *Pool) selectAutoExcluding(category string, maxRetries int, skipProvider
 		}
 	}
 	return nil, fmt.Errorf("all accounts exhausted")
-}
-
-func (p *Pool) selectByModel(model string, maxRetries int) (*AccountInfo, error) {
-	return p.selectByModelExcluding(model, maxRetries, nil)
 }
 
 func (p *Pool) selectByModelExcluding(model string, maxRetries int, skipProviders map[string]bool) (*AccountInfo, error) {

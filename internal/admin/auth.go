@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -51,7 +52,7 @@ func (a *Auth) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    token,
-		Path:     "/admin",
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteStrictMode,
@@ -73,7 +74,7 @@ func (a *Auth) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    "",
-		Path:     "/admin",
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   r.TLS != nil,
 		MaxAge:   -1,
@@ -98,6 +99,8 @@ func (a *Auth) ValidateSession(r *http.Request) bool {
 
 func generateToken() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }

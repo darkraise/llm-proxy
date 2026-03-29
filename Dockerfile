@@ -19,6 +19,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}
 # Stage 3: Final image
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /llm-proxy /llm-proxy
-EXPOSE 4000
+EXPOSE 4000 4001
 VOLUME /data
 ENTRYPOINT ["/llm-proxy"]

@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Box } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
+import { Logo } from '../components/ui/Logo'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -32,9 +32,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-linear-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center">
-            <Box size={20} className="text-white" />
-          </div>
+          <Logo size={40} className="text-amber-500" />
           <div>
             <h1 className="text-xl font-semibold text-text-primary">LLM Proxy</h1>
             <p className="text-sm text-text-secondary">Admin Dashboard</p>

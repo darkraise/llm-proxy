@@ -20,11 +20,11 @@ var (
 )
 
 func main() {
-	port := flag.Int("port", 4000, "server port")
+	port := flag.Int("port", 4000, "proxy API port")
+	adminPort := flag.Int("admin-port", 4001, "admin UI and API port")
 	dataDir := flag.String("data", "/data", "data directory for SQLite DB")
 	dev := flag.Bool("dev", false, "development mode")
 	uiProxy := flag.String("ui-proxy", "", "proxy UI requests to this URL (dev mode)")
-	seedConfig := flag.String("seed", "/app/seed.yml", "path to seed YAML config")
 	healthcheck := flag.Bool("healthcheck", false, "run healthcheck and exit")
 	hashPassword := flag.String("hash-password", "", "hash a password and print to stdout, then exit")
 	flag.Parse()
@@ -51,12 +51,12 @@ func main() {
 	slog.SetDefault(logger)
 
 	cfg := server.Config{
-		Port:       *port,
-		DataDir:    *dataDir,
-		Dev:        *dev,
-		UIProxy:    *uiProxy,
-		SeedConfig: *seedConfig,
-		Version:    version,
+		Port:      *port,
+		AdminPort: *adminPort,
+		DataDir:   *dataDir,
+		Dev:       *dev,
+		UIProxy:   *uiProxy,
+		Version:   version,
 	}
 
 	srv, err := server.New(cfg)
@@ -69,8 +69,12 @@ func main() {
 	defer stop()
 
 	go func() {
-		slog.Info("server starting", "port", cfg.Port, "version", version)
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
+		slog.Info("server starting", "proxy_port", cfg.Port, "admin_port", cfg.AdminPort, "version", version)
+		if err := srv.Start(); err != nil {
+			// ErrServerClosed is expected during graceful shutdown.
+			if ctx.Err() != nil {
+				return
+			}
 			slog.Error("server error", "error", err)
 			os.Exit(1)
 		}

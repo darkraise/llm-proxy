@@ -4,6 +4,7 @@ set -euo pipefail
 DATA_DIR="./data"
 BACKEND_PORT=4000
 FRONTEND_PORT=5173
+ADMIN_PASSWORD_HASH="$2a$12$5R5OvxGOxQ6A9o4uX08gluA6otEW74IVMlSuBr77scKqBohbfkgS6"
 
 mkdir -p "$DATA_DIR"
 
@@ -20,6 +21,7 @@ VITE_PID=$!
 go run ./cmd/llm-proxy \
   -port "$BACKEND_PORT" \
   -data "$DATA_DIR" \
+  -admin-password-hash "$ADMIN_PASSWORD_HASH" \
   -dev \
   -ui-proxy "http://localhost:$FRONTEND_PORT" &
 GO_PID=$!

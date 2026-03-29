@@ -19,10 +19,11 @@ type ProxyConfig struct {
 }
 
 type FallbackConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	BaseURL string `yaml:"base_url"`
-	Model   string `yaml:"model"`
-	Timeout int    `yaml:"timeout"`
+	Enabled        bool   `yaml:"enabled"`
+	BaseURL        string `yaml:"base_url"`
+	ChatModel      string `yaml:"chat_model"`
+	EmbeddingModel string `yaml:"embedding_model,omitempty"`
+	Timeout        int    `yaml:"timeout"`
 }
 
 type AccountYAML struct {
@@ -80,10 +81,11 @@ func ExportYAML(accounts []store.Account, settings map[string]string) ([]byte, e
 			MaxRetries:     atoi(settings["max_retries"], 3),
 		},
 		Fallback: FallbackConfig{
-			Enabled: settings["fallback_enabled"] == "true",
-			BaseURL: settings["fallback_url"],
-			Model:   settings["fallback_model"],
-			Timeout: atoi(settings["fallback_timeout"], 30),
+			Enabled:        settings["fallback_enabled"] == "true",
+			BaseURL:        settings["fallback_url"],
+			ChatModel:      settings["fallback_chat_model"],
+			EmbeddingModel: settings["fallback_embedding_model"],
+			Timeout:        atoi(settings["fallback_timeout"], 30),
 		},
 	}
 

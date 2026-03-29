@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <!-- Top input arc -->
+  <path
+    d="M24 48 Q88 48, 128 128"
+    stroke="#F59E0B" stroke-opacity="0.50" stroke-width="16" stroke-linecap="round" fill="none"
+  />
+
+  <!-- Middle input line -->
+  <path
+    d="M24 128 L128 128"
+    stroke="#F59E0B" stroke-opacity="0.65" stroke-width="16" stroke-linecap="round" fill="none"
+  />
+
+  <!-- Bottom input arc -->
+  <path
+    d="M24 208 Q88 208, 128 128"
+    stroke="#F59E0B" stroke-opacity="0.50" stroke-width="16" stroke-linecap="round" fill="none"
+  />
+
+  <!-- Center convergence node -->
+  <circle cx="128" cy="128" r="22" fill="#F59E0B"/>
+  <circle cx="128" cy="128" r="10" fill="white"/>
+
+  <!-- Output path -->
+  <path
+    d="M150 128 L224 128"
+    stroke="#F59E0B" stroke-width="18" stroke-linecap="round" fill="none"
+  />
+
+  <!-- Output terminal dot -->
+  <circle cx="224" cy="128" r="12" fill="#F59E0B"/>
+</svg>

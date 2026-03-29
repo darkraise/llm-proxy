@@ -55,9 +55,10 @@ func TestIntegration_FullFlow(t *testing.T) {
 
 	// 3. Create proxy server
 	cfg := server.Config{
-		Port:    0,
-		DataDir: dataDir,
-		Version: "test",
+		Port:      0,
+		AdminPort: 0,
+		DataDir:   dataDir,
+		Version:   "test",
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
@@ -68,9 +69,11 @@ func TestIntegration_FullFlow(t *testing.T) {
 	// Normally launched by srv.Start(); since we use httptest we do it here.
 	srv.StartBackgroundWorkers()
 
-	ts := httptest.NewServer(srv.Handler())
+	ts := httptest.NewServer(srv.ProxyHandler())
+	adminTS := httptest.NewServer(srv.AdminHandler())
 	t.Cleanup(func() {
 		ts.Close()
+		adminTS.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx) //nolint:errcheck
@@ -83,11 +86,12 @@ func TestIntegration_FullFlow(t *testing.T) {
 	}
 	client := &http.Client{Jar: jar}
 
-	base := ts.URL
+	proxyBase := ts.URL
+	adminBase := adminTS.URL
 
 	// ── a. Login ──────────────────────────────────────────────────────────────
 	t.Run("login", func(t *testing.T) {
-		resp := mustPost(t, client, base+"/admin/api/auth/login",
+		resp := mustPost(t, client, adminBase+"/api/auth/login",
 			`{"password":"test-password"}`)
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
@@ -107,7 +111,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 			"models":   map[string][]string{"chat": {"test-model"}},
 			"priority": 1,
 		})
-		resp := mustPost(t, client, base+"/admin/api/accounts", string(payload))
+		resp := mustPost(t, client, adminBase+"/api/accounts", string(payload))
 		defer resp.Body.Close()
 		if resp.StatusCode != 201 {
 			raw, _ := io.ReadAll(resp.Body)
@@ -124,7 +128,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 
 	// ── c. List accounts ──────────────────────────────────────────────────────
 	t.Run("list_accounts", func(t *testing.T) {
-		resp := mustGet(t, client, base+"/admin/api/accounts")
+		resp := mustGet(t, client, adminBase+"/api/accounts")
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("list accounts: got %d", resp.StatusCode)
@@ -148,7 +152,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 	// ── d. Chat completion (OpenAI) ───────────────────────────────────────────
 	t.Run("chat_completion", func(t *testing.T) {
 		body := `{"model":"test-model","messages":[{"role":"user","content":"Hello"}]}`
-		resp := mustPost(t, client, base+"/v1/chat/completions", body)
+		resp := mustPost(t, client, proxyBase+"/v1/chat/completions", body)
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			raw, _ := io.ReadAll(resp.Body)
@@ -170,7 +174,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 	// ── e. Anthropic messages ─────────────────────────────────────────────────
 	t.Run("anthropic_messages", func(t *testing.T) {
 		body := `{"model":"test-model","max_tokens":100,"messages":[{"role":"user","content":"Hello"}]}`
-		resp := mustPost(t, client, base+"/v1/messages", body)
+		resp := mustPost(t, client, proxyBase+"/v1/messages", body)
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			raw, _ := io.ReadAll(resp.Body)
@@ -199,7 +203,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 		// The log writer batches on a 1-second ticker; wait for a full flush cycle.
 		time.Sleep(1500 * time.Millisecond)
 
-		resp := mustGet(t, client, base+"/admin/api/stats/overview")
+		resp := mustGet(t, client, adminBase+"/api/stats/overview")
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("stats overview: got %d", resp.StatusCode)
@@ -214,7 +218,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 
 	// ── g. Health ─────────────────────────────────────────────────────────────
 	t.Run("health", func(t *testing.T) {
-		resp := mustGet(t, client, base+"/health")
+		resp := mustGet(t, client, proxyBase+"/health")
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("health: got %d", resp.StatusCode)
@@ -229,7 +233,7 @@ func TestIntegration_FullFlow(t *testing.T) {
 
 	// ── h. List models ────────────────────────────────────────────────────────
 	t.Run("list_models", func(t *testing.T) {
-		resp := mustGet(t, client, base+"/v1/models")
+		resp := mustGet(t, client, proxyBase+"/v1/models")
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("list models: got %d", resp.StatusCode)

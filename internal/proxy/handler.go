@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/darkraise/llm-proxy/internal/adapter"
@@ -32,19 +33,24 @@ type Handler struct {
 	pool          *provider.Pool
 	db            *store.DB
 	logFunc       LogFunc
-	client        *http.Client
-	maxRetries    int
-	timeout       time.Duration
-	fallback      *FallbackConfig
 	rateLimitChan chan RateLimitUpdate
 	notifier      *notify.Notifier
+
+	// configMu protects fields below — written by SetConfig/SetFallback,
+	// read by concurrent request goroutines.
+	configMu   sync.RWMutex
+	client     *http.Client
+	maxRetries int
+	timeout    time.Duration
+	fallback   *FallbackConfig
 }
 
 type FallbackConfig struct {
-	Enabled bool
-	BaseURL string
-	Model   string
-	Timeout time.Duration
+	Enabled        bool
+	BaseURL        string
+	ChatModel      string
+	EmbeddingModel string
+	Timeout        time.Duration
 }
 
 func NewHandler(pool *provider.Pool, db *store.DB, logFunc LogFunc) *Handler {
@@ -65,17 +71,34 @@ func (h *Handler) SetRateLimitChan(ch chan RateLimitUpdate) {
 }
 
 func (h *Handler) SetFallback(cfg FallbackConfig) {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	h.fallback = &cfg
 }
 
 func (h *Handler) SetConfig(maxRetries int, timeout time.Duration) {
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 	h.maxRetries = maxRetries
 	h.timeout = timeout
-	h.client.Timeout = timeout
+	h.client = &http.Client{Timeout: timeout}
 }
 
 func (h *Handler) SetNotifier(n *notify.Notifier) {
 	h.notifier = n
+}
+
+// config returns a snapshot of the current config, safe for use in a request.
+func (h *Handler) config() (int, time.Duration, *http.Client, *FallbackConfig) {
+	h.configMu.RLock()
+	defer h.configMu.RUnlock()
+	return h.maxRetries, h.timeout, h.client, h.fallback
+}
+
+func (h *Handler) httpClient() *http.Client {
+	h.configMu.RLock()
+	defer h.configMu.RUnlock()
+	return h.client
 }
 
 func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +222,8 @@ func (h *Handler) HandleEmbeddings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, store.RequestLog) {
+	maxRetries, timeout, _, fallback := h.config()
+
 	logEntry := store.RequestLog{
 		Model:  req.Model,
 		Status: "error",
@@ -207,8 +232,8 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 	providerFailures := make(map[string]int)
 	skipProviders := make(map[string]bool)
 
-	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.SelectExcluding(req.Model, store.CategoryEmbedding, h.maxRetries, skipProviders)
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		prov, err := h.pool.SelectExcluding(req.Model, store.CategoryEmbedding, maxRetries, skipProviders)
 		if err != nil {
 			break
 		}
@@ -233,7 +258,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		logEntry.LatencyMs = int(latency.Milliseconds())
 		logEntry.StatusCode = statusCode
 
-		isTimeout := err != nil && (latency >= h.timeout || isTimeoutError(err))
+		isTimeout := err != nil && (latency >= timeout || isTimeoutError(err))
 
 		if err != nil {
 			slog.Warn("embedding provider error", "provider", prov.Name, "type", prov.Type, "error", err)
@@ -297,6 +322,39 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		return resp, logEntry
 	}
 
+	// All providers exhausted — try Ollama fallback for embeddings
+	if fallback != nil && fallback.Enabled && fallback.EmbeddingModel != "" {
+		slog.Warn("all embedding providers exhausted, trying Ollama fallback")
+		fallbackClient := &http.Client{Timeout: fallback.Timeout}
+		req.Model = fallback.EmbeddingModel
+
+		data, _ := json.Marshal(req)
+		fallbackURL := strings.TrimRight(fallback.BaseURL, "/")
+		if !strings.HasSuffix(fallbackURL, "/v1") {
+			fallbackURL += "/v1"
+		}
+		httpReq, err := http.NewRequest("POST", fallbackURL+"/embeddings", bytes.NewReader(data))
+		if err == nil {
+			httpReq.Header.Set("Content-Type", "application/json")
+			resp, err := fallbackClient.Do(httpReq)
+			if err == nil {
+				defer resp.Body.Close()
+				body, _ := io.ReadAll(resp.Body)
+				if resp.StatusCode == 200 {
+					var parsed adapter.EmbeddingResponse
+					if err := json.Unmarshal(body, &parsed); err == nil {
+						logEntry.Status = "success"
+						logEntry.AccountName = "ollama-fallback"
+						logEntry.Model = fallback.EmbeddingModel
+						logEntry.PromptTokens = parsed.Usage.PromptTokens
+						return &parsed, logEntry
+					}
+				}
+			}
+		}
+		slog.Error("Ollama embedding fallback also failed")
+	}
+
 	if h.notifier != nil {
 		h.notifier.Alert(notify.NewProvidersExhaustedAlert(req.Model))
 	}
@@ -319,7 +377,7 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
 
-	resp, err := h.client.Do(httpReq)
+	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -353,7 +411,7 @@ func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.Em
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
 
-	resp, err := h.client.Do(httpReq)
+	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -375,6 +433,8 @@ func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.Em
 // ─── Chat Completions ────────────────────────────────────────────────────────
 
 func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, category string) (*adapter.ChatCompletionResponse, store.RequestLog) {
+	maxRetries, timeout, _, fallback := h.config()
+
 	logEntry := store.RequestLog{
 		Model:  req.Model,
 		Status: "error",
@@ -386,8 +446,8 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 	providerFailures := make(map[string]int)
 	skipProviders := make(map[string]bool)
 
-	for attempt := 0; attempt < h.maxRetries; attempt++ {
-		prov, err := h.pool.SelectExcluding(req.Model, category, h.maxRetries, skipProviders)
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		prov, err := h.pool.SelectExcluding(req.Model, category, maxRetries, skipProviders)
 		if err != nil {
 			break
 		}
@@ -413,7 +473,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		logEntry.LatencyMs = int(latency.Milliseconds())
 		logEntry.StatusCode = statusCode
 
-		isTimeout := err != nil && (latency >= h.timeout || isTimeoutError(err))
+		isTimeout := err != nil && (latency >= timeout || isTimeoutError(err))
 
 		if err != nil {
 			slog.Warn("provider error", "provider", prov.Name, "type", prov.Type, "error", err)
@@ -511,14 +571,14 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 	}
 
 	// All cloud providers exhausted — try Ollama fallback
-	if h.fallback != nil && h.fallback.Enabled {
+	if fallback != nil && fallback.Enabled && fallback.ChatModel != "" {
 		slog.Warn("all cloud providers exhausted, trying Ollama fallback")
-		fallbackClient := &http.Client{Timeout: h.fallback.Timeout}
-		req.Model = h.fallback.Model
+		fallbackClient := &http.Client{Timeout: fallback.Timeout}
+		req.Model = fallback.ChatModel
 		req.Stream = false
 		data, _ := adapter.FormatOpenAIRequest(req)
 
-		fallbackURL := strings.TrimRight(h.fallback.BaseURL, "/")
+		fallbackURL := strings.TrimRight(fallback.BaseURL, "/")
 		if !strings.HasSuffix(fallbackURL, "/v1") {
 			fallbackURL += "/v1"
 		}
@@ -534,7 +594,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 					if err == nil {
 						logEntry.Status = "success"
 						logEntry.AccountName = "ollama-fallback"
-						logEntry.Model = h.fallback.Model
+						logEntry.Model = fallback.ChatModel
 						logEntry.PromptTokens = parsed.Usage.PromptTokens
 						logEntry.CompletionTokens = parsed.Usage.CompletionTokens
 						return &parsed, logEntry
@@ -568,7 +628,7 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
 
-	resp, err := h.client.Do(httpReq)
+	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, nil, err
 	}
@@ -600,7 +660,7 @@ func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatComplet
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := h.client.Do(httpReq)
+	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -700,7 +760,7 @@ func ProxyAuthMiddleware(db *store.DB) func(http.Handler) http.Handler {
 
 			expectedHash, _ := db.GetSetting("proxy_api_key_hash")
 			if expectedHash == "" {
-				next.ServeHTTP(w, r) // no key configured, allow through
+				writeError(w, 503, "proxy auth enabled but no API key configured")
 				return
 			}
 

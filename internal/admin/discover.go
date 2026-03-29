@@ -244,3 +244,74 @@ func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Re
 
 	writeJSON(w, 200, map[string]any{"models": models})
 }
+
+// HandleDiscoverOllama fetches models from an Ollama instance by URL.
+// No auth or account needed — used by the fallback settings UI.
+//
+// POST /api/ollama/discover
+func (h *AdminHandler) HandleDiscoverOllama(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+		writeJSON(w, 400, map[string]string{"error": "url is required"})
+		return
+	}
+
+	baseURL := strings.TrimRight(req.URL, "/")
+	// Ollama native API: GET /api/tags
+	fetchURL := strings.TrimSuffix(baseURL, "/v1") + "/api/tags"
+
+	client := &http.Client{Timeout: 7 * time.Second}
+	httpReq, err := http.NewRequestWithContext(r.Context(), "GET", fetchURL, nil)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "failed to build request"})
+		return
+	}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": "failed to reach Ollama: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("Ollama returned status %d", resp.StatusCode)})
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, 502, map[string]string{"error": "failed to read response"})
+		return
+	}
+
+	// Ollama /api/tags returns {"models": [{"name": "llama3.2:latest", ...}]}
+	var tagsResp struct {
+		Models []struct {
+			Name    string `json:"name"`
+			Details struct {
+				Family string `json:"family"`
+			} `json:"details"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(body, &tagsResp); err != nil || len(tagsResp.Models) == 0 {
+		writeJSON(w, 502, map[string]string{"error": "no models found"})
+		return
+	}
+
+	type ollamaModel struct {
+		Name   string `json:"name"`
+		Family string `json:"family"`
+	}
+	models := make([]ollamaModel, 0, len(tagsResp.Models))
+	for _, m := range tagsResp.Models {
+		models = append(models, ollamaModel{
+			Name:   m.Name,
+			Family: m.Details.Family,
+		})
+	}
+
+	writeJSON(w, 200, models)
+}

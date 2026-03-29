@@ -1,7 +1,7 @@
 // Typed API client for the LLM Proxy admin backend.
 // All requests include credentials (session cookie) and auto-redirect on 401.
 
-const BASE = '/admin/api'
+const BASE = '/api'
 
 export class ApiError extends Error {
   constructor(
@@ -38,7 +38,7 @@ async function request<T>(
   })
 
   if (res.status === 401) {
-    window.location.href = '/admin/login'
+    window.location.href = '/login'
     throw new ApiError(401, 'Unauthorized')
   }
 
@@ -169,6 +169,11 @@ export interface DiscoverModel {
 
 export interface DiscoverResult {
   models: DiscoverModel[]
+}
+
+export interface OllamaModel {
+  name: string
+  family: string
 }
 
 export interface RateLimitDef {
@@ -365,6 +370,11 @@ export const api = {
 
   notifications: {
     test: () => request<{ success: boolean; error?: string }>('POST', '/notifications/test'),
+  },
+
+  ollama: {
+    discover: (url: string) =>
+      request<OllamaModel[]>('POST', '/ollama/discover', { url }),
   },
 
   // ─── Config ──────────────────────────────────────────────────────────────

@@ -500,6 +500,14 @@ func (h *AdminHandler) HandleGetSettings(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, 200, safe)
 }
 
+var allowedSettings = map[string]bool{
+	"request_timeout": true, "max_retries": true, "log_retention_days": true,
+	"datetime_format": true, "proxy_auth_enabled": true, "proxy_api_key": true,
+	"fallback_enabled": true, "fallback_url": true, "fallback_chat_model": true,
+	"fallback_embedding_model": true, "fallback_timeout": true,
+	"notification_channels": true, "notification_alerts": true,
+}
+
 func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var settings map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
@@ -508,13 +516,12 @@ func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	for k, v := range settings {
-		switch k {
-		case "encryption_key_salt":
-			continue // block direct writes to internal keys
-		case "proxy_api_key":
+		if !allowedSettings[k] {
+			continue
+		}
+		if k == "proxy_api_key" {
 			// Hash the API key before storing
 			if v == "" {
-				// Clear proxy auth key
 				h.db.SetSetting("proxy_api_key_hash", "")
 			} else {
 				hash, err := crypto.HashPassword(v)

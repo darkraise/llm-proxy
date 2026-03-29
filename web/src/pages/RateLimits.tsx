@@ -167,19 +167,19 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
             return (
               <span
                 key={key}
-                className="inline-flex items-center gap-1 bg-surface border border-border rounded-full px-2.5 py-1 text-xs text-text-primary"
+                className="inline-flex items-center gap-1.5 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm font-medium text-text-primary"
               >
                 {def?.short ?? key}
                 <button
                   type="button"
-                  className="text-text-muted hover:text-error transition-colors"
+                  className="rounded-md p-0.5 -mr-1 text-text-muted hover:text-error hover:bg-error/10 transition-colors"
                   onClick={() => {
                     const next = providerMetrics.filter((m) => m !== key)
                     setProviderMetrics(next)
                     api.ratelimits.setMetrics(provider, next)
                   }}
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               </span>
             )
@@ -200,7 +200,7 @@ function ProviderTab({ provider, accounts }: ProviderTabProps) {
                   { value: '', label: '+ Add metric' },
                   ...available.map((m) => ({ value: m.key, label: m.short })),
                 ]}
-                className="text-xs h-7"
+                className="text-sm"
               />
             )
           })()}

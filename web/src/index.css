@@ -146,6 +146,7 @@
   --success: #52c41a;
   --warning: #faad14;
   --error: #f85149;
+  --logo-inner: #13131f;
 }
 
 [data-theme='light'] {
@@ -164,6 +165,7 @@
   --success: #16a34a;
   --warning: #d97706;
   --error: #dc2626;
+  --logo-inner: #ffffff;
 }
 
 @keyframes fade-in {
