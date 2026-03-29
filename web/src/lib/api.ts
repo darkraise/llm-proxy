@@ -249,10 +249,6 @@ export interface TestResult {
 
 export const api = {
   auth: {
-    setupStatus: () =>
-      request<{ setup_required: boolean }>('GET', '/auth/setup-status'),
-    setup: (password: string) =>
-      request<void>('POST', '/auth/setup', { password }),
     login: (password: string) =>
       request<void>('POST', '/auth/login', { password }),
     logout: () => request<void>('POST', '/auth/logout'),

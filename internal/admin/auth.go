@@ -4,13 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/darkraise/llm-proxy/internal/crypto"
-	"github.com/darkraise/llm-proxy/internal/store"
 )
 
 type session struct {
@@ -18,61 +16,16 @@ type session struct {
 }
 
 type Auth struct {
-	db       *store.DB
-	mu       sync.RWMutex
-	sessions map[string]session
+	passwordHash string
+	mu           sync.RWMutex
+	sessions     map[string]session
 }
 
-func NewAuth(db *store.DB) *Auth {
+func NewAuth(passwordHash string) *Auth {
 	return &Auth{
-		db:       db,
-		sessions: make(map[string]session),
+		passwordHash: passwordHash,
+		sessions:     make(map[string]session),
 	}
-}
-
-func (a *Auth) IsSetupRequired() bool {
-	hash, _ := a.db.GetSetting("admin_password_hash")
-	return hash == ""
-}
-
-func (a *Auth) HandleSetupStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"setup_required": a.IsSetupRequired()})
-}
-
-func (a *Auth) HandleSetup(w http.ResponseWriter, r *http.Request) {
-	if !a.IsSetupRequired() {
-		http.Error(w, `{"error":"setup already completed"}`, 400)
-		return
-	}
-
-	var req struct {
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid request"}`, 400)
-		return
-	}
-
-	if len(req.Password) < 8 {
-		http.Error(w, `{"error":"password must be at least 8 characters"}`, 400)
-		return
-	}
-
-	hash, err := crypto.HashPassword(req.Password)
-	if err != nil {
-		http.Error(w, `{"error":"failed to hash password"}`, 500)
-		return
-	}
-
-	if err := a.db.SetSetting("admin_password_hash", hash); err != nil {
-		http.Error(w, `{"error":"failed to save password"}`, 500)
-		return
-	}
-
-	slog.Info("initial admin password set via setup page")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (a *Auth) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +37,7 @@ func (a *Auth) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, _ := a.db.GetSetting("admin_password_hash")
-	if hash == "" || !crypto.VerifyPassword(hash, req.Password) {
+	if !crypto.VerifyPassword(a.passwordHash, req.Password) {
 		http.Error(w, `{"error":"invalid password"}`, 401)
 		return
 	}

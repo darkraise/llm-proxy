@@ -52,23 +52,24 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Initialize admin auth (password set via Setup page, stored as hash in DB)
-	auth := admin.NewAuth(db)
-
-	// Derive encryption key from admin password hash in DB.
-	// No password yet = no encryption (keys stored plaintext until setup).
-	var encryptionKey []byte
-	if passwordHash, _ := db.GetSetting("admin_password_hash"); passwordHash != "" {
-		saltHex, _ := db.GetSetting("encryption_key_salt")
-		var salt []byte
-		if saltHex == "" {
-			salt = cryptopkg.GenerateSalt()
-			db.SetSetting("encryption_key_salt", fmt.Sprintf("%x", salt))
-		} else {
-			fmt.Sscanf(saltHex, "%x", &salt)
-		}
-		encryptionKey = cryptopkg.DeriveKey(passwordHash, salt)
+	// Initialize admin auth from ADMIN_PASSWORD_HASH env var
+	adminPasswordHash := os.Getenv("ADMIN_PASSWORD_HASH")
+	if adminPasswordHash == "" {
+		slog.Error("ADMIN_PASSWORD_HASH environment variable is required")
+		os.Exit(1)
 	}
+	auth := admin.NewAuth(adminPasswordHash)
+
+	// Derive encryption key from password hash
+	saltHex, _ := db.GetSetting("encryption_key_salt")
+	var salt []byte
+	if saltHex == "" {
+		salt = cryptopkg.GenerateSalt()
+		db.SetSetting("encryption_key_salt", fmt.Sprintf("%x", salt))
+	} else {
+		fmt.Sscanf(saltHex, "%x", &salt)
+	}
+	encryptionKey := cryptopkg.DeriveKey(adminPasswordHash, salt)
 
 	// Load accounts from DB
 	accounts, err := db.ListAccounts()
@@ -219,8 +220,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/", s.handleRoot)
 
 	// Admin auth (no session required)
-	s.mux.HandleFunc("GET /admin/api/auth/setup-status", s.auth.HandleSetupStatus)
-	s.mux.HandleFunc("POST /admin/api/auth/setup", s.auth.HandleSetup)
 	s.mux.HandleFunc("POST /admin/api/auth/login", s.auth.HandleLogin)
 	s.mux.HandleFunc("POST /admin/api/auth/logout", s.auth.HandleLogout)
 

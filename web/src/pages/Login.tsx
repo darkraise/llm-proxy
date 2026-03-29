@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Box } from 'lucide-react'
 import { api, ApiError } from '../lib/api'
@@ -8,16 +8,6 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [checking, setChecking] = useState(true)
-
-  useEffect(() => {
-    api.auth.setupStatus()
-      .then((res) => { if (res.setup_required) navigate('/setup', { replace: true }) })
-      .catch(() => {})
-      .finally(() => setChecking(false))
-  }, [navigate])
-
-  if (checking) return null
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

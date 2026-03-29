@@ -8,6 +8,7 @@ services:
       - ./data:/data
       - ./config.yml:/app/seed.yml:ro
     environment:
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/llm-proxy", "--healthcheck"]

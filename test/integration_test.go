@@ -13,7 +13,6 @@ import (
 
 	cryptopkg "github.com/darkraise/llm-proxy/internal/crypto"
 	"github.com/darkraise/llm-proxy/internal/server"
-	"github.com/darkraise/llm-proxy/internal/store"
 )
 
 // mockOpenAIHandler returns a valid OpenAI chat completion response for any request.
@@ -45,28 +44,16 @@ func TestIntegration_FullFlow(t *testing.T) {
 	mockProvider := httptest.NewServer(http.HandlerFunc(mockOpenAIHandler))
 	defer mockProvider.Close()
 
-	// 2. Pre-seed DB with a password hash so the server can authenticate requests
-	//    without an encryption key — API keys are stored and used as plaintext,
-	//    which avoids the pool/decryption gap that exists when ADMIN_PASSWORD is set.
+	// 2. Set ADMIN_PASSWORD_HASH env var for the server
 	dataDir := t.TempDir()
-	dbPath := dataDir + "/llm-proxy.db"
 
-	seedDB, err := store.NewDB(dbPath)
-	if err != nil {
-		t.Fatalf("seed DB: %v", err)
-	}
 	hash, err := cryptopkg.HashPassword("test-password")
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
-	if err := seedDB.SetSetting("admin_password_hash", hash); err != nil {
-		t.Fatalf("set password hash: %v", err)
-	}
-	seedDB.Close()
+	t.Setenv("ADMIN_PASSWORD_HASH", hash)
 
-	// 3. Create proxy server. ADMIN_PASSWORD is not set so no encryption key is
-	//    derived; the server will see the pre-seeded password hash and skip
-	//    overwriting it (NewAuth only sets it when hash is empty).
+	// 3. Create proxy server
 	cfg := server.Config{
 		Port:    0,
 		DataDir: dataDir,

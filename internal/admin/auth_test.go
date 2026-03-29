@@ -23,19 +23,17 @@ func newTestStore(t *testing.T) *store.DB {
 	return db
 }
 
-func seedPassword(t *testing.T, db *store.DB, password string) {
+func hashPassword(t *testing.T, password string) string {
 	t.Helper()
 	hash, err := crypto.HashPassword(password)
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.SetSetting("admin_password_hash", hash)
+	return hash
 }
 
 func TestAuth_LoginLogout(t *testing.T) {
-	db := newTestStore(t)
-	seedPassword(t, db, "admin123")
-	auth := NewAuth(db)
+	auth := NewAuth(hashPassword(t, "admin123"))
 
 	// Login with correct password
 	body := `{"password":"admin123"}`
@@ -71,9 +69,7 @@ func TestAuth_LoginLogout(t *testing.T) {
 }
 
 func TestAuth_LoginWrongPassword(t *testing.T) {
-	db := newTestStore(t)
-	seedPassword(t, db, "admin123")
-	auth := NewAuth(db)
+	auth := NewAuth(hashPassword(t, "admin123"))
 
 	body := `{"password":"wrong"}`
 	req := httptest.NewRequest("POST", "/admin/api/auth/login", strings.NewReader(body))
@@ -86,8 +82,7 @@ func TestAuth_LoginWrongPassword(t *testing.T) {
 }
 
 func TestAuth_MiddlewareBlocksUnauthenticated(t *testing.T) {
-	db := newTestStore(t)
-	auth := NewAuth(db)
+	auth := NewAuth(hashPassword(t, "admin123"))
 
 	protected := auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -103,9 +98,7 @@ func TestAuth_MiddlewareBlocksUnauthenticated(t *testing.T) {
 }
 
 func TestAuth_MiddlewareAllowsAuthenticated(t *testing.T) {
-	db := newTestStore(t)
-	seedPassword(t, db, "admin123")
-	auth := NewAuth(db)
+	auth := NewAuth(hashPassword(t, "admin123"))
 
 	// Login first
 	loginBody := `{"password":"admin123"}`

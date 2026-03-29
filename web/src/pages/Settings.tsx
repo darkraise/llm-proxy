@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { api, ApiError } from '../lib/api'
+import { api } from '../lib/api'
 import { ToggleSwitch } from '../components/ui/ToggleSwitch'
 import { Select } from '../components/ui/Select'
 import { DATE_FORMAT_PRESETS, DEFAULT_FORMAT } from '../lib/dateformat'
@@ -155,12 +155,8 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
   const [proxyKey, setProxyKey] = useState('')
   const keyConfigured = settings.proxy_api_key_configured === 'true'
   const [showKey, setShowKey] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [saving, setSaving] = useState(false)
-  const [pwSaving, setPwSaving] = useState(false)
   const [status, setStatus] = useState<SaveStatus | null>(null)
-  const [pwStatus, setPwStatus] = useState<SaveStatus | null>(null)
 
   async function handleSaveAuth(e: FormEvent) {
     e.preventDefault()
@@ -181,111 +177,48 @@ function SecuritySettings({ settings }: { settings: Record<string, string> }) {
     }
   }
 
-  async function handleChangePassword(e: FormEvent) {
-    e.preventDefault()
-    if (newPassword !== confirmPassword) {
-      setPwStatus({ ok: false, msg: 'Passwords do not match.' })
-      return
-    }
-    if (newPassword.length < 8) {
-      setPwStatus({ ok: false, msg: 'Password must be at least 8 characters.' })
-      return
-    }
-    setPwSaving(true)
-    setPwStatus(null)
-    try {
-      await api.settings.update({ admin_password: newPassword })
-      setNewPassword('')
-      setConfirmPassword('')
-      setPwStatus({ ok: true, msg: 'Password changed. Please log in again.' })
-    } catch (err) {
-      const msg =
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to change password'
-      setPwStatus({ ok: false, msg })
-    } finally {
-      setPwSaving(false)
-    }
-  }
-
   return (
     <Section title="Security">
-      <div className="space-y-6">
-        {/* Proxy auth */}
-        <form onSubmit={handleSaveAuth} className="space-y-4">
-          <Field label="Proxy Authentication" hint="Require an API key for all proxied requests.">
-            <div className="mt-1">
-              <ToggleSwitch
-                checked={proxyAuth}
-                onChange={setProxyAuth}
-                label="Enable proxy auth"
+      <form onSubmit={handleSaveAuth} className="space-y-4">
+        <Field label="Proxy Authentication" hint="Require an API key for all proxied requests.">
+          <div className="mt-1">
+            <ToggleSwitch
+              checked={proxyAuth}
+              onChange={setProxyAuth}
+              label="Enable proxy auth"
+            />
+          </div>
+        </Field>
+
+        {proxyAuth && (
+          <Field
+            label="Proxy API Key"
+            hint={keyConfigured
+              ? 'A key is configured. Enter a new value to replace it, or leave blank to keep current.'
+              : 'Set an API key that clients must send as a Bearer token.'}
+          >
+            <div className="flex gap-2">
+              <input
+                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent font-mono flex-1"
+                type={showKey ? 'text' : 'password'}
+                value={proxyKey}
+                onChange={(e) => setProxyKey(e.target.value)}
+                placeholder={keyConfigured ? '••••••••  (blank = keep current)' : 'sk-proxy-...'}
+                autoComplete="off"
               />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-sm font-medium px-4 py-2"
+              >
+                {showKey ? 'Hide' : 'Show'}
+              </button>
             </div>
           </Field>
+        )}
 
-          {proxyAuth && (
-            <Field
-              label="Proxy API Key"
-              hint={keyConfigured
-                ? 'A key is configured. Enter a new value to replace it, or leave blank to keep current.'
-                : 'Set an API key that clients must send as a Bearer token.'}
-            >
-              <div className="flex gap-2">
-                <input
-                  className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent font-mono flex-1"
-                  type={showKey ? 'text' : 'password'}
-                  value={proxyKey}
-                  onChange={(e) => setProxyKey(e.target.value)}
-                  placeholder={keyConfigured ? '••••••••  (blank = keep current)' : 'sk-proxy-...'}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="bg-[rgba(255,255,255,0.05)] text-text-secondary hover:bg-[rgba(255,255,255,0.08)] rounded-lg text-sm font-medium px-4 py-2"
-                >
-                  {showKey ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </Field>
-          )}
-
-          <SaveButton saving={saving} status={status} />
-        </form>
-
-        {/* Change password */}
-        <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium text-text-primary mb-3">Change Admin Password</p>
-          <form onSubmit={handleChangePassword} className="space-y-3">
-            <Field label="New Password">
-              <input
-                type="password"
-                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                autoComplete="new-password"
-                placeholder="Minimum 8 characters"
-                required
-              />
-            </Field>
-            <Field label="Confirm Password">
-              <input
-                type="password"
-                className="bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:border-transparent w-full"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                autoComplete="new-password"
-                placeholder="Repeat password"
-                required
-              />
-            </Field>
-            <SaveButton saving={pwSaving} status={pwStatus} />
-          </form>
-        </div>
-      </div>
+        <SaveButton saving={saving} status={status} />
+      </form>
     </Section>
   )
 }

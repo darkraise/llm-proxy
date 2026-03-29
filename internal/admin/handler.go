@@ -487,7 +487,7 @@ func (h *AdminHandler) HandleGetSettings(w http.ResponseWriter, r *http.Request)
 	safe := make(map[string]string)
 	for k, v := range all {
 		switch k {
-		case "admin_password_hash", "encryption_key_salt", "proxy_api_key_hash":
+		case "encryption_key_salt", "proxy_api_key_hash":
 			continue
 		default:
 			safe[k] = v
@@ -509,20 +509,8 @@ func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 
 	for k, v := range settings {
 		switch k {
-		case "admin_password_hash", "encryption_key_salt":
-			continue // block direct writes to hashed keys
-		case "admin_password":
-			// Hash the password before storing
-			hash, err := crypto.HashPassword(v)
-			if err != nil {
-				writeJSON(w, 500, map[string]string{"error": "failed to hash password"})
-				return
-			}
-			if err := h.db.SetSetting("admin_password_hash", hash); err != nil {
-				writeJSON(w, 500, map[string]string{"error": err.Error()})
-				return
-			}
-			continue
+		case "encryption_key_salt":
+			continue // block direct writes to internal keys
 		case "proxy_api_key":
 			// Hash the API key before storing
 			if v == "" {

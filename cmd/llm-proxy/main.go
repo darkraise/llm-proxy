@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/darkraise/llm-proxy/internal/crypto"
 	"github.com/darkraise/llm-proxy/internal/server"
 )
 
@@ -25,7 +26,18 @@ func main() {
 	uiProxy := flag.String("ui-proxy", "", "proxy UI requests to this URL (dev mode)")
 	seedConfig := flag.String("seed", "/app/seed.yml", "path to seed YAML config")
 	healthcheck := flag.Bool("healthcheck", false, "run healthcheck and exit")
+	hashPassword := flag.String("hash-password", "", "hash a password and print to stdout, then exit")
 	flag.Parse()
+
+	if *hashPassword != "" {
+		hash, err := crypto.HashPassword(*hashPassword)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(hash)
+		os.Exit(0)
+	}
 
 	if *healthcheck {
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/health", *port))

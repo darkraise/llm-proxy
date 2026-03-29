@@ -14,8 +14,7 @@ import (
 func setupTestAdmin(t *testing.T) (*AdminHandler, *http.Cookie) {
 	t.Helper()
 	db := newTestStore(t)
-	seedPassword(t, db, "admin123")
-	auth := NewAuth(db)
+	auth := NewAuth(hashPassword(t, "admin123"))
 	pool := provider.NewPool(nil)
 	h := NewAdminHandler(db, auth, pool, nil)
 
