@@ -52,13 +52,20 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Initialize admin auth and encryption key
+	// Initialize admin auth
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
 	auth := admin.NewAuth(db, adminPassword)
 
-	// Derive encryption key from admin password
+	// Derive encryption key from password hash (stored in DB).
+	// If ADMIN_PASSWORD env is set, use it for backward compat.
+	// Otherwise, derive from the admin_password_hash in DB.
 	var encryptionKey []byte
-	if adminPassword != "" {
+	passwordHash, _ := db.GetSetting("admin_password_hash")
+	keySource := adminPassword
+	if keySource == "" && passwordHash != "" {
+		keySource = passwordHash // use stored hash as key derivation input
+	}
+	if keySource != "" {
 		saltHex, _ := db.GetSetting("encryption_key_salt")
 		var salt []byte
 		if saltHex == "" {
@@ -67,7 +74,7 @@ func New(cfg Config) (*Server, error) {
 		} else {
 			fmt.Sscanf(saltHex, "%x", &salt)
 		}
-		encryptionKey = cryptopkg.DeriveKey(adminPassword, salt)
+		encryptionKey = cryptopkg.DeriveKey(keySource, salt)
 	}
 
 	// Load accounts from DB
