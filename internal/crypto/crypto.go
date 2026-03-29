@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -70,44 +71,13 @@ func Decrypt(key, ciphertext []byte) ([]byte, error) {
 }
 
 func HashPassword(password string) (string, error) {
-	salt := GenerateSalt()
-	hash := argon2.IDKey([]byte(password), salt, argonTime, argonMem, argonParal, keyLen)
-
-	// Encode as salt:hash (both hex-encoded)
-	return fmt.Sprintf("%x:%x", salt, hash), nil
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
 }
 
-func VerifyPassword(encoded, password string) bool {
-	var saltHex, hashHex string
-	_, err := fmt.Sscanf(encoded, "%64s", &saltHex)
-	if err != nil {
-		return false
-	}
-
-	// Split on ':'
-	for i, c := range encoded {
-		if c == ':' {
-			saltHex = encoded[:i]
-			hashHex = encoded[i+1:]
-			break
-		}
-	}
-
-	salt := make([]byte, len(saltHex)/2)
-	fmt.Sscanf(saltHex, "%x", &salt)
-
-	expectedHash := make([]byte, len(hashHex)/2)
-	fmt.Sscanf(hashHex, "%x", &expectedHash)
-
-	actualHash := argon2.IDKey([]byte(password), salt, argonTime, argonMem, argonParal, keyLen)
-
-	if len(actualHash) != len(expectedHash) {
-		return false
-	}
-	// Constant-time comparison
-	var diff byte
-	for i := range actualHash {
-		diff |= actualHash[i] ^ expectedHash[i]
-	}
-	return diff == 0
+func VerifyPassword(hash, password string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
