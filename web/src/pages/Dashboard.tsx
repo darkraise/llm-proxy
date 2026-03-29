@@ -532,7 +532,7 @@ export default function Dashboard() {
                 }`}
               >
                 <span
-                  className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                  className="w-2.5 h-2.5 rounded-xs shrink-0"
                   style={{ backgroundColor: getProviderChartColor(provider, idx) }}
                 />
                 <span className="text-text-secondary">{provider}</span>

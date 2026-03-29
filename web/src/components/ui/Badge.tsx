@@ -19,7 +19,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded px-2.5 py-0.5 text-xs font-medium ${variantClasses[variant]}`}
+      className={`inline-flex items-center rounded-sm px-2.5 py-0.5 text-xs font-medium ${variantClasses[variant]}`}
     >
       {children}
     </span>
@@ -62,7 +62,7 @@ export function ProviderBadge({ provider }: { provider: string }) {
     "bg-[rgba(255,255,255,0.05)] text-text-secondary";
   return (
     <span
-      className={`inline-flex items-center justify-center rounded px-2.5 pt-0.5 pb-1.5 text-xs font-medium ${colors}`}
+      className={`inline-flex items-center justify-center rounded-sm px-2.5 pt-0.5 pb-1.5 text-xs font-medium ${colors}`}
     >
       {provider}
     </span>

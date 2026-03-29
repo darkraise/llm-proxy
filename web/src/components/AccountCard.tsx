@@ -78,14 +78,14 @@ export function AccountCard({ account, selected, onClick, onToggleEnabled }: Acc
       {/* Model row */}
       <div className="flex items-center gap-1.5">
         {defaultChat ? (
-          <span className="bg-[rgba(255,255,255,0.05)] text-text-primary text-xs px-2 py-0.5 rounded truncate">
+          <span className="bg-[rgba(255,255,255,0.05)] text-text-primary text-xs px-2 py-0.5 rounded-sm truncate">
             <ModelName name={defaultChat} />
           </span>
         ) : (
           <span className="text-text-muted text-xs">No default model</span>
         )}
         {categorySummary && (
-          <span className="bg-accent-muted text-accent-light text-xs px-2 py-0.5 rounded flex-shrink-0">
+          <span className="bg-accent-muted text-accent-light text-xs px-2 py-0.5 rounded-sm shrink-0">
             {categorySummary}
           </span>
         )}

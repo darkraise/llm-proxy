@@ -126,8 +126,8 @@ function EditableCell({
           autoFocus
           className={[
             'rlt-input',
-            'w-full bg-surface border border-accent rounded px-2 py-1',
-            'text-center focus:outline-none focus:ring-1 focus:ring-accent',
+            'w-full bg-surface border border-accent rounded-sm px-2 py-1',
+            'text-center focus:outline-hidden focus:ring-1 focus:ring-accent',
             'placeholder-text-muted',
             colorCls,
           ].join(' ')}
@@ -143,7 +143,7 @@ function EditableCell({
         <div
           onClick={() => setFocused(true)}
           className={[
-            'w-full border border-border/40 rounded px-2 py-1 cursor-text',
+            'w-full border border-border/40 rounded-sm px-2 py-1 cursor-text',
             'text-center transition-colors hover:border-border',
             colorCls,
           ].join(' ')}

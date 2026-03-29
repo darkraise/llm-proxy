@@ -41,16 +41,16 @@ function ProgressBar({
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-text-secondary w-28 truncate flex-shrink-0">
+      <span className="text-xs text-text-secondary w-28 truncate shrink-0">
         {isModel ? <ModelName name={name} className="text-xs" /> : name}
       </span>
-      <div className="flex-1 h-2 rounded bg-[rgba(255,255,255,0.06)] overflow-hidden">
+      <div className="flex-1 h-2 rounded-sm bg-[rgba(255,255,255,0.06)] overflow-hidden">
         <div
-          className="h-full rounded bg-accent transition-all"
+          className="h-full rounded-sm bg-accent transition-all"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-text-muted w-20 text-right flex-shrink-0">
+      <span className="text-xs text-text-muted w-20 text-right shrink-0">
         {value.toLocaleString()}
         {secondary && (
           <span className="text-text-muted/60 ml-1">{secondary}</span>

@@ -190,7 +190,7 @@ export function AddModelsDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-overlay border border-border rounded-xl max-w-4xl w-full mx-4 max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div>
             <h2 className="font-semibold text-text-primary">Add Supported Models</h2>
             <p className="text-xs text-text-muted mt-0.5">
@@ -203,7 +203,7 @@ export function AddModelsDialog({
         </div>
 
         {/* Step indicator */}
-        <div className="px-5 pt-3 flex items-center gap-1 flex-shrink-0">
+        <div className="px-5 pt-3 flex items-center gap-1 shrink-0">
           {[1, 2].map((n) => (
             <div key={n} className="flex items-center gap-1">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
@@ -226,7 +226,7 @@ export function AddModelsDialog({
           {step === 1 && (
             <div className="flex flex-col flex-1 min-h-0 gap-3">
               {/* Controls row */}
-              <div className="flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center justify-between shrink-0">
                 <ToggleSwitch
                   checked={freeOnly}
                   onChange={setFreeOnly}
@@ -246,7 +246,7 @@ export function AddModelsDialog({
 
               {/* Search input */}
               <input
-                className="input flex-shrink-0"
+                className="input shrink-0"
                 placeholder="Filter models..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -254,7 +254,7 @@ export function AddModelsDialog({
 
               {/* Error */}
               {fetchError && (
-                <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2 text-sm flex-shrink-0">
+                <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2 text-sm shrink-0">
                   {fetchError}
                 </p>
               )}
@@ -272,7 +272,7 @@ export function AddModelsDialog({
               {/* Model list */}
               {!loading && availableModels.length > 0 && (
                 <>
-                  <div className="flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center justify-between shrink-0">
                     <span className="text-xs text-text-muted">
                       {selectedModels.size}/{availableModels.length} selected
                       {search && ` (${filteredModels.length} shown)`}
@@ -295,7 +295,7 @@ export function AddModelsDialog({
                           value={modelCategories[id] ?? 'chat'}
                           onChange={(v) => setModelCategories((prev) => ({ ...prev, [id]: v as ModelCategory }))}
                           options={MODEL_CATEGORIES.map((c) => ({ value: c, label: c }))}
-                          className="w-28 text-xs h-7 flex-shrink-0"
+                          className="w-28 text-xs h-7 shrink-0"
                         />
                       </label>
                     ))}
@@ -311,7 +311,7 @@ export function AddModelsDialog({
               )}
 
               {/* Footer */}
-              <div className="flex justify-between pt-3 border-t border-border flex-shrink-0">
+              <div className="flex justify-between pt-3 border-t border-border shrink-0">
                 <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
                 <button
                   type="button"
@@ -328,7 +328,7 @@ export function AddModelsDialog({
           {/* Step 2: Rate Limits */}
           {step === 2 && (
             <div className="flex flex-col flex-1 min-h-0 gap-3">
-              <p className="text-xs text-text-muted flex-shrink-0">
+              <p className="text-xs text-text-muted shrink-0">
                 Configure rate limits for the {selectedList.length} selected model{selectedList.length !== 1 ? 's' : ''}.
                 The default row is read-only and shows existing account defaults.
               </p>
@@ -344,13 +344,13 @@ export function AddModelsDialog({
               </div>
 
               {saveError && (
-                <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2 text-sm flex-shrink-0">
+                <p className="text-error bg-error/10 border border-error/30 rounded-md px-3 py-2 text-sm shrink-0">
                   {saveError}
                 </p>
               )}
 
               {/* Footer */}
-              <div className="flex justify-between pt-3 border-t border-border flex-shrink-0">
+              <div className="flex justify-between pt-3 border-t border-border shrink-0">
                 <button type="button" onClick={() => setStep(1)} className="btn-secondary">Back</button>
                 <button
                   type="button"

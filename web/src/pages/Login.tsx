@@ -42,7 +42,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center">
+          <div className="w-10 h-10 bg-linear-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-[10px] flex items-center justify-center">
             <Box size={20} className="text-white" />
           </div>
           <div>

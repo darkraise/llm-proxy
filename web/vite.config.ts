@@ -3,7 +3,22 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'redirect-admin',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (req.url === '/admin') {
+            _res.writeHead(301, { Location: '/admin/' })
+            _res.end()
+            return
+          }
+          next()
+        })
+      },
+    },
+  ],
   base: '/admin/',
   resolve: {
     alias: {

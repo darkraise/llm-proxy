@@ -126,7 +126,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-surface-overlay border border-border rounded-xl max-w-xl w-full mx-4 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <h2 className="font-semibold text-text-primary">Edit Account</h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X size={16} />
@@ -238,7 +238,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
             )}
           </div>
 
-          <div className="flex justify-end gap-2 px-5 py-3 border-t border-border flex-shrink-0">
+          <div className="flex justify-end gap-2 px-5 py-3 border-t border-border shrink-0">
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={saving || !hasChanges} className="btn-primary disabled:opacity-50">
               {saving ? 'Saving\u2026' : 'Update'}
@@ -636,7 +636,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                             type="checkbox"
                             checked={selectedModels.has(id)}
                             onChange={() => toggleModel(id)}
-                            className="checkbox flex-shrink-0"
+                            className="checkbox shrink-0"
                           />
                           <span className="text-text-primary font-mono truncate flex-1">{id}</span>
                           <Select
@@ -646,7 +646,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                               ...MODEL_CATEGORIES.map((c) => ({ value: c, label: c })),
                               { value: 'skip', label: 'skip' },
                             ]}
-                            className="w-28 text-xs h-7 flex-shrink-0"
+                            className="w-28 text-xs h-7 shrink-0"
                           />
                         </label>
                       ))}

@@ -64,14 +64,14 @@ export function Sidebar() {
         {isCollapsed ? (
           <div className="flex items-center justify-center">
             {isMobile ? (
-              <div className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 bg-linear-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center shrink-0">
                 <Box size={16} className="text-white" />
               </div>
             ) : (
               <button
                 aria-expanded={false}
                 onClick={() => setCollapsed(false)}
-                className="w-9 h-9 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer"
+                className="w-9 h-9 bg-linear-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center shrink-0 cursor-pointer"
                 title="Expand sidebar"
               >
                 <ChevronsRight size={14} className="text-white" />
@@ -80,7 +80,7 @@ export function Sidebar() {
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 bg-linear-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center shrink-0">
               <Box size={16} className="text-white" />
             </div>
             <span className="text-base font-semibold text-text-primary whitespace-nowrap">

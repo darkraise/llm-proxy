@@ -38,7 +38,7 @@ export default function Setup() {
     <div className="min-h-screen flex items-center justify-center bg-surface p-4">
       <div className="bg-surface-raised border border-border rounded-xl p-8 w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center mb-4">
+          <div className="w-12 h-12 bg-linear-to-br from-[#7c5bf0] to-[#5b8cf0] rounded-xl flex items-center justify-center mb-4">
             <Box size={24} className="text-white" />
           </div>
           <h1 className="text-xl font-semibold text-text-primary">Welcome to LLM Proxy</h1>

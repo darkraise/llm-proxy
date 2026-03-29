@@ -276,7 +276,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
     return (
       <div className="flex flex-col h-full">
         {/* Top section — compact, no grow */}
-        <div className="p-4 space-y-5 flex-shrink-0">
+        <div className="p-4 space-y-5 shrink-0">
           {/* API Key (only in edit mode, since not shown in read mode) */}
           {ed && (
             <div>
@@ -381,7 +381,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
             }`}>
               <span className="flex-1">{testResult.success ? 'Connection successful' : `Error: ${testResult.error ?? 'Unknown error'}`}</span>
               {onClearTest && (
-                <button onClick={onClearTest} className="flex-shrink-0 hover:opacity-70 transition-opacity mt-0.5">
+                <button onClick={onClearTest} className="shrink-0 hover:opacity-70 transition-opacity mt-0.5">
                   <X size={14} />
                 </button>
               )}
@@ -399,7 +399,7 @@ export function AccountDrawer({ account, onClose, onUpdate, onTest, onDelete, on
 
         {/* Models & Rate Limits — fills remaining height, edit mode synced with account edit */}
         <div className="flex-1 flex flex-col min-h-0 px-4 pb-4">
-          <div className="flex items-center justify-between mb-2 flex-shrink-0">
+          <div className="flex items-center justify-between mb-2 shrink-0">
             <h3 className="text-xs uppercase tracking-wider text-text-muted font-medium">Models & Rate Limits</h3>
             {!ed && (
               <button

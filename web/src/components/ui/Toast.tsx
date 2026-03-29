@@ -24,7 +24,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {toast && (
         <div
           key={toast.key}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-surface-raised border border-border rounded-lg px-4 py-2 text-sm text-text-primary shadow-lg animate-fade-in"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-100 bg-surface-raised border border-border rounded-lg px-4 py-2 text-sm text-text-primary shadow-lg animate-fade-in"
         >
           {toast.message}
         </div>

@@ -15,7 +15,7 @@ const SelectTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       "flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-[rgba(255,255,255,0.04)] px-3 py-2 text-sm text-text-primary",
-      "focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent",
+      "focus:outline-hidden focus:ring-2 focus:ring-accent focus:border-transparent",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "[&>span]:truncate",
       className
@@ -38,7 +38,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-[100] max-h-60 min-w-[8rem] overflow-hidden rounded-lg border border-border bg-surface-overlay shadow-lg",
+        "relative z-100 max-h-60 min-w-32 overflow-hidden rounded-lg border border-border bg-surface-overlay shadow-lg",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         position === "popper" && "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
         className
@@ -49,7 +49,7 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Viewport
         className={cn(
           "p-1",
-          position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+          position === "popper" && "h-(--radix-select-trigger-height) w-full min-w-(--radix-select-trigger-width)"
         )}
       >
         {children}
@@ -66,9 +66,9 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-text-primary outline-none",
+      "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm text-text-primary outline-hidden",
       "focus:bg-accent-muted focus:text-accent-light",
-      "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "data-disabled:pointer-events-none data-disabled:opacity-50",
       className
     )}
     {...props}

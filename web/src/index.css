@@ -1,37 +1,165 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@plugin 'tailwindcss-animate';
+
+@theme {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-border: var(--border);
+  --color-border-muted: var(--border-muted);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-accent-muted: var(--accent-muted);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial,
+    sans-serif;
+  --font-mono: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility card {
+  @apply bg-surface-raised border border-border rounded-xl;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:outline-hidden focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-surface disabled:opacity-50 disabled:pointer-events-none;
+}
+
+@utility btn-primary {
+  @apply btn bg-accent hover:bg-accent-light text-white;
+}
+
+@utility btn-secondary {
+  @apply btn bg-surface-overlay hover:bg-border text-text-primary border border-border;
+}
+
+@utility btn-danger {
+  @apply btn text-error border;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  border-color: color-mix(in srgb, var(--error) 30%, transparent);
+
+  &:hover {
+    background: color-mix(in srgb, var(--error) 20%, transparent);
+  }
+}
+
+@utility input {
+  @apply w-full rounded-lg px-3 py-1.5 text-text-primary placeholder-text-muted
+      focus:outline-hidden focus:ring-1 focus:ring-accent transition-colors;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+
+@utility label {
+  @apply block text-xs font-medium text-text-secondary uppercase tracking-wide mb-1;
+}
+
+@utility checkbox {
+  @apply appearance-none w-4 h-4 rounded-sm border border-border bg-surface cursor-pointer
+      transition-colors shrink-0
+      checked:bg-accent checked:border-accent
+      focus:outline-hidden focus:ring-2 focus:ring-accent-muted focus:ring-offset-0;
+  background-image: none;
+
+  &:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2.5-2.5a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
+
+@utility badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-sm text-xs font-medium;
+}
+
+@utility badge-success {
+  @apply badge text-success;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+@utility badge-error {
+  @apply badge text-error;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+@utility badge-warning {
+  @apply badge text-warning;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+
+@utility badge-neutral {
+  @apply badge bg-surface-overlay text-text-secondary border border-border;
+}
+
+@utility badge-accent {
+  @apply badge text-accent;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 
 :root {
   --surface: #13131f;
   --surface-raised: #1e1e32;
   --surface-overlay: #252540;
-  --border: rgba(255,255,255,0.1);
-  --border-muted: rgba(255,255,255,0.05);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-muted: rgba(255, 255, 255, 0.05);
   --text-primary: #e8e8f0;
   --text-secondary: #7a7a8a;
   --text-muted: #7a7a8e;
   --accent: #7c5bf0;
   --accent-light: #a78bfa;
-  --accent-muted: rgba(124,91,240,0.12);
+  --accent-muted: rgba(124, 91, 240, 0.12);
   --accent-gradient: linear-gradient(135deg, #7c5bf0, #5b8cf0);
   --success: #52c41a;
   --warning: #faad14;
   --error: #f85149;
 }
 
-[data-theme="light"] {
+[data-theme='light'] {
   --surface: #ffffff;
   --surface-raised: #f8f9fa;
   --surface-overlay: #ffffff;
-  --border: rgba(0,0,0,0.08);
-  --border-muted: rgba(0,0,0,0.04);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-muted: rgba(0, 0, 0, 0.04);
   --text-primary: #1a1a2e;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
   --accent: #7c5bf0;
   --accent-light: #6d4ed6;
-  --accent-muted: rgba(124,91,240,0.08);
+  --accent-muted: rgba(124, 91, 240, 0.08);
   --accent-gradient: linear-gradient(135deg, #7c5bf0, #5b8cf0);
   --success: #16a34a;
   --warning: #d97706;
@@ -39,10 +167,17 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translate(-50%, 10px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
-.animate-fade-in {
+
+@utility animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
 
@@ -82,91 +217,5 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
-  }
-}
-
-@layer components {
-  .card {
-    @apply bg-surface-raised border border-border rounded-xl;
-  }
-
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-surface disabled:opacity-50 disabled:pointer-events-none;
-  }
-
-  .btn-primary {
-    @apply btn bg-accent hover:bg-accent-light text-white;
-  }
-
-  .btn-secondary {
-    @apply btn bg-surface-overlay hover:bg-border text-text-primary border border-border;
-  }
-
-  .btn-danger {
-    @apply btn text-error border;
-    background: color-mix(in srgb, var(--error) 10%, transparent);
-    border-color: color-mix(in srgb, var(--error) 30%, transparent);
-  }
-
-  .btn-danger:hover {
-    background: color-mix(in srgb, var(--error) 20%, transparent);
-  }
-
-  .input {
-    @apply w-full rounded-lg px-3 py-1.5 text-text-primary placeholder-text-muted
-      focus:outline-none focus:ring-1 focus:ring-accent transition-colors;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.1);
-  }
-
-  .input:focus {
-    border-color: var(--accent);
-  }
-
-  .label {
-    @apply block text-xs font-medium text-text-secondary uppercase tracking-wide mb-1;
-  }
-
-  .checkbox {
-    @apply appearance-none w-4 h-4 rounded border border-border bg-surface cursor-pointer
-      transition-colors shrink-0
-      checked:bg-accent checked:border-accent
-      focus:outline-none focus:ring-2 focus:ring-accent-muted focus:ring-offset-0;
-    background-image: none;
-  }
-
-  .checkbox:checked {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2.5-2.5a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
-    background-size: 100% 100%;
-    background-position: center;
-    background-repeat: no-repeat;
-  }
-
-  .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium;
-  }
-
-  .badge-success {
-    @apply badge text-success;
-    background: color-mix(in srgb, var(--success) 10%, transparent);
-  }
-
-  .badge-error {
-    @apply badge text-error;
-    background: color-mix(in srgb, var(--error) 10%, transparent);
-  }
-
-  .badge-warning {
-    @apply badge text-warning;
-    background: color-mix(in srgb, var(--warning) 10%, transparent);
-  }
-
-  .badge-neutral {
-    @apply badge bg-surface-overlay text-text-secondary border border-border;
-  }
-
-  .badge-accent {
-    @apply badge text-accent;
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 }
