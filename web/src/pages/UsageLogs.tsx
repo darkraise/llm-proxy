@@ -238,7 +238,7 @@ export default function UsageLogs() {
                     </td>
                     <td className="px-4 py-2.5 text-xs text-text-primary">
                       {log.account_name
-                        ? accounts.some((a) => a.name === log.account_name)
+                        ? accounts.some((a) => a.name === log.account_name) || log.account_name.includes('fallback')
                           ? log.account_name
                           : <span className="text-text-muted">{log.provider_type || log.account_name} <span className="text-xs">(deleted)</span></span>
                         : '\u2014'}
