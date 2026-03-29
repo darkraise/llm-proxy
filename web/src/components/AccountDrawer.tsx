@@ -3,19 +3,16 @@ import {
   api, Account, AccountInput, AccountLimit, TestResult,
   MODEL_CATEGORIES, parseCategorizedModels, parseDefaultModels,
   flattenModels, buildModelCategoryMap,
+  FIXED_URL_PROVIDERS, formatCompact,
 } from '../lib/api'
 import { Drawer } from './ui/Drawer'
 import { ProviderBadge } from './ui/Badge'
 import { ToggleSwitch } from './ui/ToggleSwitch'
-import { RateLimitTable, formatCompact } from './RateLimitTable'
+import { RateLimitTable } from './RateLimitTable'
 import { ModelName } from './ui/ModelName'
 import { FlaskConical, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Select } from './ui/Select'
 import { AddModelsDialog } from './AddModelsDialog'
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const FIXED_URL_PROVIDERS = new Set(['openai', 'groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

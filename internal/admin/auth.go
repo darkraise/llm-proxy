@@ -114,6 +114,7 @@ func (a *Auth) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/admin",
 		HttpOnly: true,
+		Secure:   r.TLS != nil,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400,
 	})
@@ -135,6 +136,7 @@ func (a *Auth) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/admin",
 		HttpOnly: true,
+		Secure:   r.TLS != nil,
 		MaxAge:   -1,
 	})
 

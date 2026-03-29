@@ -2,19 +2,13 @@ import { ProviderBadge } from './ui/Badge';
 import { StatusDot } from './ui/StatusDot';
 import { ModelName } from './ui/ModelName';
 import type { Account } from '../lib/api';
-import { parseCategorizedModels, parseDefaultModels } from '../lib/api';
+import { parseCategorizedModels, parseDefaultModels, formatCompact } from '../lib/api';
 
 function getAccountStatus(account: Account): 'healthy' | 'rate-limited' | 'error' | 'disabled' {
   if (!account.enabled) return 'disabled';
   if (account.status?.reason?.includes('exhausted')) return 'rate-limited';
   if (account.status && !account.status.available) return 'error';
   return 'healthy';
-}
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toString();
 }
 
 function formatCategoryCounts(categorized: Record<string, string[]>): string {

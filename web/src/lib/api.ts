@@ -86,6 +86,18 @@ export function parseDefaultModels(raw: string): Record<string, string> {
   }
 }
 
+// Providers with hardcoded base URLs — no need to show base URL field
+export const FIXED_URL_PROVIDERS = new Set(['openai', 'groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
+
+/** Format a number compactly (e.g. 1500 -> "1.5K", 2000000 -> "2M"). */
+export function formatCompact(n: number): string {
+  if (n >= 1_000_000 && n % 1_000_000 === 0) return `${n / 1_000_000}M`
+  if (n >= 1_000_000) return `${parseFloat((n / 1_000_000).toFixed(1))}M`
+  if (n >= 1_000 && n % 1_000 === 0) return `${n / 1_000}K`
+  if (n >= 1_000) return `${parseFloat((n / 1_000).toFixed(1))}K`
+  return String(n)
+}
+
 /** Flatten a categorized model map into a single array of model names. */
 export function flattenModels(categorized: Record<string, string[]>): string[] {
   return Object.values(categorized).flat()

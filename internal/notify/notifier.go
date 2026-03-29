@@ -24,23 +24,30 @@ func NewNotifier(db *store.DB) *Notifier {
 // Alert sends a notification if the alert type is enabled and not in cooldown.
 // Safe to call from any goroutine.
 func (n *Notifier) Alert(alert Alert) {
+	// Load config and check cooldown under lock, then release before network I/O.
 	n.mu.Lock()
-	defer n.mu.Unlock()
 
 	channels := n.loadChannels()
 	alerts := n.loadAlerts()
 
 	rule := n.getRuleForType(alerts, alert.Type)
 	if rule == nil || !rule.Enabled {
+		n.mu.Unlock()
 		return
 	}
 
 	if last, ok := n.cooldowns[alert.Key]; ok {
 		if time.Since(last) < time.Duration(rule.CooldownMin)*time.Minute {
+			n.mu.Unlock()
 			return
 		}
 	}
 
+	// Optimistically set cooldown so concurrent callers skip while we send.
+	n.cooldowns[alert.Key] = time.Now()
+	n.mu.Unlock()
+
+	// Perform network I/O without holding the mutex.
 	sent := false
 	if channels.Email.Enabled {
 		if err := SendEmail(channels.Email, alert.Subject, alert.Message); err != nil {
@@ -65,8 +72,12 @@ func (n *Notifier) Alert(alert Alert) {
 	}
 
 	if sent {
-		n.cooldowns[alert.Key] = time.Now()
 		slog.Info("notification sent", "type", alert.Type, "key", alert.Key)
+	} else {
+		// All channels failed — clear optimistic cooldown so next attempt retries.
+		n.mu.Lock()
+		delete(n.cooldowns, alert.Key)
+		n.mu.Unlock()
 	}
 }
 

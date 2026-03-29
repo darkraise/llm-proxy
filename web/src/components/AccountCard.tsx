@@ -2,13 +2,7 @@ import { ProviderBadge, providerHexColors } from './ui/Badge';
 import { ToggleSwitch } from './ui/ToggleSwitch';
 import { ModelName } from './ui/ModelName';
 import type { Account } from '../lib/api';
-import { parseCategorizedModels, parseDefaultModels } from '../lib/api';
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toString();
-}
+import { parseCategorizedModels, parseDefaultModels, formatCompact } from '../lib/api';
 
 function formatCategoryCounts(categorized: Record<string, string[]>): string {
   return Object.entries(categorized)

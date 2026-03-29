@@ -363,10 +363,7 @@ func (s *Server) StartBackgroundWorkers() {
 }
 
 func (s *Server) Start() error {
-	go s.logWriter()
-	go s.rateLimitWriter()
-	go s.logPruner()
-	go s.notifier.Run(s.notifyStop)
+	s.StartBackgroundWorkers()
 
 	slog.Info("server started",
 		"port", s.cfg.Port,

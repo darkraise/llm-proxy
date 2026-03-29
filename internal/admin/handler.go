@@ -176,7 +176,11 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 	if req.APIKey != "" {
 		apiKeyEnc = []byte(req.APIKey)
 		if h.encryptionKey != nil {
-			enc, _ := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
+			enc, err := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "encryption failed"})
+				return
+			}
 			apiKeyEnc = enc
 		}
 	} else {
@@ -312,7 +316,8 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 		testReq, _ = http.NewRequest("GET", testURL, nil)
 		testReq.Header.Set("Authorization", "Bearer "+apiKey)
 	default:
-		testURL = p.BaseURL + "/models"
+		baseURL := resolveProviderURL(p.Type, p.BaseURL)
+		testURL = baseURL + "/models"
 		testReq, _ = http.NewRequest("GET", testURL, nil)
 		if p.Type != "ollama" {
 			testReq.Header.Set("Authorization", "Bearer "+apiKey)
@@ -634,6 +639,30 @@ func (h *AdminHandler) reloadPool() {
 		}
 	}
 	h.pool.Reload(accounts)
+}
+
+// knownProviderBaseURLs maps provider types to their canonical API base URLs.
+// Mirrors the map in proxy/handler.go so that admin handlers (test, discover)
+// resolve URLs the same way the proxy does.
+var knownProviderBaseURLs = map[string]string{
+	"groq":       "https://api.groq.com/openai/v1",
+	"openrouter": "https://openrouter.ai/api/v1",
+	"cerebras":   "https://api.cerebras.ai/v1",
+	"mistral":    "https://api.mistral.ai/v1",
+	"github":     "https://models.inference.ai.azure.com",
+	"cohere":     "https://api.cohere.ai/compatibility/v1",
+	"llm7":       "https://api.llm7.io/v1",
+	"nvidia":     "https://integrate.api.nvidia.com/v1",
+	"openai":     "https://api.openai.com/v1",
+}
+
+// resolveProviderURL returns the canonical URL for known providers,
+// falling back to the stored base URL.
+func resolveProviderURL(providerType, baseURL string) string {
+	if u, ok := knownProviderBaseURLs[providerType]; ok {
+		return u
+	}
+	return baseURL
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

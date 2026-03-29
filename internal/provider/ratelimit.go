@@ -121,16 +121,16 @@ func (rl *RateLimiter) Configure(accountName string, limits []LimitConfig) {
 
 // Allow checks whether the account is within its account-level rate limits.
 func (rl *RateLimiter) Allow(accountName string) bool {
-	rl.mu.RLock()
-	defer rl.mu.RUnlock()
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 
 	return rl.allowState(accountName)
 }
 
 // AllowForModel checks both account-level and model-specific rate limits.
 func (rl *RateLimiter) AllowForModel(accountName, model string) bool {
-	rl.mu.RLock()
-	defer rl.mu.RUnlock()
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 
 	if !rl.allowState(accountName) {
 		return false
@@ -143,7 +143,7 @@ func (rl *RateLimiter) AllowForModel(accountName, model string) bool {
 	return true
 }
 
-// allowState is the internal check — must be called with rl.mu held (at least read).
+// allowState is the internal check — must be called with rl.mu held.
 func (rl *RateLimiter) allowState(key string) bool {
 	state, ok := rl.states[key]
 	if !ok {
@@ -169,8 +169,8 @@ func (rl *RateLimiter) allowState(key string) bool {
 }
 
 func (rl *RateLimiter) AllowTokens(providerName string, estimatedTokens int) bool {
-	rl.mu.RLock()
-	defer rl.mu.RUnlock()
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 
 	state, ok := rl.states[providerName]
 	if !ok {
@@ -258,8 +258,8 @@ func (rl *RateLimiter) RecordBackoff(providerName string, duration time.Duration
 }
 
 func (rl *RateLimiter) Status(providerName string) AccountStatus {
-	rl.mu.RLock()
-	defer rl.mu.RUnlock()
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 
 	state, ok := rl.states[providerName]
 	if !ok {

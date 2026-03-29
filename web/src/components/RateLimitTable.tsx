@@ -1,18 +1,8 @@
 import { useState } from 'react'
-import { AccountLimit, MODEL_CATEGORIES } from '../lib/api'
+import { AccountLimit, MODEL_CATEGORIES, formatCompact } from '../lib/api'
 import { ModelName } from './ui/ModelName'
 import { Badge } from './ui/Badge'
 import { Select } from './ui/Select'
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-export function formatCompact(n: number): string {
-  if (n >= 1_000_000 && n % 1_000_000 === 0) return `${n / 1_000_000}M`
-  if (n >= 1_000_000) return `${parseFloat((n / 1_000_000).toFixed(1))}M`
-  if (n >= 1_000 && n % 1_000 === 0) return `${n / 1_000}K`
-  if (n >= 1_000) return `${parseFloat((n / 1_000).toFixed(1))}K`
-  return String(n)
-}
 
 // ─── Metric definitions ───────────────────────────────────────────────────────
 

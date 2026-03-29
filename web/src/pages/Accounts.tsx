@@ -4,6 +4,7 @@ import {
   api, Account, AccountInput, AccountLimit, TestResult,
   MODEL_CATEGORIES, ModelCategory,
   parseCategorizedModels, parseDefaultModels, flattenModels, buildModelCategoryMap,
+  FIXED_URL_PROVIDERS,
 } from '../lib/api'
 import { RateLimitTable } from '../components/RateLimitTable'
 import { AccountCard } from '../components/AccountCard'
@@ -30,9 +31,6 @@ const PROVIDER_TYPE_URLS: Record<string, string> = {
   google: '',
   'openai-compatible': '',
 }
-
-// Providers with hardcoded base URLs — no need to show base URL field
-const FIXED_URL_PROVIDERS = new Set(['openai', 'groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
 
 // ─── Edit Modal (existing accounts) ──────────────────────────────────────────
 

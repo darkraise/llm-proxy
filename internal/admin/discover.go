@@ -184,9 +184,10 @@ func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Re
 	}
 
 	// Reuse the discover logic by constructing a discoverRequest
+	baseURL := resolveProviderURL(account.Type, account.BaseURL)
 	req := discoverRequest{
 		Type:    account.Type,
-		BaseURL: account.BaseURL,
+		BaseURL: baseURL,
 		APIKey:  apiKey,
 	}
 

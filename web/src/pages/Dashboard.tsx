@@ -17,6 +17,7 @@ import {
   ModelStats,
   Account,
   RequestLog,
+  formatCompact,
 } from '../lib/api'
 import BreakdownTabs from '../components/BreakdownTabs'
 import { ToggleSwitch } from '../components/ui/ToggleSwitch'
@@ -145,12 +146,6 @@ function buildProviderBuckets(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toString()
-}
 
 const TICK_STYLE = { fill: '#8b949e', fontSize: 11 }
 
