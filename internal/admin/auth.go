@@ -23,24 +23,11 @@ type Auth struct {
 	sessions map[string]session
 }
 
-func NewAuth(db *store.DB, initialPassword string) *Auth {
-	a := &Auth{
+func NewAuth(db *store.DB) *Auth {
+	return &Auth{
 		db:       db,
 		sessions: make(map[string]session),
 	}
-
-	// Set initial password if not already set
-	existing, _ := db.GetSetting("admin_password_hash")
-	if existing == "" && initialPassword != "" {
-		hash, err := crypto.HashPassword(initialPassword)
-		if err != nil {
-			slog.Error("failed to hash initial password", "error", err)
-		} else {
-			db.SetSetting("admin_password_hash", hash)
-		}
-	}
-
-	return a
 }
 
 func (a *Auth) IsSetupRequired() bool {

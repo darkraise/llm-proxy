@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/darkraise/llm-proxy/internal/crypto"
+
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
@@ -21,9 +23,19 @@ func newTestStore(t *testing.T) *store.DB {
 	return db
 }
 
+func seedPassword(t *testing.T, db *store.DB, password string) {
+	t.Helper()
+	hash, err := crypto.HashPassword(password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetSetting("admin_password_hash", hash)
+}
+
 func TestAuth_LoginLogout(t *testing.T) {
 	db := newTestStore(t)
-	auth := NewAuth(db, "admin123")
+	seedPassword(t, db, "admin123")
+	auth := NewAuth(db)
 
 	// Login with correct password
 	body := `{"password":"admin123"}`
@@ -60,7 +72,8 @@ func TestAuth_LoginLogout(t *testing.T) {
 
 func TestAuth_LoginWrongPassword(t *testing.T) {
 	db := newTestStore(t)
-	auth := NewAuth(db, "admin123")
+	seedPassword(t, db, "admin123")
+	auth := NewAuth(db)
 
 	body := `{"password":"wrong"}`
 	req := httptest.NewRequest("POST", "/admin/api/auth/login", strings.NewReader(body))
@@ -74,7 +87,7 @@ func TestAuth_LoginWrongPassword(t *testing.T) {
 
 func TestAuth_MiddlewareBlocksUnauthenticated(t *testing.T) {
 	db := newTestStore(t)
-	auth := NewAuth(db, "admin123")
+	auth := NewAuth(db)
 
 	protected := auth.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -91,7 +104,8 @@ func TestAuth_MiddlewareBlocksUnauthenticated(t *testing.T) {
 
 func TestAuth_MiddlewareAllowsAuthenticated(t *testing.T) {
 	db := newTestStore(t)
-	auth := NewAuth(db, "admin123")
+	seedPassword(t, db, "admin123")
+	auth := NewAuth(db)
 
 	// Login first
 	loginBody := `{"password":"admin123"}`
