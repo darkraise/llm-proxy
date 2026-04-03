@@ -18,6 +18,7 @@ import (
 	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
 	"github.com/darkraise/llm-proxy/internal/proxy"
+	"github.com/darkraise/llm-proxy/internal/scanner"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
@@ -45,6 +46,8 @@ type Server struct {
 	rateLimitChan chan proxy.RateLimitUpdate
 	notifier      *notify.Notifier
 	notifyStop    chan struct{}
+	scanner       *scanner.Manager
+	encryptionKey []byte
 }
 
 func New(cfg Config) (*Server, error) {
@@ -86,7 +89,14 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
-	pool := provider.NewPool(accounts)
+	db.BackfillAPIKeyHashes(accounts)
+
+	providerList, _ := db.ListEnabledProviders()
+	providerMap := make(map[string]store.Provider, len(providerList))
+	for _, p := range providerList {
+		providerMap[p.Name] = p
+	}
+	pool := provider.NewPool(accounts, providerMap)
 
 	// Async request logger
 	logChan := make(chan store.RequestLog, 1000)
@@ -109,6 +119,28 @@ func New(cfg Config) (*Server, error) {
 	notifier := notify.NewNotifier(db)
 	proxyHandler.SetNotifier(notifier)
 	adminHandler.SetNotifier(notifier)
+
+	scannerMgr := scanner.NewManager(db, encryptionKey)
+	if tokenEnc, _ := db.GetSetting("scanner_github_token"); tokenEnc != "" {
+		if plain, err := cryptopkg.Decrypt(encryptionKey, []byte(tokenEnc)); err == nil {
+			scannerMgr.ConfigureGitHub(string(plain))
+		}
+	}
+	if delayStr, _ := db.GetSetting("scanner_delay"); delayStr != "" {
+		var d int
+		fmt.Sscanf(delayStr, "%d", &d)
+		if d > 0 {
+			scannerMgr.ConfigureGitHubParams(time.Duration(d)*time.Second, 0)
+		}
+	}
+	if mpStr, _ := db.GetSetting("scanner_max_pages"); mpStr != "" {
+		var mp int
+		fmt.Sscanf(mpStr, "%d", &mp)
+		if mp > 0 {
+			scannerMgr.ConfigureGitHubParams(0, mp)
+		}
+	}
+	adminHandler.SetScanner(scannerMgr)
 
 	// Load proxy config from settings (also called on settings change)
 	reloadProxyConfig := func() {
@@ -172,6 +204,8 @@ func New(cfg Config) (*Server, error) {
 		rateLimitChan: rateLimitChan,
 		notifier:      notifier,
 		notifyStop:    notifyStop,
+		scanner:       scannerMgr,
+		encryptionKey: encryptionKey,
 		http: &http.Server{
 			Addr:    fmt.Sprintf(":%d", cfg.Port),
 			Handler: mux,
@@ -212,10 +246,18 @@ func (s *Server) adminRoutes() {
 
 	m.Handle("GET /api/accounts", protected(s.admin.HandleListAccounts))
 	m.Handle("PATCH /api/accounts/bulk", protected(s.admin.HandleBulkUpdateAccounts))
+	m.Handle("POST /api/accounts/bulk-delete", protected(s.admin.HandleBulkDeleteAccounts))
+	m.Handle("POST /api/accounts/bulk-edit", protected(s.admin.HandleBulkEditAccounts))
 	m.Handle("POST /api/accounts", protected(s.admin.HandleCreateAccount))
 	m.Handle("PUT /api/accounts/{id}", protected(s.admin.HandleUpdateAccount))
 	m.Handle("DELETE /api/accounts/{id}", protected(s.admin.HandleDeleteAccount))
 	m.Handle("POST /api/accounts/{id}/test", protected(s.admin.HandleTestAccount))
+
+	m.Handle("GET /api/providers", protected(s.admin.HandleListProviders))
+	m.Handle("GET /api/providers/{name}", protected(s.admin.HandleGetProvider))
+	m.Handle("POST /api/providers", protected(s.admin.HandleCreateProvider))
+	m.Handle("PUT /api/providers/{name}", protected(s.admin.HandleUpdateProvider))
+	m.Handle("DELETE /api/providers/{name}", protected(s.admin.HandleDeleteProvider))
 
 	m.Handle("GET /api/stats/overview", protected(s.admin.HandleStatsOverview))
 	m.Handle("GET /api/stats/requests", protected(s.admin.HandleStatsRequests))
@@ -228,6 +270,8 @@ func (s *Server) adminRoutes() {
 
 	m.Handle("POST /api/config/import", protected(s.admin.HandleConfigImport))
 	m.Handle("GET /api/config/export", protected(s.admin.HandleConfigExport))
+	m.Handle("POST /api/settings/import", protected(s.admin.HandleSettingsImport))
+	m.Handle("GET /api/settings/export", protected(s.admin.HandleSettingsExport))
 
 	m.Handle("GET /api/provider-metrics/{provider}", protected(s.admin.HandleGetProviderMetrics))
 	m.Handle("PUT /api/provider-metrics/{provider}", protected(s.admin.HandleSetProviderMetrics))
@@ -243,6 +287,26 @@ func (s *Server) adminRoutes() {
 	m.Handle("POST /api/notifications/test", protected(s.admin.HandleTestNotification))
 
 	m.Handle("POST /api/ollama/discover", protected(s.admin.HandleDiscoverOllama))
+
+	m.Handle("POST /api/keys/test", protected(s.admin.HandleTestKey))
+
+	m.Handle("GET /api/scanner/status", protected(s.admin.HandleGetScannerStatus))
+	m.Handle("POST /api/scanner/start", protected(s.admin.HandleStartScan))
+	m.Handle("POST /api/scanner/stop", protected(s.admin.HandleStopScan))
+	m.Handle("GET /api/scanner/keys", protected(s.admin.HandleListDiscoveredKeys))
+	m.Handle("POST /api/scanner/keys/{id}/validate", protected(s.admin.HandleValidateDiscoveredKey))
+	m.Handle("POST /api/scanner/keys/{id}/discover", protected(s.admin.HandleDiscoverByDiscoveredKey))
+	m.Handle("POST /api/scanner/keys/{id}/import", protected(s.admin.HandleImportDiscoveredKey))
+	m.Handle("POST /api/scanner/keys/import", protected(s.admin.HandleBulkImportKeys))
+	m.Handle("POST /api/scanner/keys/delete", protected(s.admin.HandleBulkDeleteKeys))
+	m.Handle("DELETE /api/scanner/keys/{id}", protected(s.admin.HandleDeleteDiscoveredKey))
+	m.Handle("GET /api/scanner/history", protected(s.admin.HandleListScanHistory))
+	m.Handle("GET /api/scanner/export", protected(s.admin.HandleExportScanResults))
+	m.Handle("GET /api/scanner/config", protected(s.admin.HandleGetScannerConfig))
+	m.Handle("PUT /api/scanner/config", protected(s.admin.HandleUpdateScannerConfig))
+	m.Handle("GET /api/scanner/patterns", protected(s.admin.HandleListKeyPatterns))
+	m.Handle("PUT /api/scanner/patterns", protected(s.admin.HandleUpsertKeyPattern))
+	m.Handle("DELETE /api/scanner/patterns/{id}", protected(s.admin.HandleDeleteKeyPattern))
 
 	// Admin UI: dev proxy or embedded SPA
 	if s.cfg.Dev && s.cfg.UIProxy != "" {
@@ -378,6 +442,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.notifyStop)
 	close(s.logChan)
 	close(s.rateLimitChan)
+	s.scanner.Stop()
 	s.db.Close()
 	return nil
 }
@@ -415,9 +480,27 @@ func (s *Server) logWriter() {
 	}
 }
 
-// rateLimitWriter drains the rateLimitChan and upserts each definition into
-// the database. It mirrors the logWriter pattern: async and non-blocking to
-// the proxy request path.
+func (s *Server) reloadPool() {
+	accounts, err := s.db.ListAccounts()
+	if err != nil {
+		slog.Error("rate limit propagation: failed to reload accounts", "error", err)
+		return
+	}
+	for i := range accounts {
+		if s.encryptionKey != nil {
+			if plain, err := cryptopkg.Decrypt(s.encryptionKey, accounts[i].APIKey); err == nil {
+				accounts[i].APIKey = plain
+			}
+		}
+	}
+	providerList, _ := s.db.ListEnabledProviders()
+	providerMap := make(map[string]store.Provider, len(providerList))
+	for _, p := range providerList {
+		providerMap[p.Name] = p
+	}
+	s.pool.Reload(accounts, providerMap)
+}
+
 func (s *Server) rateLimitWriter() {
 	for update := range s.rateLimitChan {
 		for _, def := range update.Defs {
@@ -429,6 +512,22 @@ func (s *Server) rateLimitWriter() {
 					"error", err,
 				)
 			}
+		}
+
+		modified, err := s.db.FillAccountLimitsFromDiscovered(update.Provider, update.Defs)
+		if err != nil {
+			slog.Error("rate limit propagation failed",
+				"provider", update.Provider,
+				"error", err,
+			)
+			continue
+		}
+		if modified {
+			slog.Info("discovered rate limits propagated, reloading pool",
+				"provider", update.Provider,
+				"model", update.Model,
+			)
+			s.reloadPool()
 		}
 	}
 }
