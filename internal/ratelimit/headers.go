@@ -57,13 +57,18 @@ var ProviderHeaderMappings = map[string][]HeaderMapping{
 	},
 }
 
+var genericFallbackMappings = []HeaderMapping{
+	{"x-ratelimit-limit-requests", "rpm", 60},
+	{"x-ratelimit-limit-tokens", "tpm", 60},
+}
+
 // ParseRateLimitHeaders inspects the provider response headers and returns
-// any rate limit definitions that can be extracted. Returns nil when the
-// provider is unknown or no relevant headers are present.
+// any rate limit definitions that can be extracted. Providers without an
+// explicit mapping fall back to the standard OpenAI-compatible headers.
 func ParseRateLimitHeaders(providerType string, headers http.Header, model string) []store.RateLimitDef {
 	mappings, ok := ProviderHeaderMappings[providerType]
 	if !ok {
-		return nil
+		mappings = genericFallbackMappings
 	}
 
 	var defs []store.RateLimitDef

@@ -312,3 +312,65 @@ func TestParseRateLimitHeaders_OpenRouter(t *testing.T) {
 		t.Errorf("unexpected def: %+v", defs[0])
 	}
 }
+
+func TestParseRateLimitHeaders_GenericFallback(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-ratelimit-limit-requests", "100")
+	headers.Set("x-ratelimit-limit-tokens", "50000")
+
+	defs := ratelimit.ParseRateLimitHeaders("nvidia", headers, "meta/llama-3.1-70b")
+
+	if len(defs) != 2 {
+		t.Fatalf("expected 2 defs from generic fallback, got %d", len(defs))
+	}
+
+	byMetric := map[string]int{}
+	byWindow := map[string]int{}
+	for _, d := range defs {
+		if d.Provider != "nvidia" {
+			t.Errorf("expected provider nvidia, got %s", d.Provider)
+		}
+		byMetric[d.Metric] = d.MaxValue
+		byWindow[d.Metric] = d.WindowSecs
+	}
+
+	if byMetric["rpm"] != 100 {
+		t.Errorf("rpm: expected 100, got %d", byMetric["rpm"])
+	}
+	if byMetric["tpm"] != 50000 {
+		t.Errorf("tpm: expected 50000, got %d", byMetric["tpm"])
+	}
+	if byWindow["rpm"] != 60 {
+		t.Errorf("rpm window: expected 60, got %d", byWindow["rpm"])
+	}
+}
+
+func TestParseRateLimitHeaders_GenericFallbackNoHeaders(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("content-type", "application/json")
+
+	defs := ratelimit.ParseRateLimitHeaders("nvidia", headers, "some-model")
+	if len(defs) != 0 {
+		t.Errorf("expected 0 defs when no rate limit headers present, got %d", len(defs))
+	}
+}
+
+func TestParseRateLimitHeaders_ExplicitOverridesFallback(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-ratelimit-limit-requests", "14400")
+	headers.Set("x-ratelimit-limit-tokens", "6000")
+
+	defs := ratelimit.ParseRateLimitHeaders("groq", headers, "llama-3.3-70b")
+
+	byMetric := map[string]int{}
+	for _, d := range defs {
+		byMetric[d.Metric] = d.WindowSecs
+	}
+
+	if byMetric["rpd"] != 86400 {
+		t.Errorf("expected rpd with 86400s window (explicit), got window %d", byMetric["rpd"])
+	}
+	if _, hasRpm := byMetric["rpm"]; hasRpm {
+		t.Error("should not have rpm — groq's explicit mapping uses rpd")
+	}
+}
