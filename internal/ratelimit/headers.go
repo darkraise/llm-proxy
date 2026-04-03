@@ -18,6 +18,18 @@ type HeaderMapping struct {
 // ProviderHeaderMappings lists the response headers that carry rate limit
 // capacity values, keyed by provider type.
 var ProviderHeaderMappings = map[string][]HeaderMapping{
+	"openai": {
+		{"x-ratelimit-limit-requests", "rpm", 60},
+		{"x-ratelimit-limit-tokens", "tpm", 60},
+	},
+	"openai_legacy": {
+		{"x-ratelimit-limit-requests", "rpm", 60},
+		{"x-ratelimit-limit-tokens", "tpm", 60},
+	},
+	"anthropic": {
+		{"anthropic-ratelimit-requests-limit", "rpm", 60},
+		{"anthropic-ratelimit-tokens-limit", "tpm", 60},
+	},
 	"groq": {
 		{"x-ratelimit-limit-requests", "rpd", 86400},
 		{"x-ratelimit-limit-tokens", "tpm", 60},
@@ -25,6 +37,23 @@ var ProviderHeaderMappings = map[string][]HeaderMapping{
 	"cerebras": {
 		{"x-ratelimit-limit-requests-day", "rpd", 86400},
 		{"x-ratelimit-limit-tokens-minute", "tpm", 60},
+	},
+	"xai": {
+		{"x-ratelimit-limit-requests", "rpd", 86400},
+		{"x-ratelimit-limit-tokens", "tpm", 60},
+	},
+	"together": {
+		{"x-ratelimit-limit", "rps", 1},
+		{"x-tokenlimit-limit", "tps", 1},
+	},
+	"fireworks": {
+		{"x-ratelimit-limit-requests", "rpm", 60},
+	},
+	"deepseek": {
+		{"x-ratelimit-limit-requests", "rpm", 60},
+	},
+	"openrouter": {
+		{"x-ratelimit-limit-requests", "rpm", 60},
 	},
 }
 
