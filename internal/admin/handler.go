@@ -12,18 +12,21 @@ import (
 
 	"github.com/darkraise/llm-proxy/internal/config"
 	"github.com/darkraise/llm-proxy/internal/crypto"
+	"github.com/darkraise/llm-proxy/internal/keyval"
 	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
+	"github.com/darkraise/llm-proxy/internal/scanner"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
 
 type AdminHandler struct {
-	db              *store.DB
-	auth            *Auth
-	pool            *provider.Pool
-	encryptionKey   []byte
-	notifier        *notify.Notifier
-	onSettingsChange func() // called after settings are saved to reload runtime config
+	db               *store.DB
+	auth             *Auth
+	pool             *provider.Pool
+	encryptionKey    []byte
+	notifier         *notify.Notifier
+	scanner          *scanner.Manager
+	onSettingsChange func()
 }
 
 func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKey []byte) *AdminHandler {
@@ -32,6 +35,10 @@ func NewAdminHandler(db *store.DB, auth *Auth, pool *provider.Pool, encryptionKe
 
 func (h *AdminHandler) SetNotifier(n *notify.Notifier) {
 	h.notifier = n
+}
+
+func (h *AdminHandler) SetScanner(s *scanner.Manager) {
+	h.scanner = s
 }
 
 func (h *AdminHandler) SetOnSettingsChange(fn func()) {
@@ -123,6 +130,7 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 		Type:          req.Type,
 		BaseURL:       req.BaseURL,
 		APIKey:        apiKeyEnc,
+		APIKeyHash:    crypto.HashKey(req.APIKey),
 		Models:        store.FormatCategorizedModels(req.Models),
 		Priority:      req.Priority,
 		Enabled:       enabled,
@@ -132,6 +140,10 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 
 	id, err := h.db.CreateAccount(p)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") && strings.Contains(err.Error(), "api_key_hash") {
+			writeJSON(w, 409, map[string]string{"error": "API key already exists in another account"})
+			return
+		}
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
@@ -278,7 +290,101 @@ func (h *AdminHandler) HandleBulkUpdateAccounts(w http.ResponseWriter, r *http.R
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
+func (h *AdminHandler) HandleBulkDeleteAccounts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+
+	deleted := 0
+	for _, id := range req.IDs {
+		if err := h.db.DeleteAccount(id); err == nil {
+			deleted++
+		}
+	}
+
+	h.reloadPool()
+	writeJSON(w, 200, map[string]any{"deleted": deleted})
+}
+
+func (h *AdminHandler) HandleBulkEditAccounts(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs           []int64              `json:"ids"`
+		Models        *map[string][]string `json:"models"`
+		DefaultModels *map[string]string   `json:"default_models"`
+		Limits        *[]store.AccountLimit `json:"limits"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if len(req.IDs) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "ids is required"})
+		return
+	}
+
+	var fields store.BulkEditFields
+	if req.Models != nil {
+		s := store.FormatCategorizedModels(*req.Models)
+		fields.Models = &s
+	}
+	if req.DefaultModels != nil {
+		s := store.FormatDefaultModels(*req.DefaultModels)
+		fields.DefaultModels = &s
+	}
+	if req.Limits != nil {
+		fields.Limits = req.Limits
+	}
+
+	if err := h.db.BulkEditAccounts(req.IDs, fields); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.reloadPool()
+	writeJSON(w, 200, map[string]string{"status": "ok"})
+}
+
 func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	p, err := h.db.GetAccount(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "account not found"})
+		return
+	}
+	apiKey, err := h.decryptAccountKey(p)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"success": false, "error": "failed to decrypt API key"})
+		return
+	}
+
+	info := h.providerInfo(p.Type, p.BaseURL)
+	results := keyval.Validate(r.Context(), info, apiKey, []keyval.StepConfig{{Step: "models_fetch"}})
+	last := results[len(results)-1]
+
+	if !last.Success {
+		errMsg := last.Error
+		if len(errMsg) > 500 {
+			errMsg = errMsg[:500]
+		}
+		writeJSON(w, 200, map[string]any{"success": false, "status_code": last.StatusCode, "error": errMsg})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"success": true, "status_code": last.StatusCode})
+}
+
+// HandleChatTestAccount sends a minimal chat completion through a specific
+// HandleGetAccountKey returns the decrypted API key for an account.
+//
+// GET /api/accounts/{id}/key
+func (h *AdminHandler) HandleGetAccountKey(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
@@ -291,12 +397,11 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Decrypt API key
 	var apiKey string
 	if h.encryptionKey != nil {
 		plain, err := crypto.Decrypt(h.encryptionKey, p.APIKey)
 		if err != nil {
-			writeJSON(w, 200, map[string]any{"success": false, "error": "failed to decrypt API key: " + err.Error()})
+			writeJSON(w, 500, map[string]string{"error": "failed to decrypt"})
 			return
 		}
 		apiKey = strings.TrimSpace(string(plain))
@@ -304,44 +409,56 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 		apiKey = strings.TrimSpace(string(p.APIKey))
 	}
 
-	// Test connectivity using GET /models — no tokens consumed, no request quota used.
-	client := &http.Client{Timeout: 10 * time.Second}
+	writeJSON(w, 200, map[string]string{"key": apiKey})
+}
 
-	var testURL string
-	var testReq *http.Request
-
-	switch p.Type {
-	case "google":
-		testURL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
-		testReq, _ = http.NewRequest("GET", testURL, nil)
-		testReq.Header.Set("Authorization", "Bearer "+apiKey)
-	default:
-		baseURL := resolveProviderURL(p.Type, p.BaseURL)
-		testURL = baseURL + "/models"
-		testReq, _ = http.NewRequest("GET", testURL, nil)
-		if p.Type != "ollama" {
-			testReq.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-	}
-
-	resp, err := client.Do(testReq)
+func (h *AdminHandler) HandleChatTestAccount(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		writeJSON(w, 200, map[string]any{"success": false, "error": err.Error()})
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	defer resp.Body.Close()
+	var req struct {
+		Model   string `json:"model"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Model == "" {
+		writeJSON(w, 400, map[string]string{"error": "model is required"})
+		return
+	}
+	if req.Message == "" {
+		req.Message = "say ok"
+	}
 
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		errMsg := string(body)
-		if len(errMsg) > 500 {
-			errMsg = errMsg[:500]
-		}
-		writeJSON(w, 200, map[string]any{"success": false, "status_code": resp.StatusCode, "error": errMsg})
+	p, err := h.db.GetAccount(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "account not found"})
+		return
+	}
+	apiKey, err := h.decryptAccountKey(p)
+	if err != nil {
+		writeJSON(w, 200, map[string]any{"error": "failed to decrypt API key"})
 		return
 	}
 
-	writeJSON(w, 200, map[string]any{"success": true, "status_code": resp.StatusCode})
+	info := h.providerInfo(p.Type, p.BaseURL)
+	steps := []keyval.StepConfig{
+		{Step: "chat_completion", Params: map[string]any{
+			"model": req.Model, "message": req.Message, "max_tokens": float64(20),
+		}},
+	}
+	results := keyval.Validate(r.Context(), info, apiKey, steps)
+	last := results[len(results)-1]
+
+	writeJSON(w, 200, map[string]any{
+		"status_code": last.StatusCode,
+		"response":    last.Response,
+		"rate_limits": last.RateLimits,
+	})
 }
 
 func adminFirstModel(modelsJSON string) string {
@@ -556,14 +673,20 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	cfg, err := config.ParseYAML(body)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err.Error()})
-		return
+	// Try new accounts-only format first, fall back to legacy combined format.
+	accountsCfg, err := config.ParseAccountsYAML(body)
+	if err != nil || len(accountsCfg.Accounts) == 0 {
+		legacyCfg, err2 := config.ParseYAML(body)
+		if err2 != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err2.Error()})
+			return
+		}
+		accountsCfg = &config.AccountsYAML{Accounts: legacyCfg.Accounts}
 	}
 
 	imported := 0
-	for _, p := range cfg.ToAccounts() {
+	for _, p := range accountsCfg.ToAccounts() {
+		p.APIKeyHash = crypto.HashKey(string(p.APIKey))
 		apiKeyEnc := p.APIKey
 		if h.encryptionKey != nil {
 			enc, err := crypto.Encrypt(h.encryptionKey, p.APIKey)
@@ -573,18 +696,10 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 		}
 		p.APIKey = apiKeyEnc
 		if _, err := h.db.CreateAccount(p); err != nil {
-			slog.Warn("import account failed", "name", p.Name, "error", err)
+			slog.Warn("import account skipped", "name", p.Name, "error", err)
 		} else {
 			imported++
 		}
-	}
-
-	// Import proxy settings
-	if cfg.Proxy.RequestTimeout > 0 {
-		h.db.SetSetting("request_timeout", fmt.Sprintf("%d", cfg.Proxy.RequestTimeout))
-	}
-	if cfg.Proxy.MaxRetries > 0 {
-		h.db.SetSetting("max_retries", fmt.Sprintf("%d", cfg.Proxy.MaxRetries))
 	}
 
 	h.reloadPool()
@@ -598,7 +713,6 @@ func (h *AdminHandler) HandleConfigExport(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Decrypt API keys for export
 	for i := range accounts {
 		if h.encryptionKey != nil {
 			if plain, err := crypto.Decrypt(h.encryptionKey, accounts[i].APIKey); err == nil {
@@ -607,16 +721,61 @@ func (h *AdminHandler) HandleConfigExport(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	settings, _ := h.db.GetAllSettings()
-	data, err := config.ExportYAML(accounts, settings)
+	data, err := config.ExportAccountsYAML(accounts)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/x-yaml")
-	w.Header().Set("Content-Disposition", "attachment; filename=llm-proxy-config.yml")
+	w.Header().Set("Content-Disposition", "attachment; filename=llm-proxy-accounts.yml")
 	w.Write(data)
+}
+
+func (h *AdminHandler) HandleSettingsExport(w http.ResponseWriter, r *http.Request) {
+	settings, _ := h.db.GetAllSettings()
+	data, err := config.ExportSettingsYAML(settings)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-yaml")
+	w.Header().Set("Content-Disposition", "attachment; filename=llm-proxy-settings.yml")
+	w.Write(data)
+}
+
+func (h *AdminHandler) HandleSettingsImport(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	cfg, err := config.ParseSettingsYAML(body)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err.Error()})
+		return
+	}
+
+	if cfg.Proxy.RequestTimeout > 0 {
+		h.db.SetSetting("request_timeout", fmt.Sprintf("%d", cfg.Proxy.RequestTimeout))
+	}
+	if cfg.Proxy.MaxRetries > 0 {
+		h.db.SetSetting("max_retries", fmt.Sprintf("%d", cfg.Proxy.MaxRetries))
+	}
+	if cfg.Fallback.BaseURL != "" {
+		h.db.SetSetting("fallback_enabled", fmt.Sprintf("%v", cfg.Fallback.Enabled))
+		h.db.SetSetting("fallback_url", cfg.Fallback.BaseURL)
+		h.db.SetSetting("fallback_chat_model", cfg.Fallback.ChatModel)
+		h.db.SetSetting("fallback_embedding_model", cfg.Fallback.EmbeddingModel)
+		h.db.SetSetting("fallback_timeout", fmt.Sprintf("%d", cfg.Fallback.Timeout))
+	}
+
+	if h.onSettingsChange != nil {
+		h.onSettingsChange()
+	}
+	writeJSON(w, 200, map[string]string{"status": "imported"})
 }
 
 func (h *AdminHandler) reloadPool() {
@@ -633,31 +792,42 @@ func (h *AdminHandler) reloadPool() {
 			}
 		}
 	}
-	h.pool.Reload(accounts)
-}
-
-// knownProviderBaseURLs maps provider types to their canonical API base URLs.
-// Mirrors the map in proxy/handler.go so that admin handlers (test, discover)
-// resolve URLs the same way the proxy does.
-var knownProviderBaseURLs = map[string]string{
-	"groq":       "https://api.groq.com/openai/v1",
-	"openrouter": "https://openrouter.ai/api/v1",
-	"cerebras":   "https://api.cerebras.ai/v1",
-	"mistral":    "https://api.mistral.ai/v1",
-	"github":     "https://models.inference.ai.azure.com",
-	"cohere":     "https://api.cohere.ai/compatibility/v1",
-	"llm7":       "https://api.llm7.io/v1",
-	"nvidia":     "https://integrate.api.nvidia.com/v1",
-	"openai":     "https://api.openai.com/v1",
-}
-
-// resolveProviderURL returns the canonical URL for known providers,
-// falling back to the stored base URL.
-func resolveProviderURL(providerType, baseURL string) string {
-	if u, ok := knownProviderBaseURLs[providerType]; ok {
-		return u
+	providerList, _ := h.db.ListEnabledProviders()
+	providerMap := make(map[string]store.Provider, len(providerList))
+	for _, p := range providerList {
+		providerMap[p.Name] = p
 	}
-	return baseURL
+	h.pool.Reload(accounts, providerMap)
+}
+
+func (h *AdminHandler) providerInfo(providerType, accountBaseURL string) keyval.ProviderInfo {
+	prov, err := h.db.GetProvider(providerType)
+	if err != nil {
+		return keyval.ProviderInfo{Name: providerType, AuthType: "bearer"}
+	}
+	baseURL := accountBaseURL
+	if baseURL == "" {
+		baseURL = prov.BaseURL
+	}
+	return keyval.ProviderInfo{
+		Name:        prov.Name,
+		BaseURL:     baseURL,
+		ModelsURL:   prov.ModelsURL,
+		AuthType:    prov.AuthType,
+		AuthHeader:  prov.AuthHeader,
+		APIStandard: prov.APIStandard,
+	}
+}
+
+func (h *AdminHandler) decryptAccountKey(p store.Account) (string, error) {
+	if h.encryptionKey != nil {
+		plain, err := crypto.Decrypt(h.encryptionKey, p.APIKey)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(plain)), nil
+	}
+	return strings.TrimSpace(string(p.APIKey)), nil
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

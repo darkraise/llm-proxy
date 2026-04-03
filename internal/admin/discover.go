@@ -9,60 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkraise/llm-proxy/internal/crypto"
+	"github.com/darkraise/llm-proxy/internal/keyval"
 )
 
-// parseModelList handles both OpenAI format {"data":[{"id":"..."}]} and
-// plain array [{"id":"...","name":"..."}] responses from different providers.
-func parseModelList(data []byte) []discoverModel {
-	// Try OpenAI format first: {"data": [{"id": "..."}]}
-	var openai struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(data, &openai); err == nil && len(openai.Data) > 0 {
-		models := make([]discoverModel, 0, len(openai.Data))
-		for _, item := range openai.Data {
-			if item.ID != "" {
-				models = append(models, discoverModel{ID: item.ID, Name: item.ID})
-			}
-		}
-		return models
-	}
-
-	// Try plain array: [{"id":"...", "name":"..."}]
-	var arr []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(data, &arr); err == nil && len(arr) > 0 {
-		models := make([]discoverModel, 0, len(arr))
-		for _, item := range arr {
-			name := item.Name
-			if name == "" {
-				name = item.ID
-			}
-			if name != "" {
-				models = append(models, discoverModel{ID: name, Name: name})
-			}
-		}
-		return models
-	}
-
-	return nil
-}
-
 type discoverRequest struct {
-	Type    string `json:"type"`
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
-	FreeOnly bool  `json:"free_only"`
-}
-
-type discoverModel struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Type     string `json:"type"`
+	BaseURL  string `json:"base_url"`
+	APIKey   string `json:"api_key"`
+	FreeOnly bool   `json:"free_only"`
 }
 
 // HandleDiscoverModels fetches the model list from an external provider using
@@ -75,91 +29,51 @@ func (h *AdminHandler) HandleDiscoverModels(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
-
 	if req.Type == "" {
 		writeJSON(w, 400, map[string]string{"error": "type is required"})
 		return
 	}
 
-	client := &http.Client{Timeout: 7 * time.Second}
-
-	var fetchURL string
-	var fetchReq *http.Request
-	var err error
-
-	switch req.Type {
-	case "google":
-		fetchURL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
-		fetchReq, err = http.NewRequestWithContext(r.Context(), "GET", fetchURL, nil)
-		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "failed to build request: " + err.Error()})
-			return
+	info := h.providerInfo(req.Type, "")
+	if req.BaseURL != "" {
+		if info.BaseURL != "" && strings.HasPrefix(info.ModelsURL, info.BaseURL) {
+			info.ModelsURL = ""
 		}
-		fetchReq.Header.Set("Authorization", "Bearer "+req.APIKey)
+		info.BaseURL = req.BaseURL
+	}
+	results := keyval.Validate(r.Context(), info, req.APIKey, []keyval.StepConfig{{Step: "models_fetch"}})
+	last := results[len(results)-1]
 
-	case "ollama":
-		fetchURL = req.BaseURL + "/models"
-		fetchReq, err = http.NewRequestWithContext(r.Context(), "GET", fetchURL, nil)
-		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "failed to build request: " + err.Error()})
-			return
+	if !last.Success {
+		status := 502
+		if last.StatusCode == 401 || last.StatusCode == 403 {
+			status = 401
 		}
-		// Ollama needs no auth header.
-
-	default:
-		fetchURL = req.BaseURL + "/models"
-		fetchReq, err = http.NewRequestWithContext(r.Context(), "GET", fetchURL, nil)
-		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "failed to build request: " + err.Error()})
-			return
-		}
-		fetchReq.Header.Set("Authorization", "Bearer "+req.APIKey)
-	}
-
-	resp, err := client.Do(fetchReq)
-	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to reach provider: " + err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		writeJSON(w, 401, map[string]string{"error": "authentication failed"})
-		return
-	}
-	if resp.StatusCode >= 400 {
-		writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("provider returned status %d", resp.StatusCode)})
+		writeJSON(w, status, map[string]string{"error": last.Error})
 		return
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to read response"})
-		return
+	models := make([]map[string]string, len(last.Models))
+	for i, m := range last.Models {
+		models[i] = map[string]string{"id": m, "name": m}
 	}
 
-	models := parseModelList(respBody)
-	if models == nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to parse provider response"})
-		return
-	}
-
-	// For openrouter with free_only: keep only models with ":free" suffix.
-	if req.FreeOnly && req.Type == "openrouter" {
-		filtered := make([]discoverModel, 0)
+	if req.FreeOnly {
+		var filtered []map[string]string
 		for _, m := range models {
-			if strings.HasSuffix(m.ID, ":free") {
+			if strings.HasSuffix(m["id"], ":free") {
 				filtered = append(filtered, m)
 			}
 		}
-		models = filtered
+		if len(filtered) > 0 {
+			models = filtered
+		}
 	}
 
 	writeJSON(w, 200, map[string]any{"models": models})
 }
 
 // HandleDiscoverByAccount fetches models using a stored account's credentials.
-// This is used by the Rate Limits page to refresh the model list.
 //
 // POST /admin/api/accounts/{id}/discover
 func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Request) {
@@ -168,80 +82,30 @@ func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Re
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-
 	account, err := h.db.GetAccount(id)
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "account not found"})
 		return
 	}
-
-	// Decrypt API key
-	apiKey := string(account.APIKey)
-	if h.encryptionKey != nil {
-		if plain, err := crypto.Decrypt(h.encryptionKey, account.APIKey); err == nil {
-			apiKey = string(plain)
-		}
-	}
-
-	// Reuse the discover logic by constructing a discoverRequest
-	baseURL := resolveProviderURL(account.Type, account.BaseURL)
-	req := discoverRequest{
-		Type:    account.Type,
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-	}
-
-	client := &http.Client{Timeout: 7 * time.Second}
-
-	var fetchURL string
-	var fetchReq *http.Request
-
-	switch req.Type {
-	case "google":
-		fetchURL = "https://generativelanguage.googleapis.com/v1beta/openai/models"
-		fetchReq, err = http.NewRequest("GET", fetchURL, nil)
-		if err == nil {
-			fetchReq.Header.Set("Authorization", "Bearer "+req.APIKey)
-		}
-	case "ollama":
-		fetchURL = req.BaseURL + "/models"
-		fetchReq, err = http.NewRequest("GET", fetchURL, nil)
-	default:
-		fetchURL = req.BaseURL + "/models"
-		fetchReq, err = http.NewRequest("GET", fetchURL, nil)
-		if err == nil {
-			fetchReq.Header.Set("Authorization", "Bearer "+req.APIKey)
-		}
-	}
+	apiKey, err := h.decryptAccountKey(account)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to build request"})
+		writeJSON(w, 500, map[string]string{"error": "failed to decrypt API key"})
 		return
 	}
 
-	resp, err := client.Do(fetchReq)
-	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to reach provider: " + err.Error()})
-		return
-	}
-	defer resp.Body.Close()
+	info := h.providerInfo(account.Type, account.BaseURL)
+	results := keyval.Validate(r.Context(), info, apiKey, []keyval.StepConfig{{Step: "models_fetch"}})
+	last := results[len(results)-1]
 
-	if resp.StatusCode >= 400 {
-		writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("provider returned status %d", resp.StatusCode)})
+	if !last.Success {
+		writeJSON(w, 502, map[string]string{"error": last.Error})
 		return
 	}
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to read response"})
-		return
+	models := make([]map[string]string, len(last.Models))
+	for i, m := range last.Models {
+		models[i] = map[string]string{"id": m, "name": m}
 	}
-
-	models := parseModelList(respBody)
-	if models == nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to parse response"})
-		return
-	}
-
 	writeJSON(w, 200, map[string]any{"models": models})
 }
 
