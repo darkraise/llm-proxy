@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/darkraise/llm-proxy/internal/adapter"
+	"github.com/darkraise/llm-proxy/internal/keyval"
 	"github.com/darkraise/llm-proxy/internal/crypto"
 	"github.com/darkraise/llm-proxy/internal/notify"
 	"github.com/darkraise/llm-proxy/internal/provider"
@@ -375,7 +376,7 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 		return nil, 0, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
+	setProviderAuth(httpReq, prov)
 
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
@@ -409,7 +410,7 @@ func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.Em
 		return nil, 0, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
+	setProviderAuth(httpReq, prov)
 
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
@@ -462,7 +463,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		var statusCode int
 		var respHeaders http.Header
 
-		switch prov.Type {
+		switch prov.APIStandard {
 		case "google":
 			resp, statusCode, err = h.callGoogle(prov, req)
 		default:
@@ -626,7 +627,7 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 		return nil, 0, nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
+	setProviderAuth(httpReq, prov)
 
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
@@ -699,24 +700,12 @@ func isTimeoutError(err error) bool {
 	return strings.Contains(s, "timeout") || strings.Contains(s, "deadline exceeded")
 }
 
-var knownProviderURLs = map[string]string{
-	"groq":       "https://api.groq.com/openai/v1",
-	"openrouter": "https://openrouter.ai/api/v1",
-	"cerebras":   "https://api.cerebras.ai/v1",
-	"mistral":    "https://api.mistral.ai/v1",
-	"github":     "https://models.inference.ai.azure.com",
-	"cohere":     "https://api.cohere.ai/compatibility/v1",
-	"llm7":       "https://api.llm7.io/v1",
-	"nvidia":     "https://integrate.api.nvidia.com/v1",
-	"openai":     "https://api.openai.com/v1",
+func resolveBaseURL(prov *provider.AccountInfo) string {
+	return prov.ProviderURL
 }
 
-// resolveBaseURL returns the canonical URL for known providers, or falls back to the stored base URL.
-func resolveBaseURL(prov *provider.AccountInfo) string {
-	if url, ok := knownProviderURLs[prov.Type]; ok {
-		return url
-	}
-	return prov.BaseURL
+func setProviderAuth(httpReq *http.Request, prov *provider.AccountInfo) {
+	keyval.SetAuth(httpReq, prov.AuthType, prov.AuthHeader, prov.DecryptedKey)
 }
 
 // firstModel resolves the actual model name to send to a provider.
