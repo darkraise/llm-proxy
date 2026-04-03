@@ -161,19 +161,211 @@ func TestGetDefaultLimits_EmptyModels(t *testing.T) {
 func TestGetDefaultLimits_ReturnsEmptyWithNoAdminDefs(t *testing.T) {
 	db := newTestDB(t)
 
-	// No admin-defined limits — GetDefaultLimits now returns empty; the
-	// frontend falls back to the fetch-docs endpoint for live data.
+	// No admin-defined limits — falls back to provider's default_limits.
+	// Groq has rpm, rpd, tpm seeded, so we expect 3 limits for the model.
 	limits, err := db.GetDefaultLimits("groq", []string{"llama-3.3-70b-versatile"})
 	if err != nil {
 		t.Fatalf("GetDefaultLimits: %v", err)
 	}
-	if len(limits) != 0 {
-		t.Errorf("expected empty result when no admin defs exist, got %d", len(limits))
+	if len(limits) == 0 {
+		t.Errorf("expected provider default limits for groq, got 0")
 	}
 
 	// Unknown provider also returns empty.
 	limits2, _ := db.GetDefaultLimits("unknown-provider", []string{"model"})
 	if len(limits2) != 0 {
 		t.Errorf("expected empty for unknown provider, got %d", len(limits2))
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_FillsGaps(t *testing.T) {
+	db := newTestDB(t)
+	id, err := db.CreateAccount(Account{
+		Name: "groq-1", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "tpm", MaxValue: 6000, WindowSecs: 60},
+	}
+	modified, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !modified {
+		t.Error("expected modified=true when filling gaps")
+	}
+	account, err := db.GetAccount(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(account.Limits) != 2 {
+		t.Fatalf("expected 2 limits, got %d", len(account.Limits))
+	}
+	byMetric := map[string]AccountLimit{}
+	for _, l := range account.Limits {
+		byMetric[l.Metric] = l
+	}
+	if byMetric["rpd"].MaxValue != 14400 {
+		t.Errorf("rpd: expected 14400, got %d", byMetric["rpd"].MaxValue)
+	}
+	if byMetric["tpm"].MaxValue != 6000 {
+		t.Errorf("tpm: expected 6000, got %d", byMetric["tpm"].MaxValue)
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_DoesNotOverwrite(t *testing.T) {
+	db := newTestDB(t)
+	_, err := db.CreateAccount(Account{
+		Name: "groq-manual", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
+		Limits: []AccountLimit{
+			{Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 100, WindowSecs: 86400},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "tpm", MaxValue: 6000, WindowSecs: 60},
+	}
+	modified, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !modified {
+		t.Error("expected modified=true because tpm was added")
+	}
+	account, _ := db.GetAccount(1)
+	byMetric := map[string]AccountLimit{}
+	for _, l := range account.Limits {
+		byMetric[l.Metric] = l
+	}
+	if byMetric["rpd"].MaxValue != 100 {
+		t.Errorf("rpd should not be overwritten: expected 100, got %d", byMetric["rpd"].MaxValue)
+	}
+	if byMetric["tpm"].MaxValue != 6000 {
+		t.Errorf("tpm should be filled: expected 6000, got %d", byMetric["tpm"].MaxValue)
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_NoModification(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateAccount(Account{
+		Name: "groq-full", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
+		Limits: []AccountLimit{
+			{Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+			{Model: "llama-3.3-70b", Metric: "tpm", MaxValue: 6000, WindowSecs: 60},
+		},
+	})
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "tpm", MaxValue: 6000, WindowSecs: 60},
+	}
+	modified, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if modified {
+		t.Error("expected modified=false when all limits already exist")
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_SkipsDisabledAccounts(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateAccount(Account{
+		Name: "groq-disabled", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: false,
+	})
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+	}
+	modified, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if modified {
+		t.Error("expected modified=false for disabled account")
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_SkipsModelNotOnAccount(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateAccount(Account{
+		Name: "groq-other", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["mixtral-8x7b"]}`, Enabled: true,
+	})
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+	}
+	modified, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if modified {
+		t.Error("expected modified=false when discovered model is not on account")
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_DeduplicatesReloads(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateAccount(Account{
+		Name: "groq-dedup", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
+	})
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+	}
+	modified1, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !modified1 {
+		t.Error("first call should return modified=true")
+	}
+	modified2, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if modified2 {
+		t.Error("second call should return modified=false (dedup)")
+	}
+}
+
+func TestFillAccountLimitsFromDiscovered_MultipleAccounts(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateAccount(Account{
+		Name: "groq-a", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
+		Limits: []AccountLimit{
+			{Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 100, WindowSecs: 86400},
+		},
+	})
+	id2, _ := db.CreateAccount(Account{
+		Name: "groq-b", Type: "groq", APIKey: []byte("k"),
+		Models: `{"chat":["llama-3.3-70b"]}`, Enabled: true,
+	})
+	defs := []RateLimitDef{
+		{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpd", MaxValue: 14400, WindowSecs: 86400},
+	}
+	modified, err := db.FillAccountLimitsFromDiscovered("groq", defs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !modified {
+		t.Error("expected modified=true for groq-b")
+	}
+	a, _ := db.GetAccount(1)
+	b, _ := db.GetAccount(id2)
+	if len(a.Limits) != 1 || a.Limits[0].MaxValue != 100 {
+		t.Errorf("groq-a limit should be unchanged at 100, got %+v", a.Limits)
+	}
+	if len(b.Limits) != 1 || b.Limits[0].MaxValue != 14400 {
+		t.Errorf("groq-b limit should be 14400, got %+v", b.Limits)
 	}
 }
