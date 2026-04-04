@@ -89,8 +89,6 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
-	db.BackfillAPIKeyHashes(accounts)
-
 	providerList, _ := db.ListEnabledProviders()
 	providerMap := make(map[string]store.Provider, len(providerList))
 	for _, p := range providerList {
@@ -121,10 +119,24 @@ func New(cfg Config) (*Server, error) {
 	adminHandler.SetNotifier(notifier)
 
 	scannerMgr := scanner.NewManager(db, encryptionKey)
-	if tokenEnc, _ := db.GetSetting("scanner_github_token"); tokenEnc != "" {
-		if plain, err := cryptopkg.Decrypt(encryptionKey, []byte(tokenEnc)); err == nil {
-			scannerMgr.ConfigureGitHub(string(plain))
+	decryptSetting := func(key string) string {
+		stored, _ := db.GetSetting(key)
+		if stored == "" {
+			return ""
 		}
+		var enc []byte
+		fmt.Sscanf(stored, "%x", &enc)
+		if len(enc) == 0 {
+			return ""
+		}
+		plain, err := cryptopkg.Decrypt(encryptionKey, enc)
+		if err != nil {
+			return ""
+		}
+		return string(plain)
+	}
+	if token := decryptSetting("scanner_github_token"); token != "" {
+		scannerMgr.ConfigureGitHub(token)
 	}
 	if delayStr, _ := db.GetSetting("scanner_delay"); delayStr != "" {
 		var d int
@@ -252,6 +264,8 @@ func (s *Server) adminRoutes() {
 	m.Handle("PUT /api/accounts/{id}", protected(s.admin.HandleUpdateAccount))
 	m.Handle("DELETE /api/accounts/{id}", protected(s.admin.HandleDeleteAccount))
 	m.Handle("POST /api/accounts/{id}/test", protected(s.admin.HandleTestAccount))
+	m.Handle("GET /api/accounts/{id}/key", protected(s.admin.HandleGetAccountKey))
+	m.Handle("POST /api/accounts/{id}/chat-test", protected(s.admin.HandleChatTestAccount))
 
 	m.Handle("GET /api/providers", protected(s.admin.HandleListProviders))
 	m.Handle("GET /api/providers/{name}", protected(s.admin.HandleGetProvider))
@@ -289,12 +303,14 @@ func (s *Server) adminRoutes() {
 	m.Handle("POST /api/ollama/discover", protected(s.admin.HandleDiscoverOllama))
 
 	m.Handle("POST /api/keys/test", protected(s.admin.HandleTestKey))
+	m.Handle("POST /api/keys/chat-test", protected(s.admin.HandleChatTestKey))
 
 	m.Handle("GET /api/scanner/status", protected(s.admin.HandleGetScannerStatus))
 	m.Handle("POST /api/scanner/start", protected(s.admin.HandleStartScan))
 	m.Handle("POST /api/scanner/stop", protected(s.admin.HandleStopScan))
 	m.Handle("GET /api/scanner/keys", protected(s.admin.HandleListDiscoveredKeys))
 	m.Handle("POST /api/scanner/keys/{id}/validate", protected(s.admin.HandleValidateDiscoveredKey))
+	m.Handle("POST /api/scanner/keys/validate", protected(s.admin.HandleBulkValidateKeys))
 	m.Handle("POST /api/scanner/keys/{id}/discover", protected(s.admin.HandleDiscoverByDiscoveredKey))
 	m.Handle("POST /api/scanner/keys/{id}/import", protected(s.admin.HandleImportDiscoveredKey))
 	m.Handle("POST /api/scanner/keys/import", protected(s.admin.HandleBulkImportKeys))

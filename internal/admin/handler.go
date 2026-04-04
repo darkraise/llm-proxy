@@ -673,15 +673,14 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Try new accounts-only format first, fall back to legacy combined format.
 	accountsCfg, err := config.ParseAccountsYAML(body)
-	if err != nil || len(accountsCfg.Accounts) == 0 {
-		legacyCfg, err2 := config.ParseYAML(body)
-		if err2 != nil {
-			writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err2.Error()})
-			return
-		}
-		accountsCfg = &config.AccountsYAML{Accounts: legacyCfg.Accounts}
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err.Error()})
+		return
+	}
+	if len(accountsCfg.Accounts) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "no accounts found in YAML"})
+		return
 	}
 
 	imported := 0

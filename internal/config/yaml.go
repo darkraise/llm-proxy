@@ -1,16 +1,18 @@
 package config
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/darkraise/llm-proxy/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
-type Config struct {
+// ─── Settings YAML (proxy + fallback settings only) ─────────────────────────
+
+type SettingsYAML struct {
 	Proxy    ProxyConfig    `yaml:"proxy"`
 	Fallback FallbackConfig `yaml:"fallback"`
-	Accounts []AccountYAML  `yaml:"accounts"`
 }
 
 type ProxyConfig struct {
@@ -26,56 +28,8 @@ type FallbackConfig struct {
 	Timeout        int    `yaml:"timeout"`
 }
 
-type AccountYAML struct {
-	Name    string      `yaml:"name"`
-	Type    string      `yaml:"type"`
-	BaseURL string      `yaml:"base_url,omitempty"`
-	APIKey  string      `yaml:"api_key"`
-	Models  []string    `yaml:"models"`
-	Limits  []LimitYAML `yaml:"limits"`
-	Enabled bool        `yaml:"enabled"`
-}
-
-type LimitYAML struct {
-	Metric   string `yaml:"metric"`
-	MaxValue int    `yaml:"max_value"`
-}
-
-func ParseYAML(data []byte) (*Config, error) {
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-func (c *Config) ToAccounts() []store.Account {
-	accounts := make([]store.Account, len(c.Accounts))
-	for i, p := range c.Accounts {
-		// Treat imported flat model arrays as chat models.
-		categorized := map[string][]string{store.CategoryChat: p.Models}
-		var limits []store.AccountLimit
-		for _, l := range p.Limits {
-			windowSecs := metricToWindow(l.Metric)
-			limits = append(limits, store.AccountLimit{
-				Metric: l.Metric, MaxValue: l.MaxValue, WindowSecs: windowSecs,
-			})
-		}
-		accounts[i] = store.Account{
-			Name:    p.Name,
-			Type:    p.Type,
-			BaseURL: p.BaseURL,
-			APIKey:  []byte(p.APIKey),
-			Models:  store.FormatCategorizedModels(categorized),
-			Enabled: p.Enabled,
-			Limits:  limits,
-		}
-	}
-	return accounts
-}
-
-func ExportYAML(accounts []store.Account, settings map[string]string) ([]byte, error) {
-	cfg := Config{
+func ExportSettingsYAML(settings map[string]string) ([]byte, error) {
+	cfg := SettingsYAML{
 		Proxy: ProxyConfig{
 			RequestTimeout: atoi(settings["request_timeout"], 15),
 			MaxRetries:     atoi(settings["max_retries"], 3),
@@ -88,29 +42,126 @@ func ExportYAML(accounts []store.Account, settings map[string]string) ([]byte, e
 			Timeout:        atoi(settings["fallback_timeout"], 30),
 		},
 	}
+	return yaml.Marshal(&cfg)
+}
 
+func ParseSettingsYAML(data []byte) (*SettingsYAML, error) {
+	var cfg SettingsYAML
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// ─── Accounts YAML ──────────────────────────────────────────────────────────
+
+type AccountsYAML struct {
+	Accounts []AccountYAML `yaml:"accounts"`
+}
+
+type AccountYAML struct {
+	Name          string              `yaml:"name"`
+	Type          string              `yaml:"type"`
+	BaseURL       string              `yaml:"base_url,omitempty"`
+	APIKey        string              `yaml:"api_key"`
+	Models        map[string][]string `yaml:"models"`
+	DefaultModels map[string]string   `yaml:"default_models,omitempty"`
+	Priority      int                 `yaml:"priority"`
+	Limits        []LimitYAML         `yaml:"limits"`
+	Enabled       bool                `yaml:"enabled"`
+}
+
+type LimitYAML struct {
+	Model      string `yaml:"model,omitempty"`
+	Metric     string `yaml:"metric"`
+	MaxValue   int    `yaml:"max_value"`
+	WindowSecs int    `yaml:"window_secs"`
+}
+
+func ExportAccountsYAML(accounts []store.Account) ([]byte, error) {
+	cfg := AccountsYAML{}
 	for _, p := range accounts {
-		parsed := store.ParseCategorizedModels(p.Models)
-		models := store.AllModels(parsed)
+		models := store.ParseCategorizedModels(p.Models)
+		defaults := store.ParseDefaultModels(p.DefaultModels)
 
 		var limits []LimitYAML
 		for _, l := range p.Limits {
-			limits = append(limits, LimitYAML{Metric: l.Metric, MaxValue: l.MaxValue})
+			limits = append(limits, LimitYAML{
+				Model:      l.Model,
+				Metric:     l.Metric,
+				MaxValue:   l.MaxValue,
+				WindowSecs: l.WindowSecs,
+			})
 		}
 
 		cfg.Accounts = append(cfg.Accounts, AccountYAML{
-			Name:    p.Name,
-			Type:    p.Type,
-			BaseURL: p.BaseURL,
-			APIKey:  string(p.APIKey), // plaintext for export
-			Models:  models,
-			Limits:  limits,
-			Enabled: p.Enabled,
+			Name:          p.Name,
+			Type:          p.Type,
+			BaseURL:       p.BaseURL,
+			APIKey:        string(p.APIKey),
+			Models:        models,
+			DefaultModels: defaults,
+			Priority:      p.Priority,
+			Limits:        limits,
+			Enabled:       p.Enabled,
 		})
 	}
-
 	return yaml.Marshal(&cfg)
 }
+
+func ParseAccountsYAML(data []byte) (*AccountsYAML, error) {
+	var cfg AccountsYAML
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (c *AccountsYAML) ToAccounts() []store.Account {
+	accounts := make([]store.Account, len(c.Accounts))
+	for i, p := range c.Accounts {
+		models := p.Models
+		if models == nil {
+			models = map[string][]string{}
+		}
+		defaults := p.DefaultModels
+		if defaults == nil {
+			defaults = map[string]string{}
+		}
+
+		var limits []store.AccountLimit
+		for _, l := range p.Limits {
+			ws := l.WindowSecs
+			if ws == 0 {
+				ws = metricToWindow(l.Metric)
+			}
+			limits = append(limits, store.AccountLimit{
+				Model:      l.Model,
+				Metric:     l.Metric,
+				MaxValue:   l.MaxValue,
+				WindowSecs: ws,
+			})
+		}
+
+		modelsJSON, _ := json.Marshal(models)
+		defaultsJSON, _ := json.Marshal(defaults)
+
+		accounts[i] = store.Account{
+			Name:          p.Name,
+			Type:          p.Type,
+			BaseURL:       p.BaseURL,
+			APIKey:        []byte(p.APIKey),
+			Models:        string(modelsJSON),
+			DefaultModels: string(defaultsJSON),
+			Priority:      p.Priority,
+			Enabled:       p.Enabled,
+			Limits:        limits,
+		}
+	}
+	return accounts
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 func metricToWindow(metric string) int {
 	switch metric {

@@ -193,6 +193,59 @@ func (h *AdminHandler) HandleValidateDiscoveredKey(w http.ResponseWriter, r *htt
 	})
 }
 
+// HandleBulkValidateKeys validates multiple keys sequentially and streams
+// results as Server-Sent Events. This avoids the SQLITE_BUSY errors that
+// occur when the frontend fires many parallel validate requests.
+//
+// POST /api/scanner/keys/validate
+func (h *AdminHandler) HandleBulkValidateKeys(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "ids array is required"})
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, 500, map[string]string{"error": "streaming not supported"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(200)
+
+	for _, id := range req.IDs {
+		dk, err := h.db.GetDiscoveredKey(id)
+		if err != nil {
+			continue
+		}
+
+		plainKey, err := crypto.Decrypt(h.encryptionKey, dk.KeyEnc)
+		if err != nil {
+			continue
+		}
+
+		valid, _ := scanner.ValidateKey(h.db, dk.Provider, string(plainKey))
+		h.db.UpdateDiscoveredKeyValidity(id, valid)
+
+		result, _ := json.Marshal(map[string]any{
+			"id":         id,
+			"provider":   dk.Provider,
+			"masked_key": maskKey(string(plainKey)),
+			"valid":      valid,
+		})
+		fmt.Fprintf(w, "data: %s\n\n", result)
+		flusher.Flush()
+	}
+
+	fmt.Fprintf(w, "data: {\"done\":true}\n\n")
+	flusher.Flush()
+}
+
 func (h *AdminHandler) HandleImportDiscoveredKey(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -429,57 +482,66 @@ func (h *AdminHandler) HandleListScanHistory(w http.ResponseWriter, r *http.Requ
 func (h *AdminHandler) HandleGetScannerConfig(w http.ResponseWriter, r *http.Request) {
 	all, _ := h.db.GetAllSettings()
 
-	githubTokenMasked := ""
-	if enc := all["scanner_github_token"]; enc != "" && h.encryptionKey != nil {
-		if plain, err := crypto.Decrypt(h.encryptionKey, []byte(enc)); err == nil && len(plain) > 0 {
-			if len(plain) >= 4 {
-				githubTokenMasked = "..." + string(plain[len(plain)-4:])
-			} else {
-				githubTokenMasked = "***"
-			}
+	maskToken := func(key string) string {
+		stored := all[key]
+		if stored == "" || h.encryptionKey == nil {
+			return ""
 		}
+		var enc []byte
+		fmt.Sscanf(stored, "%x", &enc)
+		if len(enc) == 0 {
+			return ""
+		}
+		plain, err := crypto.Decrypt(h.encryptionKey, enc)
+		if err != nil || len(plain) == 0 {
+			return ""
+		}
+		if len(plain) >= 4 {
+			return "..." + string(plain[len(plain)-4:])
+		}
+		return "***"
 	}
 
+	githubMasked := maskToken("scanner_github_token")
 	delay, maxPages := h.scanner.GitHubConfig()
 
 	writeJSON(w, 200, map[string]any{
-		"github_token_configured": githubTokenMasked != "",
-		"github_token_masked":     githubTokenMasked,
-		"delay_seconds":           int(delay.Seconds()),
-		"max_pages":               maxPages,
+		"github_token_configured": githubMasked != "",
+		"github_token_masked":    githubMasked,
+		"delay_seconds":          int(delay.Seconds()),
+		"max_pages":              maxPages,
 	})
 }
 
 func (h *AdminHandler) HandleUpdateScannerConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		GithubToken *string `json:"github_token"`
-		DelaySecs   *int    `json:"delay_seconds"`
-		MaxPages    *int    `json:"max_pages"`
+		DelaySecs   *int   `json:"delay_seconds"`
+		MaxPages    *int   `json:"max_pages"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
 
-	if req.GithubToken != nil {
-		if *req.GithubToken != "" {
-			enc, err := crypto.Encrypt(h.encryptionKey, []byte(*req.GithubToken))
+	saveEncrypted := func(key, value string) error {
+		if value != "" {
+			enc, err := crypto.Encrypt(h.encryptionKey, []byte(value))
 			if err != nil {
-				writeJSON(w, 500, map[string]string{"error": "encryption failed"})
-				return
+				return err
 			}
-			if err := h.db.SetSetting("scanner_github_token", string(enc)); err != nil {
-				writeJSON(w, 500, map[string]string{"error": err.Error()})
-				return
-			}
-			if h.scanner != nil {
-				h.scanner.ConfigureGitHub(*req.GithubToken)
-			}
-		} else {
-			h.db.SetSetting("scanner_github_token", "")
-			if h.scanner != nil {
-				h.scanner.ConfigureGitHub("")
-			}
+			return h.db.SetSetting(key, fmt.Sprintf("%x", enc))
+		}
+		return h.db.SetSetting(key, "")
+	}
+
+	if req.GithubToken != nil {
+		if err := saveEncrypted("scanner_github_token", *req.GithubToken); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if h.scanner != nil {
+			h.scanner.ConfigureGitHub(*req.GithubToken)
 		}
 	}
 

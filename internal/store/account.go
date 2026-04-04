@@ -2,22 +2,24 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
 type Account struct {
-	ID           int64          `json:"id"`
-	Name         string         `json:"name"`
-	Type         string         `json:"type"`
-	BaseURL      string         `json:"base_url"`
-	APIKey       []byte         `json:"-"`
-	Models       string         `json:"models"`
-	Priority     int            `json:"priority"`
-	Enabled      bool           `json:"enabled"`
+	ID            int64          `json:"id"`
+	Name          string         `json:"name"`
+	Type          string         `json:"type"`
+	BaseURL       string         `json:"base_url"`
+	APIKey        []byte         `json:"-"`
+	APIKeyHash    string         `json:"-"`
+	Models        string         `json:"models"`
+	Priority      int            `json:"priority"`
+	Enabled       bool           `json:"enabled"`
 	DefaultModels string         `json:"default_models"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	Limits       []AccountLimit `json:"limits"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	Limits        []AccountLimit `json:"limits"`
 }
 
 type AccountLimit struct {
@@ -35,9 +37,9 @@ func (d *DB) CreateAccount(p Account) (int64, error) {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO accounts (name, type, base_url, api_key_enc, models, priority, enabled, default_models)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Type, p.BaseURL, p.APIKey, p.Models, p.Priority, p.Enabled, p.DefaultModels,
+		`INSERT INTO accounts (name, type, base_url, api_key_enc, api_key_hash, models, priority, enabled, default_models)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Type, p.BaseURL, p.APIKey, p.APIKeyHash, p.Models, p.Priority, p.Enabled, p.DefaultModels,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert account: %w", err)
@@ -142,6 +144,7 @@ func (d *DB) UpdateAccount(id int64, p Account) error {
 }
 
 func (d *DB) DeleteAccount(id int64) error {
+	d.Exec("UPDATE discovered_keys SET imported = 0, account_id = NULL, imported_at = NULL WHERE account_id = ?", id)
 	_, err := d.Exec("DELETE FROM accounts WHERE id = ?", id)
 	return err
 }
@@ -165,4 +168,60 @@ func (d *DB) getAccountLimits(accountID int64) ([]AccountLimit, error) {
 		limits = append(limits, l)
 	}
 	return limits, rows.Err()
+}
+
+type BulkEditFields struct {
+	Models        *string
+	DefaultModels *string
+	Limits        *[]AccountLimit
+}
+
+func (d *DB) BulkEditAccounts(ids []int64, fields BulkEditFields) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, id := range ids {
+		var setClauses []string
+		var args []any
+
+		if fields.Models != nil {
+			setClauses = append(setClauses, "models = ?")
+			args = append(args, *fields.Models)
+		}
+		if fields.DefaultModels != nil {
+			setClauses = append(setClauses, "default_models = ?")
+			args = append(args, *fields.DefaultModels)
+		}
+
+		if len(setClauses) > 0 {
+			setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+			args = append(args, id)
+			query := "UPDATE accounts SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
+			if _, err := tx.Exec(query, args...); err != nil {
+				return fmt.Errorf("update account %d: %w", id, err)
+			}
+		}
+
+		if fields.Limits != nil {
+			if _, err := tx.Exec("DELETE FROM account_limits WHERE account_id = ?", id); err != nil {
+				return fmt.Errorf("delete limits for %d: %w", id, err)
+			}
+			for _, l := range *fields.Limits {
+				if _, err := tx.Exec(
+					"INSERT INTO account_limits (account_id, model, metric, max_value, window_secs) VALUES (?, ?, ?, ?, ?)",
+					id, l.Model, l.Metric, l.MaxValue, l.WindowSecs,
+				); err != nil {
+					return fmt.Errorf("insert limit for %d: %w", id, err)
+				}
+			}
+			if len(setClauses) == 0 {
+				tx.Exec("UPDATE accounts SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
+			}
+		}
+	}
+
+	return tx.Commit()
 }

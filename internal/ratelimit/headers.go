@@ -22,10 +22,6 @@ var ProviderHeaderMappings = map[string][]HeaderMapping{
 		{"x-ratelimit-limit-requests", "rpm", 60},
 		{"x-ratelimit-limit-tokens", "tpm", 60},
 	},
-	"openai_legacy": {
-		{"x-ratelimit-limit-requests", "rpm", 60},
-		{"x-ratelimit-limit-tokens", "tpm", 60},
-	},
 	"anthropic": {
 		{"anthropic-ratelimit-requests-limit", "rpm", 60},
 		{"anthropic-ratelimit-tokens-limit", "tpm", 60},
