@@ -4,33 +4,23 @@ import {
   api, Account, AccountInput, AccountLimit, TestResult,
   MODEL_CATEGORIES, ModelCategory,
   parseCategorizedModels, parseDefaultModels, flattenModels, buildModelCategoryMap,
-  FIXED_URL_PROVIDERS,
 } from '../lib/api'
 import { RateLimitTable } from '../components/RateLimitTable'
 import { AccountCard } from '../components/AccountCard'
 import { AccountListRow, LIST_GRID_COLS } from '../components/AccountListRow'
 import { AccountDrawer } from '../components/AccountDrawer'
 import { useLocalStorage } from '../hooks/useLocalStorage'
-import { LayoutGrid, List, Plus, X } from 'lucide-react'
+import { LayoutGrid, List, Pencil, Plus, X, Trash2 } from 'lucide-react'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { BulkEditModal } from '../components/BulkEditModal'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
+import { loadProviders, getDisplayName } from '../lib/providers'
 
-const PROVIDER_TYPES = ['openai', 'groq', 'google', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'ollama', 'openai-compatible']
-
-const PROVIDER_TYPE_URLS: Record<string, string> = {
-  groq: 'https://api.groq.com/openai/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-  cerebras: 'https://api.cerebras.ai/v1',
-  mistral: 'https://api.mistral.ai/v1',
-  github: 'https://models.inference.ai.azure.com',
-  cohere: 'https://api.cohere.ai/compatibility/v1',
-  llm7: 'https://api.llm7.io/v1',
-  openai: 'https://api.openai.com/v1',
-  nvidia: 'https://integrate.api.nvidia.com/v1',
-  ollama: 'http://localhost:11434/v1',
-  google: '',
-  'openai-compatible': '',
-}
+let PROVIDER_TYPES: string[] = []
+let PROVIDER_TYPE_URLS: Record<string, string> = {}
+let PROVIDER_DISPLAY_NAMES: Record<string, string> = {}
+let FIXED_URL_PROVIDERS = new Set<string>()
 
 // ─── Edit Modal (existing accounts) ──────────────────────────────────────────
 
@@ -143,7 +133,7 @@ function AccountEditModal({ initial, onClose, onSave }: AccountModalProps): Reac
                 <Select
                   value={form.type}
                   onChange={(v) => set('type', v)}
-                  options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
+                  options={PROVIDER_TYPES.map((t) => ({ value: t, label: PROVIDER_DISPLAY_NAMES[t] ?? t }))}
                 />
               </div>
             </div>
@@ -365,11 +355,10 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
   }
 
   async function goToStep3() {
-    const models = Array.from(selectedModels).filter((m) => modelCategories[m] !== 'skip')
     setLoadingDefaults(true)
     try {
       const [defaults, metrics] = await Promise.all([
-        api.ratelimits.defaults(s1.type, models),
+        api.ratelimits.defaults(s1.type),
         api.ratelimits.metrics(s1.type).catch(() => undefined),
       ])
       setLimits(defaults ?? [])
@@ -518,7 +507,7 @@ function AccountWizard({ onClose, onSave }: WizardProps): React.ReactNode {
                 <Select
                   value={s1.type}
                   onChange={(v) => setS1Field('type', v)}
-                  options={PROVIDER_TYPES.map((t) => ({ value: t, label: t }))}
+                  options={PROVIDER_TYPES.map((t) => ({ value: t, label: PROVIDER_DISPLAY_NAMES[t] ?? t }))}
                 />
               </div>
 
@@ -784,6 +773,20 @@ export default function Accounts() {
   const [viewMode, setViewMode] = useLocalStorage<'grid' | 'list'>('llm-proxy:accounts-view', 'grid')
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [providerFilter, setProviderFilter] = useState<string>('all')
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+
+  useEffect(() => {
+    loadProviders().then((providers) => {
+      const enabled = providers.filter((p) => p.enabled)
+      PROVIDER_TYPES = enabled.map((p) => p.name)
+      PROVIDER_TYPE_URLS = Object.fromEntries(enabled.map((p) => [p.name, p.base_url]))
+      PROVIDER_DISPLAY_NAMES = Object.fromEntries(enabled.map((p) => [p.name, p.display_name]))
+      FIXED_URL_PROVIDERS = new Set(enabled.filter((p) => p.base_url).map((p) => p.name))
+    })
+  }, [])
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -874,7 +877,54 @@ export default function Accounts() {
     }
   }
 
+  function toggleSelectId(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filteredAccounts.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredAccounts.map((a) => a.id)))
+    }
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  async function handleDeleteSelected() {
+    setConfirmDelete(false)
+    try {
+      await api.accounts.bulkDelete([...selectedIds])
+    } catch { /* skip failures */ }
+    exitSelectMode()
+    fetchAccounts()
+  }
+
+  async function handleEnableSelected(enabled: boolean) {
+    const ids = [...selectedIds].filter((id) => {
+      const a = accounts.find((acc) => acc.id === id)
+      return a && a.enabled !== enabled
+    })
+    if (ids.length === 0) return
+    await api.accounts.bulkUpdate(ids, { enabled })
+    exitSelectMode()
+    fetchAccounts()
+  }
+
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null
+
+  const selectedAccounts = accounts.filter((a) => selectedIds.has(a.id))
+  const selectedProviderTypes = new Set(selectedAccounts.map((a) => a.type))
+  const allSameProvider = selectedProviderTypes.size === 1
+  const selectedProviderType = allSameProvider ? [...selectedProviderTypes][0] : ''
 
   return (
     <div className="p-6 space-y-5">
@@ -887,23 +937,35 @@ export default function Accounts() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <input
-            ref={importRef}
-            type="file"
-            accept=".yml,.yaml"
-            className="hidden"
-            onChange={handleImport}
-          />
-          <button onClick={() => importRef.current?.click()} className="btn-secondary">
-            Import YAML
-          </button>
-          <a href={api.config.exportUrl()} download className="btn-secondary">
-            Export YAML
-          </a>
-          <button onClick={() => setWizardOpen(true)} className="btn-primary inline-flex items-center gap-1.5">
-            <Plus size={15} />
-            Add Account
-          </button>
+          {selectMode ? (
+            <>
+              <button onClick={exitSelectMode} className="btn-secondary">Cancel</button>
+              <button onClick={toggleSelectAll} className="btn-secondary">
+                {selectedIds.size === filteredAccounts.length && filteredAccounts.length > 0 ? 'Deselect All' : 'Select All'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setSelectMode(true)} className="btn-secondary">Select</button>
+              <input
+                ref={importRef}
+                type="file"
+                accept=".yml,.yaml"
+                className="hidden"
+                onChange={handleImport}
+              />
+              <button onClick={() => importRef.current?.click()} className="btn-secondary">
+                Import
+              </button>
+              <a href={api.config.exportUrl()} download className="btn-secondary">
+                Export
+              </a>
+              <button onClick={() => setWizardOpen(true)} className="btn-primary inline-flex items-center gap-1.5">
+                <Plus size={15} />
+                Add Account
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -928,28 +990,29 @@ export default function Accounts() {
                       : 'text-text-muted hover:text-text-secondary'
                   }`}
             >
-              {type === 'all' ? 'All' : type}
+              {type === 'all' ? 'All' : (PROVIDER_DISPLAY_NAMES[type] ?? type)}
             </button>
           ))}
             </div>
           ) : <div />}
-          {/* Bulk actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleEnableAll}
-              disabled={filteredAccounts.every((a) => a.enabled)}
-              className="btn-secondary text-xs px-2.5 py-1.5"
-            >
-              Enable All
-            </button>
-            <button
-              onClick={handleDisableAll}
-              disabled={filteredAccounts.every((a) => !a.enabled)}
-              className="btn-secondary text-xs px-2.5 py-1.5"
-            >
-              Disable All
-            </button>
-          </div>
+          {!selectMode && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleEnableAll}
+                disabled={filteredAccounts.every((a) => a.enabled)}
+                className="btn-secondary text-xs px-2.5 py-1.5"
+              >
+                Enable All
+              </button>
+              <button
+                onClick={handleDisableAll}
+                disabled={filteredAccounts.every((a) => !a.enabled)}
+                className="btn-secondary text-xs px-2.5 py-1.5"
+              >
+                Disable All
+              </button>
+            </div>
+          )}
 
           {/* View toggle */}
           <div className="flex bg-[rgba(255,255,255,0.04)] border border-border rounded-lg overflow-hidden">
@@ -992,9 +1055,11 @@ export default function Accounts() {
             <AccountCard
               key={a.id}
               account={a}
-              selected={selectedAccountId === a.id}
-              onClick={() => setSelectedAccountId(a.id)}
-              onToggleEnabled={handleToggleEnabled}
+              selected={selectMode ? selectedIds.has(a.id) : selectedAccountId === a.id}
+              checked={selectMode ? selectedIds.has(a.id) : undefined}
+              onCheck={selectMode ? () => toggleSelectId(a.id) : undefined}
+              onClick={() => selectMode ? toggleSelectId(a.id) : setSelectedAccountId(a.id)}
+              onToggleEnabled={selectMode ? undefined : handleToggleEnabled}
             />
           ))}
         </div>
@@ -1015,15 +1080,73 @@ export default function Accounts() {
             <div className="text-center">Models</div>
           </div>
           {filteredAccounts.map((a) => (
-            <AccountListRow
-              key={a.id}
-              account={a}
-              selected={selectedAccountId === a.id}
-              onClick={() => setSelectedAccountId(a.id)}
-            />
+            <div key={a.id} className="flex items-center">
+              {selectMode && (
+                <div className="flex items-center justify-center w-10 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(a.id)}
+                    onChange={() => toggleSelectId(a.id)}
+                    className="w-4 h-4 rounded border-border cursor-pointer accent-accent"
+                  />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <AccountListRow
+                  account={a}
+                  selected={selectMode ? selectedIds.has(a.id) : selectedAccountId === a.id}
+                  onClick={() => selectMode ? toggleSelectId(a.id) : setSelectedAccountId(a.id)}
+                />
+              </div>
+            </div>
           ))}
         </div>
       )}
+
+      {/* Floating action bar */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface-raised border border-border rounded-xl shadow-lg px-5 py-3 flex items-center gap-4">
+          <span className="text-sm font-medium text-text-primary">{selectedIds.size} selected</span>
+          <div className="w-px h-5 bg-border" />
+          <Button size="sm" variant="secondary" onClick={() => handleEnableSelected(true)}>Enable</Button>
+          <Button size="sm" variant="secondary" onClick={() => handleEnableSelected(false)}>Disable</Button>
+          {allSameProvider && (
+            <>
+              <div className="w-px h-5 bg-border" />
+              <Button size="sm" onClick={() => setBulkEditOpen(true)}>
+                <Pencil size={13} />
+                Bulk Edit
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="destructive" onClick={() => setConfirmDelete(true)}>
+            <Trash2 size={13} />
+            Delete
+          </Button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete accounts"
+        description={`This will permanently delete ${selectedIds.size} selected account${selectedIds.size > 1 ? 's' : ''}. This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={handleDeleteSelected}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
+      <BulkEditModal
+        open={bulkEditOpen}
+        onClose={() => setBulkEditOpen(false)}
+        onSave={() => {
+          setBulkEditOpen(false)
+          exitSelectMode()
+          fetchAccounts()
+        }}
+        accounts={selectedAccounts}
+        providerType={selectedProviderType}
+      />
 
       {/* Add wizard */}
       {wizardOpen && (

@@ -86,8 +86,46 @@ export function parseDefaultModels(raw: string): Record<string, string> {
   }
 }
 
-// Providers with hardcoded base URLs — no need to show base URL field
-export const FIXED_URL_PROVIDERS = new Set(['openai', 'groq', 'openrouter', 'cerebras', 'mistral', 'github', 'cohere', 'nvidia', 'llm7', 'google'])
+export interface ProviderLimit {
+  metric: string
+  max_value: number
+  window_secs: number
+}
+
+export interface Provider {
+  name: string
+  display_name: string
+  base_url: string
+  models_url: string
+  api_standard: string
+  auth_type: string
+  auth_header: string
+  capabilities: string
+  default_limits: string
+  validation_steps: string
+  is_builtin: boolean
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ValidationStep {
+  step: string
+  params?: Record<string, any>
+}
+
+export interface ProviderInput {
+  name: string
+  display_name: string
+  base_url: string
+  models_url: string
+  api_standard: string
+  auth_type: string
+  auth_header: string
+  capabilities: string[]
+  validation_steps?: ValidationStep[]
+  enabled: boolean
+}
 
 /** Format a number compactly (e.g. 1500 -> "1.5K", 2000000 -> "2M"). */
 export function formatCompact(n: number): string {
@@ -176,6 +214,23 @@ export interface OllamaModel {
   family: string
 }
 
+export interface KeyTestResult {
+  valid: boolean
+  status_code: number
+  error?: string
+  models?: string[]
+  rate_limits?: Record<string, string>
+  parsed_limits?: ProviderLimit[]
+  info?: Record<string, any>
+}
+
+export interface ChatTestResult {
+  status_code: number
+  response: any
+  rate_limits?: Record<string, string>
+  error?: string
+}
+
 export interface RateLimitDef {
   id: number
   provider: string
@@ -250,6 +305,88 @@ export interface TestResult {
   error?: string
 }
 
+export interface BulkEditPayload {
+  ids: number[]
+  models?: Record<string, string[]>
+  default_models?: Record<string, string>
+  limits?: AccountLimit[]
+}
+
+// ─── Scanner Types ─────────────────────────────────────────────────────────
+
+export interface DiscoveredKey {
+  id: number
+  key_hash: string
+  masked_key: string
+  provider: string
+  source: string
+  source_url: string
+  source_repo: string
+  source_file: string
+  valid: boolean | null
+  imported: boolean
+  account_id?: number
+  discovered_at: string
+  tested_at?: string
+  imported_at?: string
+}
+
+export interface ScannerStatusInner {
+  running: boolean
+  source: string
+  provider: string
+  keys_found: number
+  keys_new: number
+  patterns_total: number
+  patterns_done: number
+  started_at?: string
+  completed_at?: string
+  error?: string
+}
+
+export interface ScannerConfig {
+  delay_seconds: number
+  max_pages: number
+}
+
+export interface ScannerStatus {
+  status: ScannerStatusInner
+  total: number
+  valid: number
+  imported: number
+  providers_count: number
+  sources: string[]
+  config: ScannerConfig
+}
+
+export interface ScanHistory {
+  id: number
+  source: string
+  started_at: string
+  completed_at?: string
+  status: string
+  keys_found: number
+  keys_new: number
+  keys_valid: number
+  error_message?: string
+}
+
+export interface ScanKeyPattern {
+  id: number
+  provider: string
+  prefix: string
+  regex: string
+  search_term: string
+  enabled: boolean
+}
+
+export interface ScannerConfigResponse {
+  github_token_configured: boolean
+  github_token_masked: string
+  delay_seconds: number
+  max_pages: number
+}
+
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -257,6 +394,17 @@ export const api = {
     login: (password: string) =>
       request<void>('POST', '/auth/login', { password }),
     logout: () => request<void>('POST', '/auth/logout'),
+  },
+
+  // ─── Providers ────────────────────────────────────────────────────────────
+
+  providers: {
+    list: () => request<Provider[]>('GET', '/providers'),
+    get: (name: string) => request<Provider>('GET', `/providers/${name}`),
+    create: (data: ProviderInput) => request<{ status: string }>('POST', '/providers', data),
+    update: (name: string, data: Partial<ProviderInput>) =>
+      request<{ status: string }>('PUT', `/providers/${name}`, data),
+    delete: (name: string) => request<{ status: string }>('DELETE', `/providers/${name}`),
   },
 
   // ─── Accounts ────────────────────────────────────────────────────────────
@@ -271,12 +419,20 @@ export const api = {
       request<{ status: string }>('DELETE', `/accounts/${id}`),
     bulkUpdate: (ids: number[], enabled: boolean) =>
       request<{ status: string }>('PATCH', '/accounts/bulk', { ids, enabled }),
+    bulkDelete: (ids: number[]) =>
+      request<{ deleted: number }>('POST', '/accounts/bulk-delete', { ids }),
+    bulkEdit: (payload: BulkEditPayload) =>
+      request<{ status: string }>('POST', '/accounts/bulk-edit', payload),
     test: (id: number) =>
       request<TestResult>('POST', `/accounts/${id}/test`),
     discover: (data: { type: string; base_url: string; api_key: string; free_only: boolean }) =>
       request<DiscoverResult>('POST', '/accounts/discover', data),
     discoverByAccount: (id: number) =>
       request<DiscoverResult>('POST', `/accounts/${id}/discover`),
+    getKey: (id: number) =>
+      request<{ key: string }>('GET', `/accounts/${id}/key`),
+    chatTest: (id: number, model: string, message: string) =>
+      request<ChatTestResult>('POST', `/accounts/${id}/chat-test`, { model, message }),
   },
 
   // ─── Rate Limit Definitions ──────────────────────────────────────────────
@@ -288,11 +444,8 @@ export const api = {
       request<{ status: string }>('PUT', '/ratelimits', def),
     delete: (id: number) =>
       request<{ status: string }>('DELETE', `/ratelimits/${id}`),
-    defaults: (provider: string, models: string[]) =>
-      request<AccountLimit[]>(
-        'GET',
-        `/ratelimits/${provider}/defaults${models.length > 0 ? '?models=' + models.join(',') : ''}`,
-      ),
+    defaults: (provider: string) =>
+      request<AccountLimit[]>('GET', `/ratelimits/${provider}/defaults`),
     metrics: (provider: string) =>
       request<string[]>('GET', `/provider-metrics/${provider}`),
     setMetrics: (provider: string, metrics: string[]) =>
@@ -377,7 +530,14 @@ export const api = {
       request<OllamaModel[]>('POST', '/ollama/discover', { url }),
   },
 
-  // ─── Config ──────────────────────────────────────────────────────────────
+  keys: {
+    test: (provider: string, key: string) =>
+      request<KeyTestResult>('POST', '/keys/test', { provider, key }),
+    chatTest: (provider: string, key: string, model: string, message: string) =>
+      request<ChatTestResult>('POST', '/keys/chat-test', { provider, key, model, message }),
+  },
+
+  // ─── Config (accounts import/export) ────────────────────────────────────
 
   config: {
     import: (yaml: string) =>
@@ -385,5 +545,70 @@ export const api = {
         'Content-Type': 'application/x-yaml',
       }),
     exportUrl: () => `${BASE}/config/export`,
+  },
+
+  // ─── Settings import/export ────────────────────────────────────────────
+
+  settingsConfig: {
+    import: (yaml: string) =>
+      request<{ status: string }>('POST', '/settings/import', undefined, yaml, {
+        'Content-Type': 'application/x-yaml',
+      }),
+    exportUrl: () => `${BASE}/settings/export`,
+  },
+
+  // ─── Scanner ─────────────────────────────────────────────────────────────
+
+  scanner: {
+    status: () => request<ScannerStatus>('GET', '/scanner/status'),
+    start: (source?: string) =>
+      request<{ status: string }>('POST', '/scanner/start', source ? { source } : {}),
+    stop: () => request<{ status: string }>('POST', '/scanner/stop'),
+    keys: (params?: { provider?: string; source?: string; valid?: string; imported?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams()
+      if (params?.provider) qs.set('provider', params.provider)
+      if (params?.source) qs.set('source', params.source)
+      if (params?.valid) qs.set('valid', params.valid)
+      if (params?.imported) qs.set('imported', params.imported)
+      if (params?.limit) qs.set('limit', String(params.limit))
+      if (params?.offset) qs.set('offset', String(params.offset))
+      const q = qs.toString()
+      return request<{ data: DiscoveredKey[]; total: number }>('GET', `/scanner/keys${q ? '?' + q : ''}`)
+    },
+    validateKey: (id: number) =>
+      request<DiscoveredKey>('POST', `/scanner/keys/${id}/validate`),
+    discoverModels: (id: number) =>
+      request<DiscoverResult>('POST', `/scanner/keys/${id}/discover`),
+    importKey: (id: number, models: Record<string, string[]>, name?: string) =>
+      request<{ id: number }>('POST', `/scanner/keys/${id}/import`, { models, name }),
+    bulkImport: (ids: number[], models: Record<string, string[]>, limits?: AccountLimit[]) =>
+      request<{ imported: number }>('POST', '/scanner/keys/import', { ids, models, limits }),
+    deleteKey: (id: number) =>
+      request<{ status: string }>('DELETE', `/scanner/keys/${id}`),
+    bulkDelete: (ids: number[]) =>
+      request<{ deleted: number }>('POST', '/scanner/keys/delete', { ids }),
+    history: (limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : ''
+      return request<ScanHistory[]>('GET', `/scanner/history${qs}`)
+    },
+    config: () => request<ScannerConfigResponse>('GET', '/scanner/config'),
+    updateConfig: (data: {
+      github_token?: string; delay_seconds?: number; max_pages?: number;
+    }) => request<{ status: string }>('PUT', '/scanner/config', data),
+    patterns: (provider?: string) => {
+      const qs = provider ? `?provider=${provider}` : ''
+      return request<ScanKeyPattern[]>('GET', `/scanner/patterns${qs}`)
+    },
+    upsertPattern: (p: Omit<ScanKeyPattern, 'id'> & { id?: number }) =>
+      request<{ status: string }>('PUT', '/scanner/patterns', p),
+    deletePattern: (id: number) =>
+      request<{ status: string }>('DELETE', `/scanner/patterns/${id}`),
+    exportUrl: (params?: { provider?: string; valid?: string }) => {
+      const qs = new URLSearchParams()
+      if (params?.provider) qs.set('provider', params.provider)
+      if (params?.valid) qs.set('valid', params.valid)
+      const q = qs.toString()
+      return `${BASE}/scanner/export${q ? '?' + q : ''}`
+    },
   },
 }

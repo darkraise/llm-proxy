@@ -148,8 +148,7 @@ export function AddModelsDialog({
     setSaving(true)
     setSaveError('')
     try {
-      // Only pass non-default limits (model-specific ones the user set)
-      const newLimits = limits.filter((l) => l.model !== '')
+      const newLimits = limits
       // Build category map for selected models only
       const selectedCats: Record<string, string> = {}
       for (const m of selectedModels) {
