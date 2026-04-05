@@ -315,7 +315,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		// Success
 		if resp != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
-			h.pool.RecordSuccess(prov.Name, resp.Usage.TotalTokens)
+			h.pool.RecordSuccessForModel(prov.Name, logEntry.Model, resp.Usage.TotalTokens)
 			logEntry.Model = resp.Model
 		}
 		logEntry.Status = "success"
@@ -552,7 +552,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 		}
 		logEntry.PromptTokens = resp.Usage.PromptTokens
 		logEntry.CompletionTokens = resp.Usage.CompletionTokens
-		h.pool.RecordSuccess(prov.Name, resp.Usage.TotalTokens)
+		h.pool.RecordSuccessForModel(prov.Name, logEntry.Model, resp.Usage.TotalTokens)
 		logEntry.Status = "success"
 		logEntry.Model = resp.Model
 

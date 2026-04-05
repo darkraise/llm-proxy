@@ -43,7 +43,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		t0 := time.Now()
 
 		var streamResp *http.Response
-		switch prov.Type {
+		switch prov.APIStandard {
 		case "google":
 			streamResp, err = h.openGoogleStream(prov, req)
 		default:
@@ -89,7 +89,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		w.Header().Set("Connection", "keep-alive")
 
 		var totalTokens int
-		if prov.Type == "google" {
+		if prov.APIStandard == "google" {
 			totalTokens = h.pipeGoogleStream(w, flusher, streamResp.Body, prov, endpoint)
 		} else {
 			totalTokens = h.pipeOpenAIStream(w, flusher, streamResp.Body, endpoint)
@@ -101,7 +101,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		logEntry.Status = "success"
 		logEntry.StatusCode = 200
 		logEntry.CompletionTokens = totalTokens
-		h.pool.RecordSuccess(prov.Name, totalTokens)
+		h.pool.RecordSuccessForModel(prov.Name, logEntry.Model, totalTokens)
 
 		if h.logFunc != nil {
 			h.logFunc(logEntry)
@@ -177,7 +177,7 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+prov.DecryptedKey)
+	setProviderAuth(httpReq, prov)
 
 	return h.httpClient().Do(httpReq)
 }
