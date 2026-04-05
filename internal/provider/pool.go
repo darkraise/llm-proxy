@@ -155,10 +155,6 @@ func accountHasModel(p *AccountInfo, model string) bool {
 	return false
 }
 
-func (p *Pool) RecordSuccess(name string, tokens int) {
-}
-
-// RecordSuccessForModel updates both account-level and model-specific counters.
 func (p *Pool) RecordSuccessForModel(name, model string, tokens int) {
 	p.rateLimiter.RecordRequestForModel(name, model)
 	if tokens > 0 {
@@ -174,8 +170,8 @@ func (p *Pool) RecordError(name string, backoff time.Duration) {
 	p.rateLimiter.RecordBackoff(name, backoff)
 }
 
-func (p *Pool) AllowTokens(name string, estimated int) bool {
-	return p.rateLimiter.AllowTokensForModel(name, "", estimated)
+func (p *Pool) AllowTokensForModel(name, model string, estimated int) bool {
+	return p.rateLimiter.AllowTokensForModel(name, model, estimated)
 }
 
 func (p *Pool) Status() map[string]AccountStatus {

@@ -27,7 +27,7 @@ func TestPool_AutoRouting_RoundRobin(t *testing.T) {
 			t.Fatalf("Select: %v", err)
 		}
 		names[i] = p.Name
-		pool.RecordSuccess(p.Name, 0)
+		pool.RecordSuccessForModel(p.Name, "auto", 0)
 	}
 
 	// Should cycle through all 3 providers
