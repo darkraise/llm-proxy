@@ -64,15 +64,10 @@ func (d *DB) DeleteRateLimitDef(id int64) error {
 	return err
 }
 
-// GetDefaultLimits returns merged AccountLimit entries for the given provider and models
-// using admin-defined rate limit definitions only. Returns an empty slice when no
-// admin definitions exist — callers should fall back to the fetch-docs endpoint for
-// live data from provider documentation.
-func (d *DB) GetDefaultLimits(provider string, models []string) ([]AccountLimit, error) {
-	if len(models) == 0 {
-		return nil, nil
-	}
-
+// GetDefaultLimits returns rate limit definitions for the given provider as
+// AccountLimit entries, preserving model="" as-is (no fan-out). Falls back to
+// the provider's default_limits JSON when no admin definitions exist.
+func (d *DB) GetDefaultLimits(provider string) ([]AccountLimit, error) {
 	defs, err := d.ListRateLimitDefs(provider)
 	if err != nil {
 		return nil, err
@@ -96,52 +91,16 @@ func (d *DB) GetDefaultLimits(provider string, models []string) ([]AccountLimit,
 		return []AccountLimit{}, nil
 	}
 
-	wantModel := make(map[string]bool, len(models))
-	for _, m := range models {
-		wantModel[m] = true
-	}
-
-	// Index provider-level defs by metric.
-	providerDefs := map[string]RateLimitDef{}
+	limits := make([]AccountLimit, 0, len(defs))
 	for _, def := range defs {
-		if def.Model == "" {
-			providerDefs[def.Metric] = def
-		}
-	}
-
-	// Build per-model merged results: model-specific overrides provider-level.
-	type key struct{ model, metric string }
-	merged := make(map[key]AccountLimit)
-
-	// Seed with provider-level defaults for every requested model.
-	for _, m := range models {
-		for metric, def := range providerDefs {
-			merged[key{m, metric}] = AccountLimit{
-				Model:      m,
-				Metric:     metric,
-				MaxValue:   def.MaxValue,
-				WindowSecs: def.WindowSecs,
-			}
-		}
-	}
-
-	// Override with model-specific definitions where they exist.
-	for _, def := range defs {
-		if def.Model == "" || !wantModel[def.Model] {
-			continue
-		}
-		merged[key{def.Model, def.Metric}] = AccountLimit{
+		limits = append(limits, AccountLimit{
 			Model:      def.Model,
 			Metric:     def.Metric,
 			MaxValue:   def.MaxValue,
 			WindowSecs: def.WindowSecs,
-		}
+		})
 	}
 
-	limits := make([]AccountLimit, 0, len(merged))
-	for _, l := range merged {
-		limits = append(limits, l)
-	}
 	sort.Slice(limits, func(i, j int) bool {
 		if limits[i].Model != limits[j].Model {
 			return limits[i].Model < limits[j].Model

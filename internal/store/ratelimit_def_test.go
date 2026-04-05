@@ -97,17 +97,16 @@ func TestGetDefaultLimits_ProviderOnly(t *testing.T) {
 	db.SetRateLimitDef(RateLimitDef{Provider: "groq", Model: "", Metric: "rpm", MaxValue: 30, WindowSecs: 60})
 	db.SetRateLimitDef(RateLimitDef{Provider: "groq", Model: "", Metric: "rpd", MaxValue: 1000, WindowSecs: 86400})
 
-	limits, err := db.GetDefaultLimits("groq", []string{"llama-3.3-70b", "mixtral-8x7b"})
+	limits, err := db.GetDefaultLimits("groq")
 	if err != nil {
 		t.Fatalf("GetDefaultLimits: %v", err)
 	}
-	// 2 metrics × 2 models = 4 entries.
-	if len(limits) != 4 {
-		t.Fatalf("limits count: got %d, want 4", len(limits))
+	if len(limits) != 2 {
+		t.Fatalf("limits count: got %d, want 2", len(limits))
 	}
 	for _, l := range limits {
-		if l.Model == "" {
-			t.Errorf("expected non-empty model in returned limits, got empty for metric %s", l.Metric)
+		if l.Model != "" {
+			t.Errorf("expected model=\"\" in returned limits, got %q for metric %s", l.Model, l.Metric)
 		}
 	}
 }
@@ -115,12 +114,10 @@ func TestGetDefaultLimits_ProviderOnly(t *testing.T) {
 func TestGetDefaultLimits_ModelOverridesProvider(t *testing.T) {
 	db := newTestDB(t)
 
-	// Provider-level: rpm=30
 	db.SetRateLimitDef(RateLimitDef{Provider: "groq", Model: "", Metric: "rpm", MaxValue: 30, WindowSecs: 60})
-	// Model-specific override: rpm=20 for llama-3.3-70b
 	db.SetRateLimitDef(RateLimitDef{Provider: "groq", Model: "llama-3.3-70b", Metric: "rpm", MaxValue: 20, WindowSecs: 60})
 
-	limits, err := db.GetDefaultLimits("groq", []string{"llama-3.3-70b", "mixtral-8x7b"})
+	limits, err := db.GetDefaultLimits("groq")
 	if err != nil {
 		t.Fatalf("GetDefaultLimits: %v", err)
 	}
@@ -128,53 +125,41 @@ func TestGetDefaultLimits_ModelOverridesProvider(t *testing.T) {
 		t.Fatalf("limits count: got %d, want 2", len(limits))
 	}
 
-	// Sort for deterministic comparison.
 	sort.Slice(limits, func(i, j int) bool { return limits[i].Model < limits[j].Model })
 
-	llamaLimit := limits[0] // llama-3.3-70b
-	mixtralLimit := limits[1]
-
-	if llamaLimit.Model != "llama-3.3-70b" {
-		t.Fatalf("unexpected model order, got %s", llamaLimit.Model)
+	if limits[0].Model != "" || limits[0].MaxValue != 30 {
+		t.Errorf("expected model=\"\" rpm=30, got model=%q rpm=%d", limits[0].Model, limits[0].MaxValue)
 	}
-	if llamaLimit.MaxValue != 20 {
-		t.Errorf("llama rpm: got %d, want 20 (model override)", llamaLimit.MaxValue)
-	}
-	if mixtralLimit.MaxValue != 30 {
-		t.Errorf("mixtral rpm: got %d, want 30 (provider default)", mixtralLimit.MaxValue)
+	if limits[1].Model != "llama-3.3-70b" || limits[1].MaxValue != 20 {
+		t.Errorf("expected model=llama rpm=20, got model=%q rpm=%d", limits[1].Model, limits[1].MaxValue)
 	}
 }
 
-func TestGetDefaultLimits_EmptyModels(t *testing.T) {
+func TestGetDefaultLimits_NoDefsReturnsEmpty(t *testing.T) {
 	db := newTestDB(t)
-	db.SetRateLimitDef(RateLimitDef{Provider: "groq", Model: "", Metric: "rpm", MaxValue: 30, WindowSecs: 60})
-
-	limits, err := db.GetDefaultLimits("groq", nil)
+	limits, err := db.GetDefaultLimits("unknown-provider")
 	if err != nil {
-		t.Fatalf("GetDefaultLimits(nil): %v", err)
+		t.Fatalf("GetDefaultLimits: %v", err)
 	}
 	if len(limits) != 0 {
-		t.Errorf("expected empty result for nil models, got %d", len(limits))
+		t.Errorf("expected empty for unknown provider, got %d", len(limits))
 	}
 }
 
-func TestGetDefaultLimits_ReturnsEmptyWithNoAdminDefs(t *testing.T) {
+func TestGetDefaultLimits_FallsBackToProviderDefaults(t *testing.T) {
 	db := newTestDB(t)
 
-	// No admin-defined limits — falls back to provider's default_limits.
-	// Groq has rpm, rpd, tpm seeded, so we expect 3 limits for the model.
-	limits, err := db.GetDefaultLimits("groq", []string{"llama-3.3-70b-versatile"})
+	limits, err := db.GetDefaultLimits("groq")
 	if err != nil {
 		t.Fatalf("GetDefaultLimits: %v", err)
 	}
 	if len(limits) == 0 {
 		t.Errorf("expected provider default limits for groq, got 0")
 	}
-
-	// Unknown provider also returns empty.
-	limits2, _ := db.GetDefaultLimits("unknown-provider", []string{"model"})
-	if len(limits2) != 0 {
-		t.Errorf("expected empty for unknown provider, got %d", len(limits2))
+	for _, l := range limits {
+		if l.Model != "" {
+			t.Errorf("provider default should have model=\"\", got %q", l.Model)
+		}
 	}
 }
 

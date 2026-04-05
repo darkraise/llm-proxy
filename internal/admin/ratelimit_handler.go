@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/darkraise/llm-proxy/internal/store"
 )
@@ -108,10 +107,10 @@ func (h *AdminHandler) HandleSetProviderMetrics(w http.ResponseWriter, r *http.R
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
-// HandleGetDefaultLimits returns merged default limits for a provider+models
-// combination, suitable for pre-populating a new account's rate limits.
+// HandleGetDefaultLimits returns default limits for a provider as-is (no fan-out),
+// suitable for pre-populating a new account's rate limits.
 //
-// GET /admin/api/ratelimits/{provider}/defaults?models=m1,m2
+// GET /admin/api/ratelimits/{provider}/defaults
 func (h *AdminHandler) HandleGetDefaultLimits(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 	if provider == "" {
@@ -119,16 +118,7 @@ func (h *AdminHandler) HandleGetDefaultLimits(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var models []string
-	if raw := r.URL.Query().Get("models"); raw != "" {
-		for _, m := range strings.Split(raw, ",") {
-			if m = strings.TrimSpace(m); m != "" {
-				models = append(models, m)
-			}
-		}
-	}
-
-	limits, err := h.db.GetDefaultLimits(provider, models)
+	limits, err := h.db.GetDefaultLimits(provider)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
