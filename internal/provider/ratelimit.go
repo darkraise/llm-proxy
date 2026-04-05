@@ -56,18 +56,19 @@ type MetricStatus struct {
 }
 
 type RateLimiter struct {
-	mu     sync.RWMutex
-	states map[string]*providerState
+	mu        sync.RWMutex
+	states    map[string]*providerState
+	templates map[string]*providerState // model="" limits, keyed by account name
 }
 
 func NewRateLimiter() *RateLimiter {
 	return &RateLimiter{
-		states: make(map[string]*providerState),
+		states:    make(map[string]*providerState),
+		templates: make(map[string]*providerState),
 	}
 }
 
 // stateKey returns the map key for a given account name and optional model.
-// Account-level limits use key = accountName; per-model limits use accountName:model.
 func stateKey(accountName, model string) string {
 	if model == "" {
 		return accountName
@@ -94,67 +95,96 @@ func newProviderState(limits []LimitConfig) *providerState {
 }
 
 // Configure registers limits for an account. Limits with Model=="" are stored
-// under the account name key; limits with a non-empty Model are stored under
-// "accountName:model" keys.
+// as a template for lazy cloning into per-model states. Limits with a non-empty
+// Model are stored under "accountName:model" keys using all-or-nothing semantics
+// (explicit limits fully replace the template for that model).
 func (rl *RateLimiter) Configure(accountName string, limits []LimitConfig) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	var accountLimits []LimitConfig
+	var templateLimits []LimitConfig
 	modelLimits := make(map[string][]LimitConfig)
 
 	for _, l := range limits {
 		if l.Model == "" {
-			accountLimits = append(accountLimits, l)
+			templateLimits = append(templateLimits, l)
 		} else {
 			modelLimits[l.Model] = append(modelLimits[l.Model], l)
 		}
 	}
 
-	rl.states[accountName] = newProviderState(accountLimits)
+	// Store template for lazy cloning.
+	if len(templateLimits) > 0 {
+		rl.templates[accountName] = newProviderState(templateLimits)
+	}
 
+	// Account-level key: backoff only (no rate counters).
+	rl.states[accountName] = &providerState{
+		requestMetrics: make(map[string]*metricCounter),
+		tokenMetrics:   make(map[string]*metricCounter),
+	}
+
+	// All-or-nothing: model-specific limits fully replace the template.
 	for model, ml := range modelLimits {
 		key := stateKey(accountName, model)
 		rl.states[key] = newProviderState(ml)
 	}
 }
 
-// Allow checks whether the account is within its account-level rate limits.
-func (rl *RateLimiter) Allow(accountName string) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
+// getOrCloneState returns the per-model state, lazily cloning from the template
+// if the model has not been seen before. Must be called with rl.mu held.
+func (rl *RateLimiter) getOrCloneState(accountName, model string) *providerState {
+	key := stateKey(accountName, model)
+	if state, ok := rl.states[key]; ok {
+		return state
+	}
 
-	return rl.allowState(accountName)
+	tmpl, ok := rl.templates[accountName]
+	if !ok {
+		return nil
+	}
+
+	cloned := cloneProviderState(tmpl)
+	rl.states[key] = cloned
+	return cloned
 }
 
-// AllowForModel checks both account-level and model-specific rate limits.
+func cloneProviderState(src *providerState) *providerState {
+	now := time.Now()
+	dst := &providerState{
+		requestMetrics: make(map[string]*metricCounter, len(src.requestMetrics)),
+		tokenMetrics:   make(map[string]*metricCounter, len(src.tokenMetrics)),
+	}
+	for k, mc := range src.requestMetrics {
+		dst.requestMetrics[k] = &metricCounter{config: mc.config, windowStart: now}
+	}
+	for k, mc := range src.tokenMetrics {
+		dst.tokenMetrics[k] = &metricCounter{config: mc.config, windowStart: now}
+	}
+	return dst
+}
+
+// AllowForModel checks backoff and model-specific rate limits.
 func (rl *RateLimiter) AllowForModel(accountName, model string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	if !rl.allowState(accountName) {
-		return false
-	}
-	if model != "" && model != "auto" {
-		if !rl.allowState(stateKey(accountName, model)) {
+	if acct, ok := rl.states[accountName]; ok {
+		if time.Now().Before(acct.backoffUntil) {
 			return false
 		}
 	}
-	return true
-}
 
-// allowState is the internal check — must be called with rl.mu held.
-func (rl *RateLimiter) allowState(key string) bool {
-	state, ok := rl.states[key]
-	if !ok {
-		return true // unconfigured = no limits
+	if model == "" || model == "auto" {
+		return true
+	}
+
+	state := rl.getOrCloneState(accountName, model)
+	if state == nil {
+		return true
 	}
 
 	now := time.Now()
-	if now.Before(state.backoffUntil) {
-		return false
-	}
-
 	for _, mc := range state.requestMetrics {
 		if !mc.available(now) {
 			return false
@@ -168,12 +198,12 @@ func (rl *RateLimiter) allowState(key string) bool {
 	return true
 }
 
-func (rl *RateLimiter) AllowTokens(providerName string, estimatedTokens int) bool {
+func (rl *RateLimiter) AllowTokensForModel(accountName, model string, estimatedTokens int) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	state, ok := rl.states[providerName]
-	if !ok {
+	state := rl.getOrCloneState(accountName, model)
+	if state == nil {
 		return true
 	}
 
@@ -186,27 +216,17 @@ func (rl *RateLimiter) AllowTokens(providerName string, estimatedTokens int) boo
 	return true
 }
 
-func (rl *RateLimiter) RecordRequest(providerName string) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	rl.recordRequestForKey(providerName)
-}
-
-// RecordRequestForModel increments counters for both account-level and model-specific keys.
+// RecordRequestForModel increments request counters for the model-specific state.
 func (rl *RateLimiter) RecordRequestForModel(accountName, model string) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	rl.recordRequestForKey(accountName)
-	if model != "" && model != "auto" {
-		rl.recordRequestForKey(stateKey(accountName, model))
+	if model == "" || model == "auto" {
+		return
 	}
-}
 
-func (rl *RateLimiter) recordRequestForKey(key string) {
-	state, ok := rl.states[key]
-	if !ok {
+	state := rl.getOrCloneState(accountName, model)
+	if state == nil {
 		return
 	}
 	now := time.Now()
@@ -216,27 +236,17 @@ func (rl *RateLimiter) recordRequestForKey(key string) {
 	}
 }
 
-func (rl *RateLimiter) RecordTokens(providerName string, tokens int) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	rl.recordTokensForKey(providerName, tokens)
-}
-
-// RecordTokensForModel increments token counters for both account-level and model-specific keys.
+// RecordTokensForModel increments token counters for the model-specific state.
 func (rl *RateLimiter) RecordTokensForModel(accountName, model string, tokens int) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	rl.recordTokensForKey(accountName, tokens)
-	if model != "" && model != "auto" {
-		rl.recordTokensForKey(stateKey(accountName, model), tokens)
+	if model == "" || model == "auto" {
+		return
 	}
-}
 
-func (rl *RateLimiter) recordTokensForKey(key string, tokens int) {
-	state, ok := rl.states[key]
-	if !ok {
+	state := rl.getOrCloneState(accountName, model)
+	if state == nil {
 		return
 	}
 	now := time.Now()
@@ -257,22 +267,18 @@ func (rl *RateLimiter) RecordBackoff(providerName string, duration time.Duration
 	state.backoffUntil = time.Now().Add(duration)
 }
 
-func (rl *RateLimiter) Status(providerName string) AccountStatus {
+// StatusForModel returns the live rate limit status for a specific model.
+func (rl *RateLimiter) StatusForModel(accountName, model string) AccountStatus {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	state, ok := rl.states[providerName]
-	if !ok {
+	state := rl.getOrCloneState(accountName, model)
+	if state == nil {
 		return AccountStatus{Available: true}
 	}
 
 	now := time.Now()
 	status := AccountStatus{Available: true}
-
-	if now.Before(state.backoffUntil) {
-		status.Available = false
-		status.Reason = "backoff"
-	}
 
 	for _, mc := range state.requestMetrics {
 		mc.reset(now)
@@ -292,6 +298,37 @@ func (rl *RateLimiter) Status(providerName string) AccountStatus {
 		if mc.count >= mc.config.MaxValue {
 			status.Available = false
 			status.Reason = mc.config.Metric + "_exhausted"
+		}
+	}
+	return status
+}
+
+// Status returns template-level metrics and backoff state for an account.
+func (rl *RateLimiter) Status(accountName string) AccountStatus {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	tmpl, ok := rl.templates[accountName]
+	if !ok {
+		return AccountStatus{Available: true}
+	}
+
+	status := AccountStatus{Available: true}
+	for _, mc := range tmpl.requestMetrics {
+		status.Metrics = append(status.Metrics, MetricStatus{
+			Metric: mc.config.Metric, Used: 0, Max: mc.config.MaxValue,
+		})
+	}
+	for _, mc := range tmpl.tokenMetrics {
+		status.Metrics = append(status.Metrics, MetricStatus{
+			Metric: mc.config.Metric, Used: 0, Max: mc.config.MaxValue,
+		})
+	}
+
+	if acct, ok := rl.states[accountName]; ok {
+		if time.Now().Before(acct.backoffUntil) {
+			status.Available = false
+			status.Reason = "backoff"
 		}
 	}
 	return status

@@ -5,212 +5,182 @@ import (
 	"time"
 )
 
-func TestRateLimiter_RequestMetric(t *testing.T) {
+func TestRateLimiter_TemplateInheritance(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("provider1", []LimitConfig{
-		{Metric: "rpm", MaxValue: 3, WindowSecs: 60},
+	rl.Configure("acct", []LimitConfig{
+		{Metric: "rpm", MaxValue: 2, WindowSecs: 60},
 	})
 
-	// Should allow 3 requests
-	for i := 0; i < 3; i++ {
-		if !rl.Allow("provider1") {
-			t.Fatalf("request %d should be allowed", i+1)
-		}
-		rl.RecordRequest("provider1")
+	rl.RecordRequestForModel("acct", "model-a")
+	rl.RecordRequestForModel("acct", "model-a")
+
+	if rl.AllowForModel("acct", "model-a") {
+		t.Error("model-a should be exhausted (2/2 rpm)")
 	}
 
-	// 4th should be denied
-	if rl.Allow("provider1") {
-		t.Error("4th request should be denied (rpm limit)")
+	if !rl.AllowForModel("acct", "model-b") {
+		t.Error("model-b should be allowed (0/2 rpm)")
+	}
+	rl.RecordRequestForModel("acct", "model-b")
+	rl.RecordRequestForModel("acct", "model-b")
+	if rl.AllowForModel("acct", "model-b") {
+		t.Error("model-b should be exhausted (2/2 rpm)")
+	}
+}
+
+func TestRateLimiter_AllOrNothingOverride(t *testing.T) {
+	rl := NewRateLimiter()
+	rl.Configure("acct", []LimitConfig{
+		{Metric: "rpm", MaxValue: 10, WindowSecs: 60},
+		{Metric: "tpm", MaxValue: 5000, WindowSecs: 60},
+		{Model: "special", Metric: "rpm", MaxValue: 2, WindowSecs: 60},
+	})
+
+	rl.RecordRequestForModel("acct", "special")
+	rl.RecordRequestForModel("acct", "special")
+	if rl.AllowForModel("acct", "special") {
+		t.Error("special should be exhausted (2/2 rpm)")
+	}
+
+	for i := 0; i < 10; i++ {
+		if !rl.AllowForModel("acct", "normal") {
+			t.Fatalf("normal request %d should be allowed", i+1)
+		}
+		rl.RecordRequestForModel("acct", "normal")
+	}
+	if rl.AllowForModel("acct", "normal") {
+		t.Error("normal should be exhausted (10/10 rpm)")
 	}
 }
 
 func TestRateLimiter_TokenMetric(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("provider1", []LimitConfig{
+	rl.Configure("acct", []LimitConfig{
 		{Metric: "tpm", MaxValue: 1000, WindowSecs: 60},
 	})
 
-	rl.RecordTokens("provider1", 800)
-	if !rl.AllowTokens("provider1", 100) {
+	rl.RecordTokensForModel("acct", "model-a", 800)
+	if !rl.AllowTokensForModel("acct", "model-a", 100) {
 		t.Error("should allow 100 tokens (900 < 1000)")
 	}
-
-	if rl.AllowTokens("provider1", 300) {
+	if rl.AllowTokensForModel("acct", "model-a", 300) {
 		t.Error("should deny 300 tokens (800 + 300 > 1000)")
+	}
+
+	if !rl.AllowTokensForModel("acct", "model-b", 900) {
+		t.Error("model-b should allow 900 tokens (0 + 900 < 1000)")
 	}
 }
 
 func TestRateLimiter_MultipleMetrics(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("provider1", []LimitConfig{
+	rl.Configure("acct", []LimitConfig{
 		{Metric: "rpm", MaxValue: 10, WindowSecs: 60},
 		{Metric: "rpd", MaxValue: 2, WindowSecs: 86400},
 	})
 
-	rl.RecordRequest("provider1")
-	rl.RecordRequest("provider1")
+	rl.RecordRequestForModel("acct", "model-a")
+	rl.RecordRequestForModel("acct", "model-a")
 
-	// RPM has headroom (2/10) but RPD is exhausted (2/2)
-	if rl.Allow("provider1") {
+	if rl.AllowForModel("acct", "model-a") {
 		t.Error("should be denied (rpd exhausted)")
 	}
 }
 
 func TestRateLimiter_Backoff(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("provider1", []LimitConfig{
+	rl.Configure("acct", []LimitConfig{
 		{Metric: "rpm", MaxValue: 100, WindowSecs: 60},
 	})
 
-	rl.RecordBackoff("provider1", 100*time.Millisecond)
+	rl.RecordBackoff("acct", 100*time.Millisecond)
 
-	if rl.Allow("provider1") {
+	if rl.AllowForModel("acct", "model-a") {
 		t.Error("should be denied during backoff")
 	}
 
 	time.Sleep(150 * time.Millisecond)
 
-	if !rl.Allow("provider1") {
+	if !rl.AllowForModel("acct", "model-a") {
 		t.Error("should be allowed after backoff expires")
 	}
 }
 
 func TestRateLimiter_WindowReset(t *testing.T) {
 	rl := NewRateLimiter()
-	// Use 1-second window for test speed
-	rl.Configure("provider1", []LimitConfig{
+	rl.Configure("acct", []LimitConfig{
 		{Metric: "rps", MaxValue: 1, WindowSecs: 1},
 	})
 
-	rl.RecordRequest("provider1")
-	if rl.Allow("provider1") {
+	rl.RecordRequestForModel("acct", "model-a")
+	if rl.AllowForModel("acct", "model-a") {
 		t.Error("should be denied (rps exhausted)")
 	}
 
 	time.Sleep(1100 * time.Millisecond)
 
-	if !rl.Allow("provider1") {
+	if !rl.AllowForModel("acct", "model-a") {
 		t.Error("should be allowed after window reset")
 	}
 }
 
-func TestRateLimiter_Status(t *testing.T) {
+func TestRateLimiter_StatusForModel(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("provider1", []LimitConfig{
+	rl.Configure("acct", []LimitConfig{
 		{Metric: "rpm", MaxValue: 10, WindowSecs: 60},
 		{Metric: "tpm", MaxValue: 5000, WindowSecs: 60},
 	})
 
-	rl.RecordRequest("provider1")
-	rl.RecordTokens("provider1", 1000)
+	rl.RecordRequestForModel("acct", "model-a")
+	rl.RecordTokensForModel("acct", "model-a", 1000)
 
-	status := rl.Status("provider1")
+	status := rl.StatusForModel("acct", "model-a")
 	if !status.Available {
 		t.Error("should be available")
 	}
 	if len(status.Metrics) != 2 {
-		t.Fatalf("metrics: got %d", len(status.Metrics))
+		t.Fatalf("metrics: got %d, want 2", len(status.Metrics))
 	}
 }
 
-func TestRateLimiter_UnconfiguredProviderAlwaysAllows(t *testing.T) {
+func TestRateLimiter_StatusTemplate(t *testing.T) {
 	rl := NewRateLimiter()
-	if !rl.Allow("unknown") {
-		t.Error("unconfigured provider should be allowed")
-	}
-}
-
-func TestRateLimiter_PerModelLimit_BlocksModel(t *testing.T) {
-	rl := NewRateLimiter()
-	rl.Configure("groq", []LimitConfig{
-		{Model: "", Metric: "rpm", MaxValue: 100, WindowSecs: 60},
-		{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 2, WindowSecs: 60},
+	rl.Configure("acct", []LimitConfig{
+		{Metric: "rpm", MaxValue: 10, WindowSecs: 60},
 	})
 
-	// Account-level Allow still works before per-model limit is hit
-	if !rl.Allow("groq") {
-		t.Error("account-level should be allowed")
+	status := rl.Status("acct")
+	if !status.Available {
+		t.Error("template status should be available")
 	}
-
-	// Use up per-model limit
-	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
-	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
-
-	// AllowForModel should now be denied for this model
-	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
-		t.Error("per-model limit exhausted; should be denied")
+	if len(status.Metrics) != 1 {
+		t.Fatalf("expected 1 template metric, got %d", len(status.Metrics))
 	}
-
-	// But account-level Allow is still fine (100 rpm not reached)
-	if !rl.Allow("groq") {
-		t.Error("account-level should still be allowed")
+	if status.Metrics[0].Used != 0 {
+		t.Error("template metrics should show zero usage")
 	}
 }
 
-func TestRateLimiter_PerModelLimit_DoesNotAffectOtherModels(t *testing.T) {
+func TestRateLimiter_UnconfiguredAlwaysAllows(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("groq", []LimitConfig{
-		{Model: "", Metric: "rpm", MaxValue: 100, WindowSecs: 60},
-		{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 1, WindowSecs: 60},
-	})
-
-	// Exhaust per-model limit for llama
-	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
-	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
-		t.Error("llama per-model limit should be exhausted")
-	}
-
-	// A different model on the same account is unaffected
-	if !rl.AllowForModel("groq", "mixtral-8x7b") {
-		t.Error("mixtral has no per-model limit; should be allowed")
+	if !rl.AllowForModel("unknown", "model") {
+		t.Error("unconfigured account should be allowed")
 	}
 }
 
-func TestRateLimiter_AccountLevelLimit_BlocksAllModels(t *testing.T) {
+func TestRateLimiter_PerModelOverrideDoesNotAffectOthers(t *testing.T) {
 	rl := NewRateLimiter()
-	rl.Configure("groq", []LimitConfig{
-		{Model: "", Metric: "rpm", MaxValue: 2, WindowSecs: 60},
-		{Model: "llama-3.3-70b-versatile", Metric: "rpm", MaxValue: 10, WindowSecs: 60},
+	rl.Configure("acct", []LimitConfig{
+		{Metric: "rpm", MaxValue: 100, WindowSecs: 60},
+		{Model: "llama", Metric: "rpm", MaxValue: 1, WindowSecs: 60},
 	})
 
-	// Exhaust account-level limit
-	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
-	rl.RecordRequestForModel("groq", "llama-3.3-70b-versatile")
-
-	// Even though per-model limit has headroom, account-level blocks everything
-	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
-		t.Error("account-level limit exhausted; should block all models")
-	}
-	if rl.AllowForModel("groq", "mixtral-8x7b") {
-		t.Error("account-level limit exhausted; should block other models too")
-	}
-}
-
-func TestRateLimiter_PerModelTokens(t *testing.T) {
-	rl := NewRateLimiter()
-	rl.Configure("groq", []LimitConfig{
-		{Model: "", Metric: "tpm", MaxValue: 10000, WindowSecs: 60},
-		{Model: "llama-3.3-70b-versatile", Metric: "tpm", MaxValue: 500, WindowSecs: 60},
-	})
-
-	rl.RecordTokensForModel("groq", "llama-3.3-70b-versatile", 400)
-
-	// Per-model: 400/500 used; 200 more would exceed
-	if rl.AllowForModel("groq", "llama-3.3-70b-versatile") {
-		// Allow check passes (request count, not tokens)
-		_ = "ok"
+	rl.RecordRequestForModel("acct", "llama")
+	if rl.AllowForModel("acct", "llama") {
+		t.Error("llama should be exhausted (1/1 rpm)")
 	}
 
-	// Verify account-level token counter also got incremented
-	status := rl.Status("groq")
-	found := false
-	for _, m := range status.Metrics {
-		if m.Metric == "tpm" && m.Used == 400 {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected account-level tpm counter to be 400")
+	if !rl.AllowForModel("acct", "mixtral") {
+		t.Error("mixtral should be allowed (0/100 rpm from template)")
 	}
 }

@@ -18,7 +18,7 @@ func makeTestProviders() []store.Account {
 }
 
 func TestPool_AutoRouting_RoundRobin(t *testing.T) {
-	pool := NewPool(makeTestProviders())
+	pool := NewPool(makeTestProviders(), nil)
 
 	names := make([]string, 3)
 	for i := 0; i < 3; i++ {
@@ -41,7 +41,7 @@ func TestPool_AutoRouting_RoundRobin(t *testing.T) {
 }
 
 func TestPool_ModelRouting(t *testing.T) {
-	pool := NewPool(makeTestProviders())
+	pool := NewPool(makeTestProviders(), nil)
 
 	// gemini-2.5-flash should only route to google-1
 	p, err := pool.Select("gemini-2.5-flash", "chat", 3)
@@ -54,7 +54,7 @@ func TestPool_ModelRouting(t *testing.T) {
 }
 
 func TestPool_ModelRouting_MultipleProviders(t *testing.T) {
-	pool := NewPool(makeTestProviders())
+	pool := NewPool(makeTestProviders(), nil)
 
 	// llama-3.3-70b matches cerebras; llama-3.3-70b-versatile matches groq
 	p, err := pool.Select("llama-3.3-70b", "chat", 3)
@@ -67,11 +67,11 @@ func TestPool_ModelRouting_MultipleProviders(t *testing.T) {
 }
 
 func TestPool_SkipsExhaustedProviders(t *testing.T) {
-	pool := NewPool(makeTestProviders())
+	pool := NewPool(makeTestProviders(), nil)
 
 	// Exhaust groq's RPM
 	for i := 0; i < 30; i++ {
-		pool.RecordSuccess("groq", 0)
+		pool.RecordSuccessForModel("groq", "llama-3.3-70b-versatile", 0)
 	}
 
 	p, err := pool.Select("auto", "chat", 3)
@@ -88,8 +88,8 @@ func TestPool_AllExhausted_ReturnsError(t *testing.T) {
 		{ID: 1, Name: "p1", Type: "openai-compatible", Models: `{"chat":["m"]}`, Enabled: true,
 			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 1, WindowSecs: 60}}},
 	}
-	pool := NewPool(providers)
-	pool.RecordSuccess("p1", 0)
+	pool := NewPool(providers, nil)
+	pool.RecordSuccessForModel("p1", "m", 0)
 
 	_, err := pool.Select("auto", "chat", 3)
 	if err == nil {
@@ -98,7 +98,7 @@ func TestPool_AllExhausted_ReturnsError(t *testing.T) {
 }
 
 func TestPool_UnknownModel_ReturnsError(t *testing.T) {
-	pool := NewPool(makeTestProviders())
+	pool := NewPool(makeTestProviders(), nil)
 	_, err := pool.Select("nonexistent-model", "chat", 3)
 	if err == nil {
 		t.Error("expected error for unknown model")
@@ -114,7 +114,7 @@ func TestPool_DefaultModels_UsedForAuto(t *testing.T) {
 			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}},
 		},
 	}
-	pool := NewPool(providers)
+	pool := NewPool(providers, nil)
 
 	acc, err := pool.Select("auto", "chat", 3)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestPool_DefaultModels_FallsBackToFirstModel(t *testing.T) {
 			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 30, WindowSecs: 60}},
 		},
 	}
-	pool := NewPool(providers)
+	pool := NewPool(providers, nil)
 
 	acc, err := pool.Select("auto", "chat", 3)
 	if err != nil {
@@ -158,7 +158,7 @@ func TestPool_PerModelRateLimit_BlocksExhaustedModel(t *testing.T) {
 			},
 		},
 	}
-	pool := NewPool(providers)
+	pool := NewPool(providers, nil)
 
 	// Use up the per-model limit for llama-3.3-70b-versatile
 	pool.RecordSuccessForModel("groq", "llama-3.3-70b-versatile", 0)
@@ -172,7 +172,7 @@ func TestPool_PerModelRateLimit_BlocksExhaustedModel(t *testing.T) {
 }
 
 func TestPool_ListModels(t *testing.T) {
-	pool := NewPool(makeTestProviders())
+	pool := NewPool(makeTestProviders(), nil)
 	models := pool.ListModels()
 
 	if len(models) < 3 { // auto + 3 provider models

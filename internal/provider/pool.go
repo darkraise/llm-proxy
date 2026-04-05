@@ -12,6 +12,10 @@ type AccountInfo struct {
 	store.Account
 	DecryptedKey  string
 	DefaultModels map[string]string
+	APIStandard   string // "openai", "google"
+	AuthType      string // "bearer", "api-key-header", "query-param", "none"
+	AuthHeader    string // custom header name for api-key-header
+	ProviderURL   string // resolved base URL
 }
 
 type Pool struct {
@@ -21,7 +25,7 @@ type Pool struct {
 	index       int // round-robin index
 }
 
-func NewPool(accounts []store.Account) *Pool {
+func NewPool(accounts []store.Account, providers map[string]store.Provider) *Pool {
 	rl := NewRateLimiter()
 
 	infos := make([]AccountInfo, 0, len(accounts))
@@ -29,10 +33,32 @@ func NewPool(accounts []store.Account) *Pool {
 		if !p.Enabled {
 			continue
 		}
+
+		prov, ok := providers[p.Type]
+		if ok && !prov.Enabled {
+			continue
+		}
+		apiStandard := "openai"
+		authType := "bearer"
+		authHeader := ""
+		providerURL := p.BaseURL
+		if ok {
+			apiStandard = prov.APIStandard
+			authType = prov.AuthType
+			authHeader = prov.AuthHeader
+			if providerURL == "" {
+				providerURL = prov.BaseURL
+			}
+		}
+
 		infos = append(infos, AccountInfo{
 			Account:       p,
 			DecryptedKey:  string(p.APIKey),
 			DefaultModels: store.ParseDefaultModels(p.DefaultModels),
+			APIStandard:   apiStandard,
+			AuthType:      authType,
+			AuthHeader:    authHeader,
+			ProviderURL:   providerURL,
 		})
 
 		var limits []LimitConfig
@@ -130,10 +156,6 @@ func accountHasModel(p *AccountInfo, model string) bool {
 }
 
 func (p *Pool) RecordSuccess(name string, tokens int) {
-	p.rateLimiter.RecordRequest(name)
-	if tokens > 0 {
-		p.rateLimiter.RecordTokens(name, tokens)
-	}
 }
 
 // RecordSuccessForModel updates both account-level and model-specific counters.
@@ -153,7 +175,7 @@ func (p *Pool) RecordError(name string, backoff time.Duration) {
 }
 
 func (p *Pool) AllowTokens(name string, estimated int) bool {
-	return p.rateLimiter.AllowTokens(name, estimated)
+	return p.rateLimiter.AllowTokensForModel(name, "", estimated)
 }
 
 func (p *Pool) Status() map[string]AccountStatus {
@@ -191,8 +213,8 @@ func (p *Pool) Accounts() []AccountInfo {
 	return p.accounts
 }
 
-func (p *Pool) Reload(accounts []store.Account) {
-	newPool := NewPool(accounts)
+func (p *Pool) Reload(accounts []store.Account, providers map[string]store.Provider) {
+	newPool := NewPool(accounts, providers)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.accounts = newPool.accounts
