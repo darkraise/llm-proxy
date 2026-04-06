@@ -20,6 +20,7 @@ import {
   type ChatTestResult,
 } from "@/lib/api"
 import { categorizeModels } from "@/lib/known-models"
+import { useProviders } from "@/hooks/use-providers"
 import { formatDateTime } from "@/lib/dateformat"
 import { PageHeader } from "@/core/layout/page-header"
 import {
@@ -226,10 +227,11 @@ function KeysTab() {
   const bulkImport = useBulkImportScannerKeys()
   const bulkDelete = useBulkDeleteScannerKeys()
 
-  const providerOptions = useMemo(() => {
-    const set = new Set(keys.map((k) => k.provider))
-    return Array.from(set).sort()
-  }, [keys])
+  const { data: allProviders } = useProviders()
+  const providerOptions = useMemo(
+    () => (allProviders ?? []).map((p) => p.name).sort(),
+    [allProviders],
+  )
 
   function toggleSelect(id: number) {
     setSelected((prev) => {
