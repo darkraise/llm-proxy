@@ -1,9 +1,525 @@
+import { useState, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
+import { toast } from "sonner"
+import { Plus, Pencil, Trash2 } from "lucide-react"
+import type { Provider } from "@/lib/api"
+import { PageHeader } from "@/core/layout/page-header"
+import { Card, CardContent, CardHeader, CardTitle } from "@/core/components/ui/card"
+import { Badge } from "@/core/components/ui/badge"
+import { Button } from "@/core/components/ui/button"
+import { Input } from "@/core/components/ui/input"
+import { Label } from "@/core/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/core/components/ui/select"
+import { Switch } from "@/core/components/ui/switch"
+import { Checkbox } from "@/core/components/ui/checkbox"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/core/components/ui/sheet"
+import { Tabs, TabsList, TabsTrigger } from "@/core/components/ui/tabs"
+import { Separator } from "@/core/components/ui/separator"
+import { Skeleton } from "@/core/components/ui/skeleton"
+import { ConfirmDialog } from "@/components/confirm-dialog"
+import {
+  useProviders,
+  useCreateProvider,
+  useUpdateProvider,
+  useDeleteProvider,
+} from "@/hooks/use-providers"
+
+type FilterTab = "all" | "builtin" | "custom"
+
+const ALL_CAPABILITIES = ["chat", "embedding", "models"] as const
+type Capability = typeof ALL_CAPABILITIES[number]
+
+function parseCapabilities(raw: string): string[] {
+  try {
+    return JSON.parse(raw) as string[]
+  } catch {
+    return []
+  }
+}
+
+interface FormState {
+  name: string
+  display_name: string
+  base_url: string
+  models_url: string
+  api_standard: string
+  auth_type: string
+  auth_header: string
+  capabilities: Capability[]
+  enabled: boolean
+}
+
+function emptyForm(): FormState {
+  return {
+    name: "",
+    display_name: "",
+    base_url: "",
+    models_url: "",
+    api_standard: "openai",
+    auth_type: "bearer",
+    auth_header: "",
+    capabilities: [],
+    enabled: true,
+  }
+}
+
+function providerToForm(p: Provider): FormState {
+  return {
+    name: p.name,
+    display_name: p.display_name,
+    base_url: p.base_url,
+    models_url: p.models_url,
+    api_standard: p.api_standard,
+    auth_type: p.auth_type,
+    auth_header: p.auth_header,
+    capabilities: parseCapabilities(p.capabilities) as Capability[],
+    enabled: p.enabled,
+  }
+}
+
+function ProviderCard({
+  provider,
+  onEdit,
+  onDelete,
+  onToggleEnabled,
+}: {
+  provider: Provider
+  onEdit: () => void
+  onDelete: () => void
+  onToggleEnabled: (enabled: boolean) => void
+}) {
+  const caps = parseCapabilities(provider.capabilities)
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base leading-snug">{provider.display_name}</CardTitle>
+          <Badge variant={provider.is_builtin ? "secondary" : "outline"} className="shrink-0 text-xs">
+            {provider.is_builtin ? "built-in" : "custom"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="truncate text-sm text-muted-foreground" title={provider.base_url}>
+          {provider.base_url}
+        </p>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Standard:</span>
+          <Badge variant="outline" className="text-xs">{provider.api_standard}</Badge>
+        </div>
+
+        {caps.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {caps.map((cap) => (
+              <Badge key={cap} variant="secondary" className="text-xs">{cap}</Badge>
+            ))}
+          </div>
+        )}
+
+        <Separator />
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={provider.enabled}
+              onCheckedChange={onToggleEnabled}
+            />
+            <span className="text-sm text-muted-foreground">
+              {provider.enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            {!provider.is_builtin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ProviderSheet({
+  open,
+  onOpenChange,
+  provider,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  provider: Provider | null
+}) {
+  const isCreate = provider === null
+  const isBuiltin = provider?.is_builtin ?? false
+
+  const [form, setForm] = useState<FormState>(() =>
+    provider ? providerToForm(provider) : emptyForm()
+  )
+
+  const createProvider = useCreateProvider()
+  const updateProvider = useUpdateProvider()
+
+  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function toggleCapability(cap: Capability) {
+    setForm((prev) => {
+      const has = prev.capabilities.includes(cap)
+      return {
+        ...prev,
+        capabilities: has
+          ? prev.capabilities.filter((c) => c !== cap)
+          : [...prev.capabilities, cap],
+      }
+    })
+  }
+
+  function handleOpen(open: boolean) {
+    if (open) {
+      setForm(provider ? providerToForm(provider) : emptyForm())
+    }
+    onOpenChange(open)
+  }
+
+  function handleSave() {
+    const payload = {
+      name: form.name,
+      display_name: form.display_name,
+      base_url: form.base_url,
+      models_url: form.models_url,
+      api_standard: form.api_standard,
+      auth_type: form.auth_type,
+      auth_header: form.auth_header,
+      capabilities: form.capabilities,
+      enabled: form.enabled,
+    }
+
+    if (isCreate) {
+      createProvider.mutate(payload, {
+        onSuccess: () => {
+          toast.success("Provider created")
+          onOpenChange(false)
+        },
+        onError: (err) => toast.error(err.message),
+      })
+    } else {
+      updateProvider.mutate(
+        { name: form.name, data: payload },
+        {
+          onSuccess: () => {
+            toast.success("Provider updated")
+            onOpenChange(false)
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      )
+    }
+  }
+
+  const isPending = createProvider.isPending || updateProvider.isPending
+
+  return (
+    <Sheet open={open} onOpenChange={handleOpen}>
+      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{isCreate ? "Add Custom Provider" : "Edit Provider"}</SheetTitle>
+        </SheetHeader>
+
+        <div className="mt-4 flex flex-col gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="p-name">Name</Label>
+            <Input
+              id="p-name"
+              value={form.name}
+              onChange={(e) => setField("name", e.target.value)}
+              disabled={!isCreate && isBuiltin}
+              placeholder="e.g. my-provider"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="p-display-name">Display Name</Label>
+            <Input
+              id="p-display-name"
+              value={form.display_name}
+              onChange={(e) => setField("display_name", e.target.value)}
+              placeholder="e.g. My Provider"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="p-base-url">Base URL</Label>
+            <Input
+              id="p-base-url"
+              value={form.base_url}
+              onChange={(e) => setField("base_url", e.target.value)}
+              placeholder="https://api.example.com/v1"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="p-models-url">Models URL</Label>
+            <Input
+              id="p-models-url"
+              value={form.models_url}
+              onChange={(e) => setField("models_url", e.target.value)}
+              placeholder="https://api.example.com/v1/models"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="p-api-standard">API Standard</Label>
+            <Select
+              value={form.api_standard}
+              onValueChange={(v) => setField("api_standard", v)}
+            >
+              <SelectTrigger id="p-api-standard">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai">openai</SelectItem>
+                <SelectItem value="anthropic">anthropic</SelectItem>
+                <SelectItem value="google">google</SelectItem>
+                <SelectItem value="cohere">cohere</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="p-auth-type">Auth Type</Label>
+            <Select
+              value={form.auth_type}
+              onValueChange={(v) => setField("auth_type", v)}
+            >
+              <SelectTrigger id="p-auth-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bearer">bearer</SelectItem>
+                <SelectItem value="x-api-key">x-api-key</SelectItem>
+                <SelectItem value="custom">custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {form.auth_type === "custom" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="p-auth-header">Auth Header</Label>
+              <Input
+                id="p-auth-header"
+                value={form.auth_header}
+                onChange={(e) => setField("auth_header", e.target.value)}
+                placeholder="X-Custom-Key"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Capabilities</Label>
+            <div className="flex flex-col gap-2">
+              {ALL_CAPABILITIES.map((cap) => (
+                <div key={cap} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`cap-${cap}`}
+                    checked={form.capabilities.includes(cap)}
+                    onCheckedChange={() => toggleCapability(cap)}
+                  />
+                  <Label htmlFor={`cap-${cap}`} className="font-normal cursor-pointer">
+                    {cap}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Switch
+              id="p-enabled"
+              checked={form.enabled}
+              onCheckedChange={(v) => setField("enabled", v)}
+            />
+            <Label htmlFor="p-enabled" className="font-normal cursor-pointer">
+              Enabled
+            </Label>
+          </div>
+        </div>
+
+        <div className="mt-auto flex gap-2 pt-6">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button className="flex-1" onClick={handleSave} disabled={isPending}>
+            {isPending ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function ProvidersPage() {
+  const [filter, setFilter] = useState<FilterTab>("all")
+  const [editOpen, setEditOpen] = useState(false)
+  const [editProvider, setEditProvider] = useState<Provider | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Provider | null>(null)
+
+  const { data: providers, isLoading } = useProviders()
+  const updateProvider = useUpdateProvider()
+  const deleteProvider = useDeleteProvider()
+
+  const filtered = useMemo(() => {
+    if (!providers) return []
+    if (filter === "builtin") return providers.filter((p) => p.is_builtin)
+    if (filter === "custom") return providers.filter((p) => !p.is_builtin)
+    return providers
+  }, [providers, filter])
+
+  function openCreate() {
+    setEditProvider(null)
+    setEditOpen(true)
+  }
+
+  function openEdit(p: Provider) {
+    setEditProvider(p)
+    setEditOpen(true)
+  }
+
+  function handleToggleEnabled(p: Provider, enabled: boolean) {
+    const caps = parseCapabilities(p.capabilities)
+    updateProvider.mutate(
+      {
+        name: p.name,
+        data: {
+          name: p.name,
+          display_name: p.display_name,
+          base_url: p.base_url,
+          models_url: p.models_url,
+          api_standard: p.api_standard,
+          auth_type: p.auth_type,
+          auth_header: p.auth_header,
+          capabilities: caps,
+          enabled,
+        },
+      },
+      {
+        onError: (err) => toast.error(`Toggle failed: ${err.message}`),
+      },
+    )
+  }
+
+  function handleDelete() {
+    if (!deleteTarget) return
+    deleteProvider.mutate(deleteTarget.name, {
+      onSuccess: () => {
+        toast.success(`Deleted provider "${deleteTarget.display_name}"`)
+        setDeleteTarget(null)
+      },
+      onError: (err) => toast.error(err.message),
+    })
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Providers"
+        actions={
+          <Button onClick={openCreate}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add Custom
+          </Button>
+        }
+      />
+
+      <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterTab)}>
+        <TabsList>
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="builtin">Built-in</TabsTrigger>
+          <TabsTrigger value="custom">Custom</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="space-y-3 p-4">
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            {providers?.length === 0
+              ? "No providers configured."
+              : "No providers match the current filter."}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((p) => (
+            <ProviderCard
+              key={p.name}
+              provider={p}
+              onEdit={() => openEdit(p)}
+              onDelete={() => setDeleteTarget(p)}
+              onToggleEnabled={(enabled) => handleToggleEnabled(p, enabled)}
+            />
+          ))}
+        </div>
+      )}
+
+      <ProviderSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        provider={editProvider}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="Delete Provider"
+        description={`Are you sure you want to delete "${deleteTarget?.display_name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        loading={deleteProvider.isPending}
+      />
+    </div>
+  )
+}
 
 export const Route = createFileRoute("/_authenticated/providers")({
-  component: () => (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold">Providers</h1>
-    </div>
-  ),
+  component: ProvidersPage,
 })
