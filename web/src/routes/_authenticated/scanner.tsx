@@ -878,6 +878,7 @@ function ConfigDialog({
   const { data: config } = useScannerConfig()
   const updateConfig = useUpdateScannerConfig()
 
+  const [editingToken, setEditingToken] = useState(false)
   const [githubToken, setGithubToken] = useState("")
   const [delay, setDelay] = useState<string>("")
   const [maxPages, setMaxPages] = useState<string>("")
@@ -889,13 +890,31 @@ function ConfigDialog({
     setInitialized(true)
   }
 
+  function handleSaveToken() {
+    if (!githubToken.trim()) return
+    updateConfig.mutate(
+      { github_token: githubToken },
+      {
+        onSuccess: () => {
+          toast.success("GitHub token saved.")
+          setGithubToken("")
+          setEditingToken(false)
+        },
+        onError: (e) => toast.error(e.message),
+      },
+    )
+  }
+
+  function handleCancelToken() {
+    setGithubToken("")
+    setEditingToken(false)
+  }
+
   function handleSave() {
     const payload: {
-      github_token?: string
       delay_seconds?: number
       max_pages?: number
     } = {}
-    if (githubToken) payload.github_token = githubToken
     const d = parseInt(delay, 10)
     if (!isNaN(d) && d >= 0) payload.delay_seconds = d
     const mp = parseInt(maxPages, 10)
@@ -903,7 +922,6 @@ function ConfigDialog({
     updateConfig.mutate(payload, {
       onSuccess: () => {
         toast.success("Configuration saved.")
-        setGithubToken("")
         onOpenChange(false)
       },
       onError: (e) => toast.error(e.message),
@@ -919,20 +937,52 @@ function ConfigDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>GitHub Token</Label>
-            <Input
-              type="password"
-              placeholder={
-                config?.github_token_configured
-                  ? config.github_token_masked
-                  : "ghp_..."
-              }
-              value={githubToken}
-              onChange={(e) => setGithubToken(e.target.value)}
-            />
-            {config?.github_token_configured && (
-              <p className="text-xs text-muted-foreground">
-                Token configured. Enter a new value to replace it.
-              </p>
+            {editingToken ? (
+              <div className="space-y-2">
+                <Input
+                  type="text"
+                  placeholder="ghp_..."
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  spellCheck={false}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveToken}
+                    disabled={!githubToken.trim() || updateConfig.isPending}
+                  >
+                    {updateConfig.isPending ? "Saving..." : "Save Token"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCancelToken}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {config?.github_token_configured
+                    ? config.github_token_masked
+                    : "No token configured"}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditingToken(true)}
+                >
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Edit
+                </Button>
+              </div>
             )}
           </div>
           <div className="grid grid-cols-2 gap-4">
