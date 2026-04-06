@@ -1,25 +1,37 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from "vite"
+import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
+import { tanstackRouter } from "@tanstack/router-plugin/vite"
+import path from "node:path"
 
 export default defineConfig({
-  plugins: [react()],
-  base: '/',
+  plugins: [
+    tanstackRouter({
+      routesDirectory: "./src/routes",
+      generatedRouteTree: "./src/routeTree.gen.ts",
+      autoCodeSplitting: true,
+    }),
+    react(),
+    tailwindcss(),
+  ],
+  base: "/",
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
   server: {
+    port: 3838,
+    host: "0.0.0.0",
     proxy: {
-      '/api': {
-        target: 'http://localhost:4001',
+      "/api": {
+        target: "http://localhost:4001",
         changeOrigin: true,
       },
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     emptyOutDir: true,
   },
 })
