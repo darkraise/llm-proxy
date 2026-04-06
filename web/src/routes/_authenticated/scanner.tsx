@@ -226,10 +226,10 @@ function KeysTab() {
   const bulkImport = useBulkImportScannerKeys()
   const bulkDelete = useBulkDeleteScannerKeys()
 
-  const providers = useMemo(() => {
-    if (!status) return []
-    return status.sources
-  }, [status])
+  const providerOptions = useMemo(() => {
+    const set = new Set(keys.map((k) => k.provider))
+    return Array.from(set).sort()
+  }, [keys])
 
   function toggleSelect(id: number) {
     setSelected((prev) => {
@@ -374,7 +374,7 @@ function KeysTab() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Providers</SelectItem>
-            {providers.map((p) => (
+            {providerOptions.map((p) => (
               <SelectItem key={p} value={p}>
                 {p}
               </SelectItem>
