@@ -140,11 +140,18 @@ function KeysTestPage() {
                 placeholder="sk-…"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
               />
             </div>
           </div>
 
-          <Button onClick={handleTestKey} disabled={testLoading}>
+          <Button
+            onClick={handleTestKey}
+            disabled={testLoading || !provider || !apiKey.trim()}
+          >
             {testLoading ? "Testing…" : "Test Key"}
           </Button>
 

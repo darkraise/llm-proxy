@@ -9,6 +9,7 @@ import {
   Download,
   Plus,
   Pencil,
+  Settings,
 } from "lucide-react"
 import type {
   DiscoveredKey,
@@ -50,6 +51,12 @@ import {
   TableRow,
 } from "@/core/components/ui/table"
 import { Skeleton } from "@/core/components/ui/skeleton"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/core/components/ui/dialog"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import {
   useScannerStatus,
@@ -74,6 +81,7 @@ const PAGE_SIZE = 20
 
 function ScannerPage() {
   const [activeTab, setActiveTab] = useState("keys")
+  const [configOpen, setConfigOpen] = useState(false)
 
   const { data: status } = useScannerStatus()
   const startScan = useScannerStart()
@@ -109,6 +117,14 @@ function ScannerPage() {
               </span>
             )}
             <StatusIndicator running={running} hasError={hasError} />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setConfigOpen(true)}
+              title="Scanner Configuration"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
             <Button
               variant={running ? "destructive" : "default"}
               onClick={handleToggleScan}
@@ -148,7 +164,7 @@ function ScannerPage() {
         </TabsContent>
       </Tabs>
 
-      <ConfigSection />
+      <ConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
   )
 }
@@ -852,8 +868,14 @@ function PatternsTab() {
 
 // ─── Config Section ────────────────────────────────────────────────────────
 
-function ConfigSection() {
-  const { data: config, isLoading } = useScannerConfig()
+function ConfigDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { data: config } = useScannerConfig()
   const updateConfig = useUpdateScannerConfig()
 
   const [githubToken, setGithubToken] = useState("")
@@ -882,22 +904,19 @@ function ConfigSection() {
       onSuccess: () => {
         toast.success("Configuration saved.")
         setGithubToken("")
+        onOpenChange(false)
       },
       onError: (e) => toast.error(e.message),
     })
   }
 
-  if (isLoading) {
-    return <Skeleton className="h-48 w-full" />
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Scanner Configuration</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Scanner Configuration</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>GitHub Token</Label>
             <Input
@@ -916,33 +935,37 @@ function ConfigSection() {
               </p>
             )}
           </div>
-          <div className="space-y-1.5">
-            <Label>Delay (seconds)</Label>
-            <Input
-              type="number"
-              min={0}
-              value={delay}
-              onChange={(e) => setDelay(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Delay (seconds)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={delay}
+                onChange={(e) => setDelay(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Max Pages</Label>
+              <Input
+                type="number"
+                min={1}
+                value={maxPages}
+                onChange={(e) => setMaxPages(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Max Pages</Label>
-            <Input
-              type="number"
-              min={1}
-              value={maxPages}
-              onChange={(e) => setMaxPages(e.target.value)}
-            />
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={updateConfig.isPending}
+            >
+              {updateConfig.isPending ? "Saving..." : "Save"}
+            </Button>
           </div>
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={updateConfig.isPending}
-        >
-          {updateConfig.isPending ? "Saving..." : "Save Configuration"}
-        </Button>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   )
 }
 
