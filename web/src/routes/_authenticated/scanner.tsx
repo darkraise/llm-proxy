@@ -975,12 +975,13 @@ function ConfigDialog({
                     : "No token configured"}
                 </span>
                 <Button
-                  size="sm"
-                  variant="outline"
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
                   onClick={() => setEditingToken(true)}
+                  title="Edit token"
                 >
-                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                  Edit
+                  <Pencil className="h-3.5 w-3.5" />
                 </Button>
               </div>
             )}
