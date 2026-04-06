@@ -136,7 +136,7 @@ function KeysTestPage() {
             <div className="space-y-1.5">
               <Label>API Key</Label>
               <Input
-                type="password"
+                type="text"
                 placeholder="sk-…"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -144,6 +144,7 @@ function KeysTestPage() {
                 data-1p-ignore
                 data-lpignore="true"
                 data-form-type="other"
+                spellCheck={false}
               />
             </div>
           </div>
