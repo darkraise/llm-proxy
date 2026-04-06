@@ -7,13 +7,14 @@ import {
   OctagonX,
   TriangleAlert,
 } from "lucide-react"
-import { useTheme } from "next-themes"
+import { useTheme } from "@/core/theme/use-theme"
 import { Toaster as Sonner } from "sonner"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const { resolvedMode } = useTheme()
+  const theme = resolvedMode ?? "system"
 
   return (
     <Sonner

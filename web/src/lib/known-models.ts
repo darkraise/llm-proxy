@@ -81,9 +81,6 @@ export const KNOWN_MODELS: Record<string, string[]> = {
   moonshot: [
     'moonshot-v1-auto', 'moonshot-v1-8k', 'moonshot-v1-32k',
   ],
-  deepseek: [
-    'deepseek-chat', 'deepseek-reasoner',
-  ],
   minimax: [
     'MiniMax-Text-01',
   ],
