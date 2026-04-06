@@ -2,13 +2,7 @@ import { useState, useEffect } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { PageHeader } from "@/core/layout/page-header"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/core/components/ui/card"
+import { Card, CardContent } from "@/core/components/ui/card"
 import { Input } from "@/core/components/ui/input"
 import { Label } from "@/core/components/ui/label"
 import { Button } from "@/core/components/ui/button"
@@ -132,11 +126,7 @@ function SettingsPage() {
 
       {/* General */}
       <Card>
-        <CardHeader>
-          <CardTitle>General</CardTitle>
-          <CardDescription>Basic proxy configuration</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <FormSection title="General" description="Basic proxy configuration">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -196,11 +186,7 @@ function SettingsPage() {
 
       {/* Proxy Authentication */}
       <Card>
-        <CardHeader>
-          <CardTitle>Proxy Authentication</CardTitle>
-          <CardDescription>Token required for proxy API access</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <FormSection title="Proxy Authentication" description="Token required for proxy API access">
             <div className="space-y-1.5">
               <Label htmlFor="proxy_token">Proxy Token</Label>
@@ -226,11 +212,7 @@ function SettingsPage() {
 
       {/* Notifications */}
       <Card>
-        <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-          <CardDescription>Alert configuration</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <FormSection title="Notifications" description="Alert configuration">
             <div className="flex items-center gap-3">
               <Button
@@ -252,11 +234,7 @@ function SettingsPage() {
 
       {/* Ollama */}
       <Card>
-        <CardHeader>
-          <CardTitle>Ollama</CardTitle>
-          <CardDescription>Local model fallback</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <FormSection title="Ollama" description="Local model fallback">
             <div className="flex items-center gap-3">
               <Switch
@@ -289,11 +267,7 @@ function SettingsPage() {
 
       {/* Import / Export */}
       <Card>
-        <CardHeader>
-          <CardTitle>Import / Export</CardTitle>
-          <CardDescription>Configuration backup and restore</CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <FormSection title="Import / Export" description="Configuration backup and restore">
             <div className="space-y-6">
               {/* Config export/import */}

@@ -79,9 +79,9 @@ function RateLimitsPage() {
         value={activeProvider}
         onValueChange={(v) => setSelectedProvider(v)}
       >
-        <TabsList className="flex-wrap">
+        <TabsList className="h-auto w-full justify-start overflow-x-auto">
           {providerNames.map((name) => (
-            <TabsTrigger key={name} value={name}>
+            <TabsTrigger key={name} value={name} className="shrink-0">
               {providers?.find((p) => p.name === name)?.display_name ?? name}
             </TabsTrigger>
           ))}

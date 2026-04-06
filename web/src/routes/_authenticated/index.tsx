@@ -128,9 +128,9 @@ function Dashboard() {
       <PageHeader
         title="Dashboard"
         actions={
-          <>
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <Label htmlFor="auto-refresh" className="text-sm">
+              <Label htmlFor="auto-refresh" className="text-sm whitespace-nowrap">
                 Auto-refresh
               </Label>
               <Switch
@@ -151,7 +151,7 @@ function Dashboard() {
                 ))}
               </SelectContent>
             </Select>
-          </>
+          </div>
         }
       />
 

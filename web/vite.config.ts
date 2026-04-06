@@ -23,6 +23,7 @@ export default defineConfig({
   server: {
     port: 3838,
     host: "0.0.0.0",
+    allowedHosts: ["host.docker.internal"],
     proxy: {
       "/api": {
         target: "http://localhost:4001",
