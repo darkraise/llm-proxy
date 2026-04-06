@@ -10,11 +10,16 @@ import {
   Plus,
   Pencil,
   Settings,
+  FlaskConical,
+  Send,
 } from "lucide-react"
-import type {
-  DiscoveredKey,
-  ScanKeyPattern,
+import {
+  api,
+  type DiscoveredKey,
+  type ScanKeyPattern,
+  type ChatTestResult,
 } from "@/lib/api"
+import { categorizeModels } from "@/lib/known-models"
 import { formatDateTime } from "@/lib/dateformat"
 import { PageHeader } from "@/core/layout/page-header"
 import {
@@ -51,6 +56,8 @@ import {
   TableRow,
 } from "@/core/components/ui/table"
 import { Skeleton } from "@/core/components/ui/skeleton"
+import { Separator } from "@/core/components/ui/separator"
+import { Textarea } from "@/core/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -193,12 +200,22 @@ function StatusIndicator({
 // ─── Keys Tab ──────────────────────────────────────────────────────────────
 
 function KeysTab() {
+  const { data: status } = useScannerStatus()
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<DiscoveredKey | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [testTarget, setTestTarget] = useState<DiscoveredKey | null>(null)
 
-  const { data, isLoading } = useScannerKeys({ limit: PAGE_SIZE, offset })
+  const [providerFilter, setProviderFilter] = useState("")
+  const [importedFilter, setImportedFilter] = useState("")
+
+  const { data, isLoading } = useScannerKeys({
+    limit: PAGE_SIZE,
+    offset,
+    provider: providerFilter || undefined,
+    imported: importedFilter || undefined,
+  })
   const keys = data?.data ?? []
   const total = data?.total ?? 0
 
@@ -208,6 +225,11 @@ function KeysTab() {
   const deleteKey = useDeleteScannerKey()
   const bulkImport = useBulkImportScannerKeys()
   const bulkDelete = useBulkDeleteScannerKeys()
+
+  const providers = useMemo(() => {
+    if (!status) return []
+    return status.sources
+  }, [status])
 
   function toggleSelect(id: number) {
     setSelected((prev) => {
@@ -258,10 +280,6 @@ function KeysTab() {
     })
   }
 
-  function handleDelete(key: DiscoveredKey) {
-    setDeleteTarget(key)
-  }
-
   function confirmDelete() {
     if (!deleteTarget) return
     deleteKey.mutate(deleteTarget.id, {
@@ -293,10 +311,6 @@ function KeysTab() {
     )
   }
 
-  function handleBulkDelete() {
-    setBulkDeleteOpen(true)
-  }
-
   function confirmBulkDelete() {
     const ids = Array.from(selected)
     bulkDelete.mutate(ids, {
@@ -324,31 +338,94 @@ function KeysTab() {
 
   return (
     <div className="space-y-4 pt-2">
-      {selected.size > 0 && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {selected.size} selected
+      {/* Info pane */}
+      {status && (
+        <div className="flex flex-wrap gap-4 text-sm">
+          <span>
+            <span className="text-muted-foreground">Total:</span>{" "}
+            <span className="font-medium">{status.total}</span>
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleBulkImport}
-            disabled={bulkImport.isPending}
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Import Selected
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={handleBulkDelete}
-            disabled={bulkDelete.isPending}
-          >
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-            Delete Selected
-          </Button>
+          <span>
+            <span className="text-muted-foreground">Valid:</span>{" "}
+            <span className="font-medium text-green-500">{status.valid}</span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Imported:</span>{" "}
+            <span className="font-medium">{status.imported}</span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Providers:</span>{" "}
+            <span className="font-medium">{status.providers_count}</span>
+          </span>
         </div>
       )}
+
+      {/* Filters and bulk actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={providerFilter}
+          onValueChange={(v) => {
+            setProviderFilter(v === "all" ? "" : v)
+            setOffset(0)
+          }}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All Providers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Providers</SelectItem>
+            {providers.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={importedFilter}
+          onValueChange={(v) => {
+            setImportedFilter(v === "all" ? "" : v)
+            setOffset(0)
+          }}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="false">Not Imported</SelectItem>
+            <SelectItem value="true">Imported</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {selected.size > 0 && (
+          <>
+            <Separator orientation="vertical" className="h-6" />
+            <span className="text-sm text-muted-foreground">
+              {selected.size} selected
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkImport}
+              disabled={bulkImport.isPending}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Import Selected
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setBulkDeleteOpen(true)}
+              disabled={bulkDelete.isPending}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              Delete Selected
+            </Button>
+          </>
+        )}
+      </div>
 
       <Table>
         <TableHeader>
@@ -416,6 +493,14 @@ function KeysTab() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      onClick={() => setTestTarget(key)}
+                      title="Test key"
+                    >
+                      <FlaskConical className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       onClick={() => handleValidate(key.id)}
                       disabled={validateKey.isPending}
                       title="Validate"
@@ -436,7 +521,7 @@ function KeysTab() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleDelete(key)}
+                      onClick={() => setDeleteTarget(key)}
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -496,6 +581,11 @@ function KeysTab() {
         onConfirm={confirmBulkDelete}
         loading={bulkDelete.isPending}
       />
+
+      <KeyTestDialog
+        discoveredKey={testTarget}
+        onOpenChange={(open) => !open && setTestTarget(null)}
+      />
     </div>
   )
 }
@@ -504,6 +594,220 @@ function ValidBadge({ valid }: { valid: boolean | null }) {
   if (valid === true) return <Badge variant="default">Yes</Badge>
   if (valid === false) return <Badge variant="destructive">No</Badge>
   return <Badge variant="outline">Unknown</Badge>
+}
+
+// ─── Key Test Dialog ──────────────────────────────────────────────────────
+
+function KeyTestDialog({
+  discoveredKey,
+  onOpenChange,
+}: {
+  discoveredKey: DiscoveredKey | null
+  onOpenChange: (open: boolean) => void
+}) {
+  const discoverModels = useDiscoverScannerModels()
+  const [models, setModels] = useState<string[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [chatModel, setChatModel] = useState("")
+  const [chatMessage, setChatMessage] = useState("")
+  const [chatResult, setChatResult] = useState<ChatTestResult | null>(null)
+  const [chatLoading, setChatLoading] = useState(false)
+
+  const open = discoveredKey !== null
+
+  function handleDiscoverModels() {
+    if (!discoveredKey) return
+    setModelsLoading(true)
+    discoverModels.mutate(discoveredKey.id, {
+      onSuccess: (result) => {
+        const ids = result.models.map((m) => m.id)
+        setModels(ids)
+        setModelsLoading(false)
+      },
+      onError: (e) => {
+        toast.error(e.message)
+        setModelsLoading(false)
+      },
+    })
+  }
+
+  async function handleChatTest() {
+    if (!discoveredKey || !chatModel || !chatMessage) return
+    setChatLoading(true)
+    setChatResult(null)
+    try {
+      const result = await api.keys.chatTest(
+        discoveredKey.provider,
+        discoveredKey.masked_key,
+        chatModel,
+        chatMessage,
+      )
+      setChatResult(result)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Chat test failed")
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  function handleClose(v: boolean) {
+    if (!v) {
+      setModels([])
+      setChatModel("")
+      setChatMessage("")
+      setChatResult(null)
+    }
+    onOpenChange(v)
+  }
+
+  const categorized = categorizeModels(models)
+
+  const chatResponseText: string | null = (() => {
+    if (!chatResult?.response) return null
+    const r = chatResult.response
+    try {
+      return (
+        r?.choices?.[0]?.message?.content ??
+        r?.content?.[0]?.text ??
+        r?.candidates?.[0]?.content?.parts?.[0]?.text ??
+        JSON.stringify(r, null, 2)
+      )
+    } catch {
+      return String(r)
+    }
+  })()
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Test Key — {discoveredKey?.provider}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Key:</span>{" "}
+            <span className="font-mono">{discoveredKey?.masked_key}</span>
+          </div>
+
+          {/* Model Discovery */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDiscoverModels}
+                disabled={modelsLoading}
+              >
+                {modelsLoading ? "Discovering..." : "Discover Models"}
+              </Button>
+              {models.length > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  {models.length} model(s) found
+                </span>
+              )}
+            </div>
+
+            {models.length > 0 && (
+              <div className="space-y-2">
+                {categorized.chat.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Chat</p>
+                    <div className="flex flex-wrap gap-1">
+                      {categorized.chat.map((m) => (
+                        <Badge key={m} variant="outline" className="text-xs">
+                          {m}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {categorized.embedding.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Embedding</p>
+                    <div className="flex flex-wrap gap-1">
+                      {categorized.embedding.map((m) => (
+                        <Badge key={m} variant="secondary" className="text-xs">
+                          {m}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Chat Test */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Chat Test</p>
+            <div className="space-y-1.5">
+              <Label>Model</Label>
+              {categorized.chat.length > 0 ? (
+                <Select value={chatModel} onValueChange={setChatModel}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select model..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorized.chat.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder="e.g. gpt-4o"
+                  value={chatModel}
+                  onChange={(e) => setChatModel(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Message</Label>
+              <Textarea
+                placeholder="Say hello..."
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                rows={2}
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={handleChatTest}
+              disabled={chatLoading || !chatModel || !chatMessage}
+            >
+              <Send className="mr-1.5 h-3.5 w-3.5" />
+              {chatLoading ? "Sending..." : "Send"}
+            </Button>
+
+            {chatResult && (
+              <div className="space-y-2">
+                {chatResult.error ? (
+                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {chatResult.error}
+                  </p>
+                ) : (
+                  <>
+                    <Card className="bg-muted/40">
+                      <CardContent className="pt-4">
+                        <p className="whitespace-pre-wrap text-sm">{chatResponseText}</p>
+                      </CardContent>
+                    </Card>
+                    <p className="text-xs text-muted-foreground">
+                      HTTP {chatResult.status_code}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 // ─── History Tab ───────────────────────────────────────────────────────────
