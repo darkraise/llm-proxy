@@ -1,3 +1,4 @@
+export { BreakdownTabs } from "./components/breakdown-tabs"
 export { StatCard } from "./components/stat-card"
 export { KPICard } from "./components/kpi-card"
 export { ProgressCard } from "./components/progress-card"
