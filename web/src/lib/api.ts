@@ -1,5 +1,4 @@
-// Typed API client for the LLM Proxy admin backend.
-// All requests include credentials (session cookie) and auto-redirect on 401.
+import { useAuthStore } from "@/features/auth/store"
 
 const BASE = '/api'
 
@@ -38,6 +37,7 @@ async function request<T>(
   })
 
   if (res.status === 401) {
+    useAuthStore.getState().clearAuth()
     window.location.href = '/login'
     throw new ApiError(401, 'Unauthorized')
   }

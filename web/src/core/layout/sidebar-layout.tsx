@@ -43,7 +43,7 @@ export function SidebarLayout({ children, nav, headerSlot }: LayoutProps) {
                 className="text-lg font-medium"
                 style={{ color: "hsl(var(--sidebar-foreground-hover))" }}
               >
-                App
+                LLM Proxy
               </span>
             )}
           </div>

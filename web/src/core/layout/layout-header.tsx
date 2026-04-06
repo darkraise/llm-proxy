@@ -3,7 +3,6 @@ import { cn } from "@/core/lib/utils"
 import { ThemeSwitcher } from "@/core/theme"
 import { SearchCommand } from "./search-command"
 import { UserMenu } from "./user-menu"
-import { NotificationBell } from "./notification-bell"
 import { MobileDrawer } from "./mobile-drawer"
 import type { NavGroup } from "./types"
 
@@ -36,7 +35,6 @@ export function LayoutHeader({
       <div className="ml-auto flex items-center gap-1">
         {headerSlot}
         <ThemeSwitcher />
-        <NotificationBell />
         <UserMenu />
       </div>
     </header>

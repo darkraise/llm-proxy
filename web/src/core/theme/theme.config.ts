@@ -31,22 +31,22 @@ export interface ThemeConfig {
 
 export const themeConfig: ThemeConfig = {
   defaults: {
-    accentColor: "blue",
-    surfaceColor: "slate",
+    accentColor: "purple",
+    surfaceColor: "purple",
     surfaceStyle: "default",
     backgroundStyle: "solid",
     fontFamily: "default",
-    mode: "system",
+    mode: "dark",
   },
   switcher: {
     enabled: true,
     axes: {
       mode: true,
       accentColor: true,
-      surfaceColor: true,
-      surfaceStyle: true,
-      backgroundStyle: true,
-      fontFamily: true,
+      surfaceColor: false,
+      surfaceStyle: false,
+      backgroundStyle: false,
+      fontFamily: false,
     },
   },
 }
