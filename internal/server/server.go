@@ -46,6 +46,7 @@ type Server struct {
 	rateLimitChan chan proxy.RateLimitUpdate
 	notifier      *notify.Notifier
 	notifyStop    chan struct{}
+	prunerStop    chan struct{}
 	scanner       *scanner.Manager
 	encryptionKey []byte
 }
@@ -201,6 +202,7 @@ func New(cfg Config) (*Server, error) {
 	adminHandler.SetOnSettingsChange(reloadProxyConfig)
 
 	notifyStop := make(chan struct{})
+	prunerStop := make(chan struct{})
 	mux := http.NewServeMux()
 	adminMux := http.NewServeMux()
 	s := &Server{
@@ -216,6 +218,7 @@ func New(cfg Config) (*Server, error) {
 		rateLimitChan: rateLimitChan,
 		notifier:      notifier,
 		notifyStop:    notifyStop,
+		prunerStop:    prunerStop,
 		scanner:       scannerMgr,
 		encryptionKey: encryptionKey,
 		http: &http.Server{
@@ -456,6 +459,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	_ = s.adminHttp.Shutdown(ctx)
 	_ = s.http.Shutdown(ctx)
 	close(s.notifyStop)
+	close(s.prunerStop)
 	close(s.logChan)
 	close(s.rateLimitChan)
 	s.scanner.Stop()
@@ -549,22 +553,28 @@ func (s *Server) rateLimitWriter() {
 }
 
 func (s *Server) logPruner() {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
 	for {
-		time.Sleep(24 * time.Hour)
-		retentionStr, _ := s.db.GetSetting("log_retention_days")
-		retention := 30
-		if v, err := fmt.Sscanf(retentionStr, "%d", &retention); err != nil || v == 0 {
-			retention = 30
-		}
-		// Roll up expiring logs into daily_stats before pruning
-		if err := s.db.RollupDailyStats(retention); err != nil {
-			slog.Error("daily rollup failed", "error", err)
-		}
-		pruned, err := s.db.PruneOldLogs(retention)
-		if err != nil {
-			slog.Error("log prune failed", "error", err)
-		} else if pruned > 0 {
-			slog.Info("pruned old logs", "count", pruned, "retention_days", retention)
+		select {
+		case <-s.prunerStop:
+			return
+		case <-ticker.C:
+			retentionStr, _ := s.db.GetSetting("log_retention_days")
+			retention := 30
+			if v, err := fmt.Sscanf(retentionStr, "%d", &retention); err != nil || v == 0 {
+				retention = 30
+			}
+			if err := s.db.RollupDailyStats(retention); err != nil {
+				slog.Error("daily rollup failed", "error", err)
+			}
+			pruned, err := s.db.PruneOldLogs(retention)
+			if err != nil {
+				slog.Error("log prune failed", "error", err)
+			} else if pruned > 0 {
+				slog.Info("pruned old logs", "count", pruned, "retention_days", retention)
+			}
 		}
 	}
 }
