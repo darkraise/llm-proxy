@@ -579,6 +579,8 @@ export const api = {
       request<DiscoveredKey>('POST', `/scanner/keys/${id}/validate`),
     discoverModels: (id: number) =>
       request<DiscoverResult>('POST', `/scanner/keys/${id}/discover`),
+    chatTest: (id: number, model: string, message: string) =>
+      request<ChatTestResult>('POST', `/scanner/keys/${id}/chat-test`, { model, message }),
     importKey: (id: number, models: Record<string, string[]>, name?: string) =>
       request<{ id: number }>('POST', `/scanner/keys/${id}/import`, { models, name }),
     bulkImport: (ids: number[], models: Record<string, string[]>, limits?: AccountLimit[]) =>

@@ -430,6 +430,58 @@ func (h *AdminHandler) HandleDiscoverByDiscoveredKey(w http.ResponseWriter, r *h
 	writeJSON(w, 200, map[string]any{"models": models})
 }
 
+func (h *AdminHandler) HandleChatTestByDiscoveredKey(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var req struct {
+		Model   string `json:"model"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Model == "" {
+		writeJSON(w, 400, map[string]string{"error": "model is required"})
+		return
+	}
+	if req.Message == "" {
+		req.Message = "say ok"
+	}
+
+	dk, err := h.db.GetDiscoveredKey(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "key not found"})
+		return
+	}
+
+	plainKey, err := crypto.Decrypt(h.encryptionKey, dk.KeyEnc)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": "failed to decrypt key"})
+		return
+	}
+
+	info := h.providerInfo(dk.Provider, "")
+	steps := []keyval.StepConfig{
+		{Step: "chat_completion", Params: map[string]any{
+			"model": req.Model, "message": req.Message, "max_tokens": float64(20),
+		}},
+	}
+	results := keyval.Validate(r.Context(), info, string(plainKey), steps)
+	last := results[len(results)-1]
+
+	writeJSON(w, 200, map[string]any{
+		"status_code": last.StatusCode,
+		"response":    last.Response,
+		"rate_limits": last.RateLimits,
+		"error":       last.Error,
+	})
+}
+
 func (h *AdminHandler) HandleBulkDeleteKeys(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		IDs []int64 `json:"ids"`

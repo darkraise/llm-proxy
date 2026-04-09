@@ -315,6 +315,7 @@ func (s *Server) adminRoutes() {
 	m.Handle("POST /api/scanner/keys/{id}/validate", protected(s.admin.HandleValidateDiscoveredKey))
 	m.Handle("POST /api/scanner/keys/validate", protected(s.admin.HandleBulkValidateKeys))
 	m.Handle("POST /api/scanner/keys/{id}/discover", protected(s.admin.HandleDiscoverByDiscoveredKey))
+	m.Handle("POST /api/scanner/keys/{id}/chat-test", protected(s.admin.HandleChatTestByDiscoveredKey))
 	m.Handle("POST /api/scanner/keys/{id}/import", protected(s.admin.HandleImportDiscoveredKey))
 	m.Handle("POST /api/scanner/keys/import", protected(s.admin.HandleBulkImportKeys))
 	m.Handle("POST /api/scanner/keys/delete", protected(s.admin.HandleBulkDeleteKeys))

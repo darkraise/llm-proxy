@@ -638,9 +638,8 @@ function KeyTestDialog({
     setChatLoading(true)
     setChatResult(null)
     try {
-      const result = await api.keys.chatTest(
-        discoveredKey.provider,
-        discoveredKey.masked_key,
+      const result = await api.scanner.chatTest(
+        discoveredKey.id,
         chatModel,
         chatMessage,
       )
