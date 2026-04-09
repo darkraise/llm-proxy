@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -32,8 +33,10 @@ func (s *ModelsFetchStep) Run(ctx context.Context, client *http.Client, provider
 	}
 	SetAuth(req, provider.AuthType, provider.AuthHeader, key)
 
+	slog.Info("keyval: outbound request", "step", "models_fetch", "method", "GET", "url", modelsURL, "provider", provider.Name)
 	resp, err := client.Do(req)
 	if err != nil {
+		slog.Warn("keyval: request failed", "step", "models_fetch", "url", modelsURL, "error", err)
 		result.Error = "request failed: " + err.Error()
 		return result
 	}
@@ -41,6 +44,7 @@ func (s *ModelsFetchStep) Run(ctx context.Context, client *http.Client, provider
 
 	body, _ := io.ReadAll(resp.Body)
 	result.StatusCode = resp.StatusCode
+	slog.Info("keyval: response", "step", "models_fetch", "url", modelsURL, "status", resp.StatusCode)
 	result.RateLimits = ExtractRateLimitHeaders(resp.Header)
 
 	if resp.StatusCode != 200 {

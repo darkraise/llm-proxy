@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -71,8 +72,11 @@ func (s *ChatCompletionStep) Run(ctx context.Context, client *http.Client, provi
 	}
 	SetAuth(req, authType, provider.AuthHeader, key)
 
+	chatURL := baseURL + "/chat/completions"
+	slog.Info("keyval: outbound request", "step", "chat_completion", "method", "POST", "url", chatURL, "provider", provider.Name, "model", model)
 	resp, err := client.Do(req)
 	if err != nil {
+		slog.Warn("keyval: request failed", "step", "chat_completion", "url", chatURL, "error", err)
 		result.Error = "request failed: " + err.Error()
 		return result
 	}
@@ -80,6 +84,7 @@ func (s *ChatCompletionStep) Run(ctx context.Context, client *http.Client, provi
 
 	body, _ := io.ReadAll(resp.Body)
 	result.StatusCode = resp.StatusCode
+	slog.Info("keyval: response", "step", "chat_completion", "url", chatURL, "status", resp.StatusCode)
 	result.RateLimits = ExtractRateLimitHeaders(resp.Header)
 
 	var parsed any
