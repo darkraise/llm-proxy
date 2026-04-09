@@ -30,6 +30,8 @@ func NewManager(db *store.DB, encryptionKey []byte) *Manager {
 }
 
 func (m *Manager) RegisterSource(s Source) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sources[s.Name()] = s
 }
 
