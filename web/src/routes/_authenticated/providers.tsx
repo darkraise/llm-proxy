@@ -2,7 +2,7 @@ import { useState, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Plus, Pencil, Trash2 } from "lucide-react"
-import type { Provider } from "@/lib/api"
+import type { Provider, ValidationStep } from "@/lib/api"
 import { PageHeader } from "@/core/layout/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/core/components/ui/card"
 import { Badge } from "@/core/components/ui/badge"
@@ -48,6 +48,15 @@ function parseCapabilities(raw: string): string[] {
   }
 }
 
+type StepType = "models_fetch" | "chat_completion"
+
+interface ValidationStepForm {
+  step: StepType
+  model: string
+  message: string
+  max_tokens: number
+}
+
 interface FormState {
   name: string
   display_name: string
@@ -57,6 +66,7 @@ interface FormState {
   auth_type: string
   auth_header: string
   capabilities: Capability[]
+  validation_steps: ValidationStepForm[]
   enabled: boolean
 }
 
@@ -70,8 +80,38 @@ function emptyForm(): FormState {
     auth_type: "bearer",
     auth_header: "",
     capabilities: [],
+    validation_steps: [],
     enabled: true,
   }
+}
+
+function parseValidationSteps(raw: string): ValidationStepForm[] {
+  if (!raw) return []
+  try {
+    const steps = JSON.parse(raw) as Array<{ step: string; params?: Record<string, any> }>
+    return steps.map((s) => ({
+      step: (s.step === "chat_completion" ? "chat_completion" : "models_fetch") as StepType,
+      model: (s.params?.model as string) ?? "",
+      message: (s.params?.message as string) ?? "say ok",
+      max_tokens: (s.params?.max_tokens as number) ?? 5,
+    }))
+  } catch {
+    return []
+  }
+}
+
+function serializeValidationSteps(steps: ValidationStepForm[]): ValidationStep[] {
+  return steps.map((s) => {
+    if (s.step === "models_fetch") return { step: "models_fetch" }
+    return {
+      step: "chat_completion",
+      params: {
+        model: s.model || undefined,
+        message: s.message || undefined,
+        max_tokens: s.max_tokens,
+      },
+    }
+  })
 }
 
 function providerToForm(p: Provider): FormState {
@@ -84,6 +124,7 @@ function providerToForm(p: Provider): FormState {
     auth_type: p.auth_type,
     auth_header: p.auth_header,
     capabilities: parseCapabilities(p.capabilities) as Capability[],
+    validation_steps: parseValidationSteps(p.validation_steps),
     enabled: p.enabled,
   }
 }
@@ -214,6 +255,7 @@ function ProviderSheet({
       auth_type: form.auth_type,
       auth_header: form.auth_header,
       capabilities: form.capabilities,
+      validation_steps: serializeValidationSteps(form.validation_steps),
       enabled: form.enabled,
     }
 
