@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -133,12 +134,14 @@ func (h *AdminHandler) HandleDiscoverOllama(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	slog.Debug("egress", "method", "GET", "url", fetchURL, "target", "ollama")
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		writeJSON(w, 502, map[string]string{"error": "failed to reach Ollama: " + err.Error()})
 		return
 	}
 	defer resp.Body.Close()
+	slog.Debug("egress response", "url", fetchURL, "status", resp.StatusCode)
 
 	if resp.StatusCode >= 400 {
 		writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("Ollama returned status %d", resp.StatusCode)})

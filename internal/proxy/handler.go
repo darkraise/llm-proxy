@@ -316,6 +316,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 		if resp != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
 			h.pool.RecordSuccessForModel(prov.Name, logEntry.Model, resp.Usage.TotalTokens)
+			h.pool.RecordInputsForModel(prov.Name, logEntry.Model, req.InputCount())
 			logEntry.Model = resp.Model
 		}
 		logEntry.Status = "success"
@@ -378,11 +379,14 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 	httpReq.Header.Set("Content-Type", "application/json")
 	setProviderAuth(httpReq, prov)
 
+	embedURL := baseURL + "/embeddings"
+	slog.Debug("egress", "method", "POST", "url", embedURL, "provider", prov.Name, "model", req.Model)
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
+	slog.Debug("egress response", "url", embedURL, "provider", prov.Name, "status", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -412,11 +416,14 @@ func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.Em
 	httpReq.Header.Set("Content-Type", "application/json")
 	setProviderAuth(httpReq, prov)
 
+	cohereURL := "https://api.cohere.ai/v2/embed"
+	slog.Debug("egress", "method", "POST", "url", cohereURL, "provider", prov.Name, "model", req.Model)
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
+	slog.Debug("egress response", "url", cohereURL, "provider", prov.Name, "status", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -629,11 +636,14 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 	httpReq.Header.Set("Content-Type", "application/json")
 	setProviderAuth(httpReq, prov)
 
+	chatURL := baseURL + "/chat/completions"
+	slog.Debug("egress", "method", "POST", "url", chatURL, "provider", prov.Name, "model", req.Model)
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 	defer resp.Body.Close()
+	slog.Debug("egress response", "url", chatURL, "provider", prov.Name, "status", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -661,11 +671,13 @@ func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatComplet
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
+	slog.Debug("egress", "method", "POST", "url", url, "provider", prov.Name, "model", req.Model)
 	resp, err := h.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
+	slog.Debug("egress response", "url", url, "provider", prov.Name, "status", resp.StatusCode)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

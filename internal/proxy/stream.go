@@ -179,6 +179,8 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 	httpReq.Header.Set("Content-Type", "application/json")
 	setProviderAuth(httpReq, prov)
 
+	streamURL := baseURL + "/chat/completions"
+	slog.Debug("egress stream", "method", "POST", "url", streamURL, "provider", prov.Name, "model", req.Model)
 	return h.httpClient().Do(httpReq)
 }
 
@@ -197,6 +199,7 @@ func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatC
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
+	slog.Debug("egress stream", "method", "POST", "url", url, "provider", prov.Name, "model", req.Model)
 	return h.httpClient().Do(httpReq)
 }
 

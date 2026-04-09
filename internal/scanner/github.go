@@ -186,10 +186,12 @@ func (g *GitHubSource) doRequest(ctx context.Context, client *http.Client, endpo
 	req.Header.Set("Authorization", "token "+g.token)
 	req.Header.Set("Accept", "application/vnd.github.text-match+json")
 
+	slog.Debug("egress", "method", "GET", "url", endpoint, "target", "github")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("egress response", "url", endpoint, "status", resp.StatusCode)
 
 	if resp.StatusCode == 403 || resp.StatusCode == 429 {
 		remaining := resp.Header.Get("X-RateLimit-Remaining")
