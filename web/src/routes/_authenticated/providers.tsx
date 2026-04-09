@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, ArrowUp, ArrowDown, X } from "lucide-react"
 import type { Provider, ValidationStep } from "@/lib/api"
 import { PageHeader } from "@/core/layout/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/core/components/ui/card"
@@ -238,6 +238,50 @@ function ProviderSheet({
     })
   }
 
+  function addStep() {
+    setForm((prev) => ({
+      ...prev,
+      validation_steps: [
+        ...prev.validation_steps,
+        { step: "models_fetch", model: "", message: "say ok", max_tokens: 5 },
+      ],
+    }))
+  }
+
+  function removeStep(index: number) {
+    setForm((prev) => ({
+      ...prev,
+      validation_steps: prev.validation_steps.filter((_, i) => i !== index),
+    }))
+  }
+
+  function moveStep(index: number, direction: -1 | 1) {
+    setForm((prev) => {
+      const steps = [...prev.validation_steps]
+      const target = index + direction
+      if (target < 0 || target >= steps.length) return prev
+      ;[steps[index], steps[target]] = [steps[target], steps[index]]
+      return { ...prev, validation_steps: steps }
+    })
+  }
+
+  function updateStep(index: number, updates: Partial<ValidationStepForm>) {
+    setForm((prev) => ({
+      ...prev,
+      validation_steps: prev.validation_steps.map((s, i) =>
+        i === index ? { ...s, ...updates } : s
+      ),
+    }))
+  }
+
+  function changeStepType(index: number, newType: StepType) {
+    if (newType === "models_fetch") {
+      updateStep(index, { step: "models_fetch", model: "", message: "say ok", max_tokens: 5 })
+    } else {
+      updateStep(index, { step: "chat_completion", model: "", message: "say ok", max_tokens: 5 })
+    }
+  }
+
   function handleOpen(open: boolean) {
     if (open) {
       setForm(provider ? providerToForm(provider) : emptyForm())
@@ -395,6 +439,113 @@ function ProviderSheet({
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Validation Steps</Label>
+            <p className="text-xs text-muted-foreground">
+              Steps run sequentially to validate discovered keys
+            </p>
+
+            {form.validation_steps.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                No steps configured. Default: models_fetch only.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {form.validation_steps.map((vs, i) => (
+                  <div
+                    key={i}
+                    className="rounded-md border p-3 space-y-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={vs.step}
+                        onValueChange={(v) => changeStepType(i, v as StepType)}
+                      >
+                        <SelectTrigger className="flex-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="models_fetch">models_fetch</SelectItem>
+                          <SelectItem value="chat_completion">chat_completion</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        disabled={i === 0}
+                        onClick={() => moveStep(i, -1)}
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        disabled={i === form.validation_steps.length - 1}
+                        onClick={() => moveStep(i, 1)}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => removeStep(i)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    {vs.step === "chat_completion" && (
+                      <div className="flex flex-col gap-2 pl-1">
+                        <div className="grid grid-cols-[5rem_1fr] items-center gap-2">
+                          <Label className="text-xs">Model</Label>
+                          <Input
+                            className="h-7 text-xs"
+                            placeholder="auto"
+                            value={vs.model}
+                            onChange={(e) => updateStep(i, { model: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[5rem_1fr] items-center gap-2">
+                          <Label className="text-xs">Message</Label>
+                          <Input
+                            className="h-7 text-xs"
+                            value={vs.message}
+                            onChange={(e) => updateStep(i, { message: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-[5rem_1fr] items-center gap-2">
+                          <Label className="text-xs">Max Tokens</Label>
+                          <Input
+                            type="number"
+                            className="h-7 text-xs"
+                            value={vs.max_tokens}
+                            onChange={(e) =>
+                              updateStep(i, { max_tokens: parseInt(e.target.value) || 0 })
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={addStep}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add Step
+            </Button>
           </div>
 
           <div className="flex items-center gap-3">
