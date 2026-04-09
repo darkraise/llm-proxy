@@ -24,26 +24,21 @@ func NewNotifier(db *store.DB) *Notifier {
 // Alert sends a notification if the alert type is enabled and not in cooldown.
 // Safe to call from any goroutine.
 func (n *Notifier) Alert(alert Alert) {
-	// Load config and check cooldown under lock, then release before network I/O.
-	n.mu.Lock()
-
 	channels := n.loadChannels()
 	alerts := n.loadAlerts()
 
 	rule := n.getRuleForType(alerts, alert.Type)
 	if rule == nil || !rule.Enabled {
-		n.mu.Unlock()
 		return
 	}
 
+	n.mu.Lock()
 	if last, ok := n.cooldowns[alert.Key]; ok {
 		if time.Since(last) < time.Duration(rule.CooldownMin)*time.Minute {
 			n.mu.Unlock()
 			return
 		}
 	}
-
-	// Optimistically set cooldown so concurrent callers skip while we send.
 	n.cooldowns[alert.Key] = time.Now()
 	n.mu.Unlock()
 
