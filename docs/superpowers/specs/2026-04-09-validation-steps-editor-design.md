@@ -13,7 +13,7 @@ The backend already supports per-provider validation steps stored as a JSON stri
 
 If no steps are configured, the pipeline defaults to `[{"step":"models_fetch"}]`.
 
-The backend API already accepts `validation_steps` on both `POST /api/providers` and `PATCH /api/providers/:name`, including for builtin providers. The frontend simply never sends the field.
+The backend API already accepts `validation_steps` on both `POST /api/providers` and `PUT /api/providers/:name`, including for builtin providers. The update handler uses nil-check semantics: if `validation_steps` is absent from the JSON body, the existing value is preserved. The frontend currently never sends the field.
 
 ## Scope
 
@@ -129,3 +129,5 @@ All changes are contained within `providers.tsx`:
 - **Inline JSX** — render the step list between Capabilities and Enabled toggle
 
 No new files. The step list UI is small enough to be inline JSX in `ProviderSheet`, following the existing pattern of the capabilities checkboxes section.
+
+**Note:** `handleToggleEnabled` in `ProvidersPage` sends a PUT without `validation_steps`. This is safe and does NOT need modification — the backend preserves the existing value when the field is absent from the JSON body.
