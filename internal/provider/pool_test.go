@@ -171,6 +171,25 @@ func TestPool_PerModelRateLimit_BlocksExhaustedModel(t *testing.T) {
 	}
 }
 
+func TestPool_RecordAfterReload_UsesNewLimiter(t *testing.T) {
+	accounts := []store.Account{
+		{ID: 1, Name: "p1", Type: "openai-compatible", Models: `{"chat":["m"]}`, Enabled: true,
+			Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 1, WindowSecs: 60}}},
+	}
+	pool := NewPool(accounts, nil)
+
+	pool.RecordSuccessForModel("p1", "m", 0)
+	pool.Reload(accounts, nil)
+	pool.RecordSuccessForModel("p1", "m", 0)
+
+	// After reload + one record, the new limiter should have 1 request counted.
+	// With MaxValue=1, selecting should fail.
+	_, err := pool.Select("m", "chat", 1)
+	if err == nil {
+		t.Error("expected error: post-reload record should have exhausted the new limiter")
+	}
+}
+
 func TestPool_ListModels(t *testing.T) {
 	pool := NewPool(makeTestProviders(), nil)
 	models := pool.ListModels()

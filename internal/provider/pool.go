@@ -156,22 +156,43 @@ func accountHasModel(p *AccountInfo, model string) bool {
 }
 
 func (p *Pool) RecordSuccessForModel(name, model string, tokens int) {
-	p.rateLimiter.RecordRequestForModel(name, model)
+	p.mu.RLock()
+	rl := p.rateLimiter
+	p.mu.RUnlock()
+	rl.RecordRequestForModel(name, model)
 	if tokens > 0 {
-		p.rateLimiter.RecordTokensForModel(name, model, tokens)
+		rl.RecordTokensForModel(name, model, tokens)
 	}
 }
 
 func (p *Pool) RecordRateLimit(name string, retryAfter time.Duration) {
-	p.rateLimiter.RecordBackoff(name, retryAfter)
+	p.mu.RLock()
+	rl := p.rateLimiter
+	p.mu.RUnlock()
+	rl.RecordBackoff(name, retryAfter)
 }
 
 func (p *Pool) RecordError(name string, backoff time.Duration) {
-	p.rateLimiter.RecordBackoff(name, backoff)
+	p.mu.RLock()
+	rl := p.rateLimiter
+	p.mu.RUnlock()
+	rl.RecordBackoff(name, backoff)
+}
+
+func (p *Pool) RecordInputsForModel(name, model string, inputs int) {
+	if inputs > 0 {
+		p.mu.RLock()
+		rl := p.rateLimiter
+		p.mu.RUnlock()
+		rl.RecordInputsForModel(name, model, inputs)
+	}
 }
 
 func (p *Pool) AllowTokensForModel(name, model string, estimated int) bool {
-	return p.rateLimiter.AllowTokensForModel(name, model, estimated)
+	p.mu.RLock()
+	rl := p.rateLimiter
+	p.mu.RUnlock()
+	return rl.AllowTokensForModel(name, model, estimated)
 }
 
 func (p *Pool) Status() map[string]AccountStatus {
