@@ -1,15 +1,15 @@
 import { useState } from "react"
 import { Plus, Save, Trash2 } from "lucide-react"
 import type { RateLimitDef } from "@/lib/api"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 import {
   Table,
   TableBody,
@@ -17,7 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/core/components/ui/table"
+} from "darkraise-ui/components/table"
 
 const METRICS = [
   { value: "rpm", label: "rpm — requests/min" },

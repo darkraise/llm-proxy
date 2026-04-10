@@ -5,12 +5,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/core/components/ui/dialog"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Checkbox } from "@/core/components/ui/checkbox"
-import { ScrollArea } from "@/core/components/ui/scroll-area"
-import { Separator } from "@/core/components/ui/separator"
+} from "darkraise-ui/components/dialog"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Checkbox } from "darkraise-ui/components/checkbox"
+import { ScrollArea } from "darkraise-ui/components/scroll-area"
+import { Separator } from "darkraise-ui/components/separator"
 import { categorizeModels } from "@/lib/known-models"
 
 interface AddModelsDialogProps {

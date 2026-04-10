@@ -7,12 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/core/components/ui/dialog"
-import { Button } from "@/core/components/ui/button"
-import { Label } from "@/core/components/ui/label"
-import { Switch } from "@/core/components/ui/switch"
-import { Separator } from "@/core/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/core/components/ui/tabs"
+} from "darkraise-ui/components/dialog"
+import { Button } from "darkraise-ui/components/button"
+import { Label } from "darkraise-ui/components/label"
+import { Switch } from "darkraise-ui/components/switch"
+import { Separator } from "darkraise-ui/components/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "darkraise-ui/components/tabs"
 import { useBulkEditAccounts, useBulkUpdateAccounts } from "@/hooks/use-accounts"
 import { AddModelsDialog } from "./add-models-dialog"
 

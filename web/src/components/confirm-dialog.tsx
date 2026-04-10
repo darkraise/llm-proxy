@@ -5,8 +5,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/core/components/ui/dialog"
-import { Button } from "@/core/components/ui/button"
+} from "darkraise-ui/components/dialog"
+import { Button } from "darkraise-ui/components/button"
 
 interface ConfirmDialogProps {
   open: boolean

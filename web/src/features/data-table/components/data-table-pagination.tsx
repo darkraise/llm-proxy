@@ -4,14 +4,14 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react"
-import { Button } from "@/core/components/ui/button"
+import { Button } from "darkraise-ui/components/button"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 import type { DataTablePaginationProps } from "../types"
 
 export function DataTablePagination<TData>({

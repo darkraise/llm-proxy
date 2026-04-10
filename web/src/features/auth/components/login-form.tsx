@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Label } from "@/core/components/ui/label"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Label } from "darkraise-ui/components/label"
 import { useAuth } from "../hooks/use-auth"
 
 export function LoginForm() {

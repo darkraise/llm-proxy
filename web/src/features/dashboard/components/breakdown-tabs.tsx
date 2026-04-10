@@ -3,7 +3,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/core/components/ui/tabs"
+} from "darkraise-ui/components/tabs"
 
 interface BreakdownItem {
   label: string

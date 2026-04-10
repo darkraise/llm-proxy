@@ -1,18 +1,18 @@
 import { useState, useCallback } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { PageHeader } from "@/core/layout/page-header"
-import { Badge } from "@/core/components/ui/badge"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Skeleton } from "@/core/components/ui/skeleton"
+import { PageHeader } from "darkraise-ui/layout"
+import { Badge } from "darkraise-ui/components/badge"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Skeleton } from "darkraise-ui/components/skeleton"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 import {
   Table,
   TableBody,
@@ -20,7 +20,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/core/components/ui/table"
+} from "darkraise-ui/components/table"
 import { useLogs } from "@/hooks/use-logs"
 import { useAccounts } from "@/hooks/use-accounts"
 import { LogDrawer } from "@/components/log-drawer"

@@ -1,5 +1,5 @@
 import { SlidersHorizontal } from "lucide-react"
-import { Button } from "@/core/components/ui/button"
+import { Button } from "darkraise-ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -7,7 +7,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/core/components/ui/dropdown-menu"
+} from "darkraise-ui/components/dropdown-menu"
 import type { Table } from "@tanstack/react-table"
 
 interface ColumnVisibilityProps<TData> {

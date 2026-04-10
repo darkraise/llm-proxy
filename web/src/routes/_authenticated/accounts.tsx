@@ -11,27 +11,27 @@ import {
 import type { Account } from "@/lib/api"
 import { parseCategorizedModels, flattenModels } from "@/lib/api"
 import { getDisplayName } from "@/lib/providers"
-import { PageHeader } from "@/core/layout/page-header"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Card, CardContent } from "@/core/components/ui/card"
-import { Badge } from "@/core/components/ui/badge"
-import { Switch } from "@/core/components/ui/switch"
-import { Skeleton } from "@/core/components/ui/skeleton"
+import { PageHeader } from "darkraise-ui/layout"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Card, CardContent } from "darkraise-ui/components/card"
+import { Badge } from "darkraise-ui/components/badge"
+import { Switch } from "darkraise-ui/components/switch"
+import { Skeleton } from "darkraise-ui/components/skeleton"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/core/components/ui/dropdown-menu"
+} from "darkraise-ui/components/dropdown-menu"
 import {
   useAccounts,
   useUpdateAccount,

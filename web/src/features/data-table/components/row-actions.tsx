@@ -1,11 +1,11 @@
 import { MoreHorizontal } from "lucide-react"
-import { Button } from "@/core/components/ui/button"
+import { Button } from "darkraise-ui/components/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/core/components/ui/dropdown-menu"
+} from "darkraise-ui/components/dropdown-menu"
 
 interface Action {
   label: string

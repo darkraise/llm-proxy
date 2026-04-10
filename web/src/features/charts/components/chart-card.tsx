@@ -3,7 +3,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/core/components/ui/card"
+} from "darkraise-ui/components/card"
 import type { ChartCardProps } from "../types"
 
 export function ChartCard({

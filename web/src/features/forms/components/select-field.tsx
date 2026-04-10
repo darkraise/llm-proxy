@@ -4,7 +4,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 import { FieldWrapper } from "./field-wrapper"
 import type { AnyFieldApi } from "@tanstack/react-form"
 

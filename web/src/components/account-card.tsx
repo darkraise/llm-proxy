@@ -1,10 +1,10 @@
 import type { Account } from "@/lib/api"
 import { parseCategorizedModels, flattenModels } from "@/lib/api"
 import { getDisplayName } from "@/lib/providers"
-import { Card, CardContent } from "@/core/components/ui/card"
-import { Badge } from "@/core/components/ui/badge"
-import { Switch } from "@/core/components/ui/switch"
-import { Checkbox } from "@/core/components/ui/checkbox"
+import { Card, CardContent } from "darkraise-ui/components/card"
+import { Badge } from "darkraise-ui/components/badge"
+import { Switch } from "darkraise-ui/components/switch"
+import { Checkbox } from "darkraise-ui/components/checkbox"
 
 interface AccountCardProps {
   account: Account

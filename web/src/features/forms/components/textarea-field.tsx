@@ -1,4 +1,4 @@
-import { Textarea } from "@/core/components/ui/textarea"
+import { Textarea } from "darkraise-ui/components/textarea"
 import { FieldWrapper } from "./field-wrapper"
 import type { AnyFieldApi } from "@tanstack/react-form"
 

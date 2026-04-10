@@ -2,18 +2,18 @@ import { useState, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { Activity, AlertTriangle, Clock, Zap } from "lucide-react"
-import { PageHeader } from "@/core/layout/page-header"
+import { PageHeader } from "darkraise-ui/layout"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
-import { Switch } from "@/core/components/ui/switch"
-import { Label } from "@/core/components/ui/label"
-import { Card, CardContent } from "@/core/components/ui/card"
-import { Skeleton } from "@/core/components/ui/skeleton"
+} from "darkraise-ui/components/select"
+import { Switch } from "darkraise-ui/components/switch"
+import { Label } from "darkraise-ui/components/label"
+import { Card, CardContent } from "darkraise-ui/components/card"
+import { Skeleton } from "darkraise-ui/components/skeleton"
 import { StatCard, BreakdownTabs } from "@/features/dashboard"
 import { ChartCard, BarChart } from "@/features/charts"
 import { formatCompact } from "@/lib/api"

@@ -9,8 +9,7 @@ import {
   ScanSearch,
   Settings,
 } from "lucide-react"
-import { SidebarLayout } from "@/core/layout/sidebar-layout"
-import type { NavGroup } from "@/core/layout/types"
+import { SidebarLayout, type NavGroup } from "darkraise-ui/layout"
 import { useAuthStore } from "@/features/auth/store"
 import { api } from "@/lib/api"
 

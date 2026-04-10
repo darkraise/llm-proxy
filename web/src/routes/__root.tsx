@@ -1,5 +1,5 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router"
-import { AppProviders } from "@/core/providers/app-providers"
+import { AppProviders } from "@/providers/app-providers"
 
 export const Route = createRootRoute({
   component: () => (
