@@ -8,21 +8,21 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-} from "@/core/components/ui/sheet"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Label } from "@/core/components/ui/label"
-import { Switch } from "@/core/components/ui/switch"
-import { Separator } from "@/core/components/ui/separator"
-import { Badge } from "@/core/components/ui/badge"
-import { ScrollArea } from "@/core/components/ui/scroll-area"
+} from "darkraise-ui/components/sheet"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Label } from "darkraise-ui/components/label"
+import { Switch } from "darkraise-ui/components/switch"
+import { Separator } from "darkraise-ui/components/separator"
+import { Badge } from "darkraise-ui/components/badge"
+import { ScrollArea } from "darkraise-ui/components/scroll-area"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 import { useProviders } from "@/hooks/use-providers"
 import {
   useCreateAccount,

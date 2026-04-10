@@ -1,4 +1,4 @@
-import { cn } from "@/core/lib/utils"
+import { cn } from "darkraise-ui/lib"
 import type { ReactNode } from "react"
 
 interface MetricGridProps {

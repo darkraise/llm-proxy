@@ -1,4 +1,4 @@
-import { Button } from "@/core/components/ui/button"
+import { Button } from "darkraise-ui/components/button"
 
 interface FormActionsProps {
   submitLabel?: string

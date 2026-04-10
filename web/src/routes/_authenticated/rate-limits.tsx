@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { PageHeader } from "@/core/layout/page-header"
-import { Skeleton } from "@/core/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/core/components/ui/tabs"
-import { Card, CardContent } from "@/core/components/ui/card"
+import { PageHeader } from "darkraise-ui/layout"
+import { Skeleton } from "darkraise-ui/components/skeleton"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "darkraise-ui/components/tabs"
+import { Card, CardContent } from "darkraise-ui/components/card"
 import { useProviders } from "@/hooks/use-providers"
 import {
   useRateLimits,

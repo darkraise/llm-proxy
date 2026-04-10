@@ -4,27 +4,27 @@ import { toast } from "sonner"
 import { api, type KeyTestResult, type ChatTestResult } from "@/lib/api"
 import { categorizeModels } from "@/lib/known-models"
 import { useProviders } from "@/hooks/use-providers"
-import { PageHeader } from "@/core/layout/page-header"
+import { PageHeader } from "darkraise-ui/layout"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/core/components/ui/card"
-import { Badge } from "@/core/components/ui/badge"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Label } from "@/core/components/ui/label"
-import { Textarea } from "@/core/components/ui/textarea"
-import { Separator } from "@/core/components/ui/separator"
+} from "darkraise-ui/components/card"
+import { Badge } from "darkraise-ui/components/badge"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Label } from "darkraise-ui/components/label"
+import { Textarea } from "darkraise-ui/components/textarea"
+import { Separator } from "darkraise-ui/components/separator"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
+} from "darkraise-ui/components/select"
 
 function KeysTestPage() {
   const { data: providers } = useProviders()

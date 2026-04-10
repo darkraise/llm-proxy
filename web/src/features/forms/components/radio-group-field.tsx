@@ -1,5 +1,5 @@
-import { RadioGroup, RadioGroupItem } from "@/core/components/ui/radio-group"
-import { Label } from "@/core/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "darkraise-ui/components/radio-group"
+import { Label } from "darkraise-ui/components/label"
 import { FieldWrapper } from "./field-wrapper"
 import type { AnyFieldApi } from "@tanstack/react-form"
 

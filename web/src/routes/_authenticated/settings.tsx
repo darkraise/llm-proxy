@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { PageHeader } from "@/core/layout/page-header"
-import { Card, CardContent } from "@/core/components/ui/card"
-import { Input } from "@/core/components/ui/input"
-import { Label } from "@/core/components/ui/label"
-import { Button } from "@/core/components/ui/button"
+import { PageHeader } from "darkraise-ui/layout"
+import { Card, CardContent } from "darkraise-ui/components/card"
+import { Input } from "darkraise-ui/components/input"
+import { Label } from "darkraise-ui/components/label"
+import { Button } from "darkraise-ui/components/button"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
-import { Switch } from "@/core/components/ui/switch"
-import { Textarea } from "@/core/components/ui/textarea"
-import { Badge } from "@/core/components/ui/badge"
+} from "darkraise-ui/components/select"
+import { Switch } from "darkraise-ui/components/switch"
+import { Textarea } from "darkraise-ui/components/textarea"
+import { Badge } from "darkraise-ui/components/badge"
 import { FormSection } from "@/features/forms"
 import { useSettings, useUpdateSettings, useTestNotification } from "@/hooks/use-settings"
 import { DATE_FORMAT_PRESETS } from "@/lib/dateformat"

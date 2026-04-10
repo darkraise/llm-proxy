@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { Button } from "@/core/components/ui/button"
+import { Button } from "darkraise-ui/components/button"
 import type { Column } from "@tanstack/react-table"
 
 interface ColumnHeaderProps<TData, TValue> {

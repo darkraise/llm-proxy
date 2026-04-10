@@ -3,30 +3,30 @@ import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Plus, Pencil, Trash2, ArrowUp, ArrowDown, X } from "lucide-react"
 import type { Provider, ValidationStep } from "@/lib/api"
-import { PageHeader } from "@/core/layout/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/core/components/ui/card"
-import { Badge } from "@/core/components/ui/badge"
-import { Button } from "@/core/components/ui/button"
-import { Input } from "@/core/components/ui/input"
-import { Label } from "@/core/components/ui/label"
+import { PageHeader } from "darkraise-ui/layout"
+import { Card, CardContent, CardHeader, CardTitle } from "darkraise-ui/components/card"
+import { Badge } from "darkraise-ui/components/badge"
+import { Button } from "darkraise-ui/components/button"
+import { Input } from "darkraise-ui/components/input"
+import { Label } from "darkraise-ui/components/label"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/core/components/ui/select"
-import { Switch } from "@/core/components/ui/switch"
-import { Checkbox } from "@/core/components/ui/checkbox"
+} from "darkraise-ui/components/select"
+import { Switch } from "darkraise-ui/components/switch"
+import { Checkbox } from "darkraise-ui/components/checkbox"
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "@/core/components/ui/sheet"
-import { Tabs, TabsList, TabsTrigger } from "@/core/components/ui/tabs"
-import { Separator } from "@/core/components/ui/separator"
-import { Skeleton } from "@/core/components/ui/skeleton"
+} from "darkraise-ui/components/sheet"
+import { Tabs, TabsList, TabsTrigger } from "darkraise-ui/components/tabs"
+import { Separator } from "darkraise-ui/components/separator"
+import { Skeleton } from "darkraise-ui/components/skeleton"
 import { ConfirmDialog } from "@/components/confirm-dialog"
 import {
   useProviders,

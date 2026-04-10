@@ -1,13 +1,13 @@
 import { formatDateTime } from "@/lib/dateformat"
-import { Badge } from "@/core/components/ui/badge"
-import { Card } from "@/core/components/ui/card"
-import { Separator } from "@/core/components/ui/separator"
+import { Badge } from "darkraise-ui/components/badge"
+import { Card } from "darkraise-ui/components/card"
+import { Separator } from "darkraise-ui/components/separator"
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "@/core/components/ui/sheet"
+} from "darkraise-ui/components/sheet"
 import type { RequestLog } from "@/lib/api"
 
 interface LogDrawerProps {

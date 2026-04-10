@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback } from "@/core/components/ui/avatar"
+import { Avatar, AvatarFallback } from "darkraise-ui/components/avatar"
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/core/components/ui/card"
+} from "darkraise-ui/components/card"
 import type { ActivityItem } from "../types"
 
 interface ActivityFeedProps {

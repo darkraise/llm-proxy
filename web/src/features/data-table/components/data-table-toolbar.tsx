@@ -1,6 +1,6 @@
 import { X } from "lucide-react"
-import { Input } from "@/core/components/ui/input"
-import { Button } from "@/core/components/ui/button"
+import { Input } from "darkraise-ui/components/input"
+import { Button } from "darkraise-ui/components/button"
 import { ColumnVisibility } from "./column-visibility"
 import type { DataTableToolbarProps } from "../types"
 

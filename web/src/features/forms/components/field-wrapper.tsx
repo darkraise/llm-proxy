@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Label } from "@/core/components/ui/label"
+import { Label } from "darkraise-ui/components/label"
 import type { AnyFieldApi } from "@tanstack/react-form"
 
 interface FieldWrapperProps {

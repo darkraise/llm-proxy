@@ -1,4 +1,4 @@
-import { Card, CardContent } from "@/core/components/ui/card"
+import { Card, CardContent } from "darkraise-ui/components/card"
 import type { KPICardProps } from "../types"
 
 export function KPICard({

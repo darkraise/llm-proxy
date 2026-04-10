@@ -1,5 +1,5 @@
-import { Switch } from "@/core/components/ui/switch"
-import { Label } from "@/core/components/ui/label"
+import { Switch } from "darkraise-ui/components/switch"
+import { Label } from "darkraise-ui/components/label"
 import type { AnyFieldApi } from "@tanstack/react-form"
 
 interface SwitchFieldProps {
