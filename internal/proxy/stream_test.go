@@ -49,7 +49,7 @@ func TestHandleChatCompletions_Streaming(t *testing.T) {
 		APIKey: []byte("test-key"), Models: `{"chat":["test-model"]}`, Enabled: true,
 	}}
 
-	pool := provider.NewPool(providers)
+	pool := provider.NewPool(providers, nil)
 	h := NewHandler(pool, nil, nil)
 
 	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}],"stream":true}`

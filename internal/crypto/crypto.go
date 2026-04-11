@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 
@@ -68,6 +69,11 @@ func Decrypt(key, ciphertext []byte) ([]byte, error) {
 
 	nonce, ct := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	return aead.Open(nil, nonce, ct, nil)
+}
+
+func HashKey(plaintext string) string {
+	sum := sha256.Sum256([]byte(plaintext))
+	return fmt.Sprintf("%x", sum)
 }
 
 func HashPassword(password string) (string, error) {

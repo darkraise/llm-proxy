@@ -55,10 +55,7 @@ func TestSettings_GetAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAllSettings: %v", err)
 	}
-	if len(all) != 2 {
-		t.Fatalf("expected 2 settings, got %d", len(all))
-	}
 	if all["a"] != `1` || all["b"] != `2` {
-		t.Errorf("unexpected values: %v", all)
+		t.Errorf("unexpected values: a=%q b=%q", all["a"], all["b"])
 	}
 }

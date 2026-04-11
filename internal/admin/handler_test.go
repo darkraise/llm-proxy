@@ -15,7 +15,7 @@ func setupTestAdmin(t *testing.T) (*AdminHandler, *http.Cookie) {
 	t.Helper()
 	db := newTestStore(t)
 	auth := NewAuth(hashPassword(t, "admin123"))
-	pool := provider.NewPool(nil)
+	pool := provider.NewPool(nil, nil)
 	h := NewAdminHandler(db, auth, pool, nil)
 
 	// Login to get session cookie

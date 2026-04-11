@@ -40,7 +40,7 @@ func TestHandleChatCompletions_NonStreaming(t *testing.T) {
 		APIKey: []byte("test-key"), Models: `{"chat":["test-model"]}`, Enabled: true,
 	}}
 
-	pool := provider.NewPool(providers)
+	pool := provider.NewPool(providers, nil)
 	h := NewHandler(pool, nil, nil) // nil logger for now
 
 	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}]}`
@@ -73,7 +73,7 @@ func TestHandleChatCompletions_AllExhausted(t *testing.T) {
 		Limits: []store.AccountLimit{{Metric: "rpm", MaxValue: 0, WindowSecs: 60}},
 	}}
 
-	pool := provider.NewPool(providers)
+	pool := provider.NewPool(providers, nil)
 	h := NewHandler(pool, nil, nil)
 
 	body := `{"model":"auto","messages":[{"role":"user","content":"Hi"}]}`
@@ -96,7 +96,7 @@ func TestHandleAnthropicMessages_NonStreaming(t *testing.T) {
 		APIKey: []byte("test-key"), Models: `{"chat":["test-model"]}`, Enabled: true,
 	}}
 
-	pool := provider.NewPool(providers)
+	pool := provider.NewPool(providers, nil)
 	h := NewHandler(pool, nil, nil)
 
 	body := `{"model":"auto","max_tokens":1024,"messages":[{"role":"user","content":"Hi"}]}`

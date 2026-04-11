@@ -40,6 +40,7 @@ func (m *metricCounter) headroom(now time.Time) int {
 type providerState struct {
 	requestMetrics map[string]*metricCounter // "rpm", "rpd", "rps"
 	tokenMetrics   map[string]*metricCounter // "tpm", "tpd"
+	inputMetrics   map[string]*metricCounter // "ipm"
 	backoffUntil   time.Time
 }
 
@@ -81,6 +82,7 @@ func newProviderState(limits []LimitConfig) *providerState {
 	state := &providerState{
 		requestMetrics: make(map[string]*metricCounter),
 		tokenMetrics:   make(map[string]*metricCounter),
+		inputMetrics:   make(map[string]*metricCounter),
 	}
 	for _, l := range limits {
 		mc := &metricCounter{config: l, windowStart: now}
@@ -89,6 +91,8 @@ func newProviderState(limits []LimitConfig) *providerState {
 			state.requestMetrics[l.Metric] = mc
 		case "tpm", "tpd", "tpmo", "tph":
 			state.tokenMetrics[l.Metric] = mc
+		case "ipm":
+			state.inputMetrics[l.Metric] = mc
 		}
 	}
 	return state
@@ -122,6 +126,7 @@ func (rl *RateLimiter) Configure(accountName string, limits []LimitConfig) {
 	rl.states[accountName] = &providerState{
 		requestMetrics: make(map[string]*metricCounter),
 		tokenMetrics:   make(map[string]*metricCounter),
+		inputMetrics:   make(map[string]*metricCounter),
 	}
 
 	// All-or-nothing: model-specific limits fully replace the template.
@@ -154,12 +159,16 @@ func cloneProviderState(src *providerState) *providerState {
 	dst := &providerState{
 		requestMetrics: make(map[string]*metricCounter, len(src.requestMetrics)),
 		tokenMetrics:   make(map[string]*metricCounter, len(src.tokenMetrics)),
+		inputMetrics:   make(map[string]*metricCounter, len(src.inputMetrics)),
 	}
 	for k, mc := range src.requestMetrics {
 		dst.requestMetrics[k] = &metricCounter{config: mc.config, windowStart: now}
 	}
 	for k, mc := range src.tokenMetrics {
 		dst.tokenMetrics[k] = &metricCounter{config: mc.config, windowStart: now}
+	}
+	for k, mc := range src.inputMetrics {
+		dst.inputMetrics[k] = &metricCounter{config: mc.config, windowStart: now}
 	}
 	return dst
 }
@@ -191,6 +200,11 @@ func (rl *RateLimiter) AllowForModel(accountName, model string) bool {
 		}
 	}
 	for _, mc := range state.tokenMetrics {
+		if !mc.available(now) {
+			return false
+		}
+	}
+	for _, mc := range state.inputMetrics {
 		if !mc.available(now) {
 			return false
 		}
@@ -256,6 +270,26 @@ func (rl *RateLimiter) RecordTokensForModel(accountName, model string, tokens in
 	}
 }
 
+// RecordInputsForModel increments input counters (e.g. ipm) for the model-specific state.
+func (rl *RateLimiter) RecordInputsForModel(accountName, model string, inputs int) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if model == "" || model == "auto" {
+		return
+	}
+
+	state := rl.getOrCloneState(accountName, model)
+	if state == nil {
+		return
+	}
+	now := time.Now()
+	for _, mc := range state.inputMetrics {
+		mc.reset(now)
+		mc.count += inputs
+	}
+}
+
 func (rl *RateLimiter) RecordBackoff(providerName string, duration time.Duration) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -300,6 +334,16 @@ func (rl *RateLimiter) StatusForModel(accountName, model string) AccountStatus {
 			status.Reason = mc.config.Metric + "_exhausted"
 		}
 	}
+	for _, mc := range state.inputMetrics {
+		mc.reset(now)
+		status.Metrics = append(status.Metrics, MetricStatus{
+			Metric: mc.config.Metric, Used: mc.count, Max: mc.config.MaxValue,
+		})
+		if mc.count >= mc.config.MaxValue {
+			status.Available = false
+			status.Reason = mc.config.Metric + "_exhausted"
+		}
+	}
 	return status
 }
 
@@ -320,6 +364,11 @@ func (rl *RateLimiter) Status(accountName string) AccountStatus {
 		})
 	}
 	for _, mc := range tmpl.tokenMetrics {
+		status.Metrics = append(status.Metrics, MetricStatus{
+			Metric: mc.config.Metric, Used: 0, Max: mc.config.MaxValue,
+		})
+	}
+	for _, mc := range tmpl.inputMetrics {
 		status.Metrics = append(status.Metrics, MetricStatus{
 			Metric: mc.config.Metric, Used: 0, Max: mc.config.MaxValue,
 		})

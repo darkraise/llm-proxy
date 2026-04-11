@@ -185,59 +185,64 @@ func (d *DB) migrate() error {
 	}
 
 	d.seedProviders()
-	d.seedKeyPatterns()
 
 	return nil
 }
 
 func (d *DB) seedProviders() {
 	type seed struct {
-		name, displayName, baseURL, modelsURL, apiStandard, authType, authHeader, capabilities, defaultLimits, validationSteps string
+		name, displayName, baseURL, modelsURL, apiStandard, authType, authHeader string
+		capabilities, defaultLimits, validationSteps                            string
+		scanPrefix, scanRegex, scanSearchTerm                                   string // empty = no scanner pattern
+		defaultMetrics                                                          string // empty = use fallback ["rpm","rpd","tpm","tpd"]
 	}
-	// Default limits: rpm=requests/min(60s), rpd=requests/day(86400s), tpm=tokens/min(60s), tpd=tokens/day(86400s)
 	providers := []seed{
-		{"openai", "OpenAI", "https://api.openai.com/v1", "https://api.openai.com/v1/models", "openai", "bearer", "", `["chat","embedding"]`, `[{"metric":"rpm","max_value":500,"window_secs":60},{"metric":"tpm","max_value":200000,"window_secs":60}]`, ""},
-		{"anthropic", "Anthropic", "https://api.anthropic.com/v1", "https://api.anthropic.com/v1/models", "openai", "api-key-header", "x-api-key", `["chat"]`, `[{"metric":"rpm","max_value":1000,"window_secs":60},{"metric":"tpm","max_value":80000,"window_secs":60}]`, ""},
-		{"google", "Google Gemini", "", "https://generativelanguage.googleapis.com/v1beta/models", "google", "query-param", "", `["chat"]`, `[{"metric":"rpm","max_value":60,"window_secs":60},{"metric":"tpd","max_value":1500000,"window_secs":86400}]`, ""},
-		{"xai", "xAI", "https://api.x.ai/v1", "https://api.x.ai/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":60,"window_secs":60}]`, ""},
-		{"groq", "Groq", "https://api.groq.com/openai/v1", "https://api.groq.com/openai/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":30,"window_secs":60},{"metric":"rpd","max_value":14400,"window_secs":86400},{"metric":"tpm","max_value":6000,"window_secs":60}]`, ""},
-		{"together", "Together", "https://api.together.xyz/v1", "https://api.together.xyz/v1/models", "openai", "bearer", "", `["chat","embedding"]`, `[{"metric":"rpm","max_value":60,"window_secs":60}]`, ""},
-		{"fireworks", "Fireworks", "https://api.fireworks.ai/inference/v1", "https://api.fireworks.ai/inference/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":600,"window_secs":60}]`, ""},
-		{"cerebras", "Cerebras", "https://api.cerebras.ai/v1", "https://api.cerebras.ai/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":30,"window_secs":60},{"metric":"rpd","max_value":1000,"window_secs":86400}]`, ""},
-		{"sambanova", "SambaNova", "https://api.sambanova.ai/v1", "https://api.sambanova.ai/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"lambda", "Lambda", "https://api.lambdalabs.com/v1", "https://api.lambdalabs.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"clarifai", "Clarifai", "https://api.clarifai.com/v2/ext/openai/v1", "https://api.clarifai.com/v2/ext/openai/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"baseten", "Baseten", "https://inference.baseten.co/v1", "https://inference.baseten.co/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"nvidia", "NVIDIA", "https://integrate.api.nvidia.com/v1", "https://integrate.api.nvidia.com/v1/models", "openai", "bearer", "", `["chat","embedding"]`, `[]`, ""},
-		{"perplexity", "Perplexity", "https://api.perplexity.ai/v1", "https://api.perplexity.ai/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":20,"window_secs":60}]`, ""},
-		{"deepseek", "DeepSeek", "https://api.deepseek.com/v1", "https://api.deepseek.com/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":60,"window_secs":60}]`, `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"deepseek-chat","max_tokens":5}}]`},
-		{"llm7", "LLM7", "https://api.llm7.io/v1", "https://api.llm7.io/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "https://openrouter.ai/api/v1/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":200,"window_secs":60}]`, ""},
-		{"mistral", "Mistral", "https://api.mistral.ai/v1", "https://api.mistral.ai/v1/models", "openai", "bearer", "", `["chat","embedding"]`, `[{"metric":"rpm","max_value":60,"window_secs":60}]`, ""},
-		{"cohere", "Cohere", "https://api.cohere.ai/compatibility/v1", "https://api.cohere.ai/compatibility/v1/models", "openai", "bearer", "", `["chat","embedding"]`, `[{"metric":"rpm","max_value":20,"window_secs":60}]`, ""},
-		{"ai21", "AI21", "https://api.ai21.com/studio/v1", "https://api.ai21.com/studio/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"voyage", "Voyage", "https://api.voyageai.com/v1", "https://api.voyageai.com/v1/models", "openai", "bearer", "", `["embedding"]`, `[{"metric":"rpm","max_value":300,"window_secs":60}]`, ""},
-		{"replicate", "Replicate", "https://api.replicate.com/v1", "https://api.replicate.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"huggingface", "HuggingFace", "https://api-inference.huggingface.co", "https://huggingface.co/api/whoami-v2", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"github", "GitHub Models", "https://models.inference.ai.azure.com", "https://models.inference.ai.azure.com/models", "openai", "bearer", "", `["chat"]`, `[{"metric":"rpm","max_value":15,"window_secs":60},{"metric":"rpd","max_value":150,"window_secs":86400}]`, ""},
-		{"zhipu", "Zhipu", "https://open.bigmodel.cn/api/paas/v4", "https://open.bigmodel.cn/api/paas/v4/models", "openai", "bearer", "", `["chat"]`, `[]`, `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"glm-4.5","max_tokens":5}}]`},
-		{"moonshot", "Moonshot", "https://api.moonshot.cn/v1", "https://api.moonshot.cn/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"kimi-k2.5","max_tokens":5}}]`},
-		{"dashscope", "DashScope", "https://dashscope.aliyuncs.com/compatible-mode/v1", "https://dashscope.aliyuncs.com/compatible-mode/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"baidu_ernie", "Baidu ERNIE", "https://qianfan.baidubce.com/v2", "https://qianfan.baidubce.com/v2/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"minimax", "MiniMax", "https://api.minimax.chat/v1", "https://api.minimax.chat/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"yi", "Yi", "https://api.lingyiwanwu.com/v1", "https://api.lingyiwanwu.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"baichuan", "Baichuan", "https://api.baichuan-ai.com/v1", "https://api.baichuan-ai.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"siliconflow", "SiliconFlow", "https://api.siliconflow.cn/v1", "https://api.siliconflow.cn/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"Qwen/Qwen3-8B","max_tokens":5}}]`},
-		{"stepfun", "StepFun", "https://api.stepfun.com/v1", "https://api.stepfun.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"reka", "Reka", "https://api.reka.ai/v1", "https://api.reka.ai/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"writer", "Writer", "https://api.writer.com/v1", "https://api.writer.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"upstage", "Upstage", "https://api.upstage.ai/v1/solar", "https://api.upstage.ai/v1/solar/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"volcengine", "Volcengine (Doubao)", "https://ark.cn-beijing.volces.com/api/v3", "https://ark.cn-beijing.volces.com/api/v3/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"tencent_hunyuan", "Tencent Hunyuan", "https://api.hunyuan.cloud.tencent.com/v1", "https://api.hunyuan.cloud.tencent.com/v1/models", "openai", "bearer", "", `["chat"]`, `[]`, ""},
-		{"ollama", "Ollama", "http://localhost:11434/v1", "", "openai", "none", "", `["chat","embedding"]`, `[]`, ""},
-		{"openai-compatible", "OpenAI Compatible", "", "", "openai", "bearer", "", `["chat","embedding"]`, `[]`, ""},
+		{name: "openai", displayName: "OpenAI", baseURL: "https://api.openai.com/v1", modelsURL: "https://api.openai.com/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat","embedding"]`, defaultLimits: `[{"metric":"rpm","max_value":500,"window_secs":60},{"metric":"tpm","max_value":200000,"window_secs":60}]`,
+			scanPrefix: "sk-proj-", scanRegex: `sk-proj-[A-Za-z0-9_-]{80,}`, scanSearchTerm: `"sk-proj-" in:file`, defaultMetrics: `["tpd"]`},
+		{name: "google", displayName: "Google Gemini", modelsURL: "https://generativelanguage.googleapis.com/v1beta/models", apiStandard: "google", authType: "query-param", capabilities: `["chat"]`, defaultLimits: `[{"metric":"rpm","max_value":60,"window_secs":60},{"metric":"tpd","max_value":1500000,"window_secs":86400}]`,
+			scanPrefix: "AIzaSy", scanRegex: `AIzaSy[A-Za-z0-9_-]{33}`, scanSearchTerm: `"AIzaSy" in:file`, defaultMetrics: `["rpm","rpd","tpm"]`},
+		{name: "groq", displayName: "Groq", baseURL: "https://api.groq.com/openai/v1", modelsURL: "https://api.groq.com/openai/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, defaultLimits: `[{"metric":"rpm","max_value":30,"window_secs":60},{"metric":"rpd","max_value":14400,"window_secs":86400},{"metric":"tpm","max_value":6000,"window_secs":60}]`,
+			scanPrefix: "gsk_", scanRegex: `gsk_[A-Za-z0-9]{52}`, scanSearchTerm: `"gsk_" in:file`, defaultMetrics: `["rpm","rpd","tpm","tpd"]`},
+		{name: "together", displayName: "Together", baseURL: "https://api.together.xyz/v1", modelsURL: "https://api.together.xyz/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat","embedding"]`, defaultLimits: `[{"metric":"rpm","max_value":60,"window_secs":60}]`,
+			scanPrefix: "TOGETHER_API_KEY", scanRegex: `[A-Za-z0-9]{64}`, scanSearchTerm: `"TOGETHER_API_KEY" in:file`},
+		{name: "cerebras", displayName: "Cerebras", baseURL: "https://api.cerebras.ai/v1", modelsURL: "https://api.cerebras.ai/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, defaultLimits: `[{"metric":"rpm","max_value":30,"window_secs":60},{"metric":"rpd","max_value":1000,"window_secs":86400}]`,
+			scanPrefix: "csk-", scanRegex: `csk-[A-Za-z0-9]{40,}`, scanSearchTerm: `"csk-" in:file`, defaultMetrics: `["rpm","rph","rpd","tpm","tph","tpd"]`},
+		{name: "sambanova", displayName: "SambaNova", baseURL: "https://api.sambanova.ai/v1", modelsURL: "https://api.sambanova.ai/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`,
+			scanPrefix: "SAMBANOVA_API_KEY", scanRegex: "SAMBANOVA_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{36,})", scanSearchTerm: `"SAMBANOVA_API_KEY" in:file`},
+		{name: "clarifai", displayName: "Clarifai", baseURL: "https://api.clarifai.com/v2/ext/openai/v1", modelsURL: "https://api.clarifai.com/v2/ext/openai/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`,
+			scanPrefix: "pat-", scanRegex: `pat-[A-Za-z0-9]{32,}`, scanSearchTerm: `"pat-" "clarifai" in:file`},
+		{name: "nvidia", displayName: "NVIDIA", baseURL: "https://integrate.api.nvidia.com/v1", modelsURL: "https://integrate.api.nvidia.com/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat","embedding"]`,
+			scanPrefix: "nvapi-", scanRegex: `nvapi-[A-Za-z0-9_-]{40,}`, scanSearchTerm: `"nvapi-" in:file`, defaultMetrics: `["rpm"]`},
+		{name: "deepseek", displayName: "DeepSeek", baseURL: "https://api.deepseek.com/v1", modelsURL: "https://api.deepseek.com/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, defaultLimits: `[{"metric":"rpm","max_value":60,"window_secs":60}]`, validationSteps: `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"deepseek-chat","max_tokens":5}}]`,
+			scanPrefix: "DEEPSEEK_API_KEY", scanRegex: `sk-[a-f0-9]{32}`, scanSearchTerm: `"DEEPSEEK_API_KEY" "sk-"`},
+		{name: "llm7", displayName: "LLM7", baseURL: "https://api.llm7.io/v1", modelsURL: "https://api.llm7.io/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`,
+			scanPrefix: "LLM7_API_KEY", scanRegex: "LLM7_API_KEY[=: \"']{1,4}([A-Za-z0-9+/]{100,}={0,2})", scanSearchTerm: `"LLM7_API_KEY" in:file`, defaultMetrics: `["rps","rpm","rph"]`},
+		{name: "openrouter", displayName: "OpenRouter", baseURL: "https://openrouter.ai/api/v1", modelsURL: "https://openrouter.ai/api/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, defaultLimits: `[{"metric":"rpm","max_value":200,"window_secs":60}]`,
+			scanPrefix: "sk-or-v1-", scanRegex: `sk-or-v1-[a-f0-9]{64}`, scanSearchTerm: `"sk-or-v1-" in:file`, defaultMetrics: `["rpm","rpd"]`},
+		{name: "mistral", displayName: "Mistral", baseURL: "https://api.mistral.ai/v1", modelsURL: "https://api.mistral.ai/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat","embedding"]`, defaultLimits: `[{"metric":"rpm","max_value":60,"window_secs":60}]`,
+			scanPrefix: "MISTRAL_API_KEY", scanRegex: "MISTRAL_API_KEY[=: \"']{1,4}([A-Za-z0-9]{32})", scanSearchTerm: `"MISTRAL_API_KEY" in:file`, defaultMetrics: `["tpm","tpmo"]`},
+		{name: "cohere", displayName: "Cohere", baseURL: "https://api.cohere.ai/compatibility/v1", modelsURL: "https://api.cohere.ai/compatibility/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat","embedding"]`, defaultLimits: `[{"metric":"rpm","max_value":20,"window_secs":60}]`,
+			scanPrefix: "COHERE_API_KEY", scanRegex: `[A-Za-z0-9]{40}`, scanSearchTerm: `"COHERE_API_KEY" in:file`, defaultMetrics: `["rpm","ipm"]`},
+		{name: "voyage", displayName: "Voyage", baseURL: "https://api.voyageai.com/v1", modelsURL: "https://api.voyageai.com/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["embedding"]`, defaultLimits: `[{"metric":"rpm","max_value":300,"window_secs":60}]`,
+			scanPrefix: "pa-", scanRegex: `pa-[A-Za-z0-9_-]{40,}`, scanSearchTerm: `"VOYAGE_API_KEY" "pa-"`},
+		{name: "huggingface", displayName: "HuggingFace", baseURL: "https://api-inference.huggingface.co", modelsURL: "https://huggingface.co/api/whoami-v2", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`,
+			scanPrefix: "hf_", scanRegex: `hf_[A-Za-z0-9]{34}`, scanSearchTerm: `"hf_" in:file`},
+		{name: "github", displayName: "GitHub Models", baseURL: "https://models.inference.ai.azure.com", modelsURL: "https://models.inference.ai.azure.com/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, defaultLimits: `[{"metric":"rpm","max_value":15,"window_secs":60},{"metric":"rpd","max_value":150,"window_secs":86400}]`,
+			scanPrefix: "ghp_", scanRegex: `ghp_[A-Za-z0-9]{36}`, scanSearchTerm: `"ghp_" in:file`},
+		{name: "zhipu", displayName: "Zhipu", baseURL: "https://open.bigmodel.cn/api/paas/v4", modelsURL: "https://open.bigmodel.cn/api/paas/v4/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, validationSteps: `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"glm-4.5","max_tokens":5}}]`,
+			scanPrefix: "ZHIPU_API_KEY", scanRegex: "ZHIPU_API_KEY[=: \"']{1,4}([A-Za-z0-9_.-]{40,})", scanSearchTerm: `"ZHIPU_API_KEY" in:file`},
+		{name: "siliconflow", displayName: "SiliconFlow", baseURL: "https://api.siliconflow.cn/v1", modelsURL: "https://api.siliconflow.cn/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`, validationSteps: `[{"step":"models_fetch"},{"step":"chat_completion","params":{"model":"Qwen/Qwen3-8B","max_tokens":5}}]`,
+			scanPrefix: "SILICONFLOW_API_KEY", scanRegex: `sk-[A-Za-z0-9]{40,}`, scanSearchTerm: `"SILICONFLOW_API_KEY" "sk-"`},
+		{name: "reka", displayName: "Reka", baseURL: "https://api.reka.ai/v1", modelsURL: "https://api.reka.ai/v1/models", apiStandard: "openai", authType: "bearer", capabilities: `["chat"]`,
+			scanPrefix: "REKA_API_KEY", scanRegex: "REKA_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", scanSearchTerm: `"REKA_API_KEY" in:file`},
+		{name: "ollama", displayName: "Ollama", baseURL: "http://localhost:11434/v1", apiStandard: "openai", authType: "none", capabilities: `["chat","embedding"]`},
+		{name: "openai-compatible", displayName: "OpenAI Compatible", apiStandard: "openai", authType: "bearer", capabilities: `["chat","embedding"]`},
 	}
+
 	for _, p := range providers {
+		if p.defaultLimits == "" {
+			p.defaultLimits = "[]"
+		}
 		d.Exec(`INSERT OR IGNORE INTO providers (name, display_name, base_url, models_url, api_standard, auth_type, auth_header, capabilities, default_limits, validation_steps, is_builtin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 			p.name, p.displayName, p.baseURL, p.modelsURL, p.apiStandard, p.authType, p.authHeader, p.capabilities, p.defaultLimits, p.validationSteps)
 	}
@@ -255,68 +260,26 @@ func (d *DB) seedProviders() {
 		placeholders += "?"
 	}
 	d.Exec(`DELETE FROM providers WHERE is_builtin = 1 AND name NOT IN (`+placeholders+`)`, names...)
-}
 
-func (d *DB) seedKeyPatterns() {
-	type seed struct {
-		provider, prefix, regex, searchTerm string
-	}
-	patterns := []seed{
-		{"openai", "sk-proj-", `sk-proj-[A-Za-z0-9_-]{80,}`, `"sk-proj-" in:file`},
-		{"anthropic", "sk-ant-api03-", `sk-ant-api03-[A-Za-z0-9_-]{93}`, `"sk-ant-api03" in:file`},
-		{"google", "AIzaSy", `AIzaSy[A-Za-z0-9_-]{33}`, `"AIzaSy" in:file`},
-		{"mistral", "MISTRAL_API_KEY", "MISTRAL_API_KEY[=: \"']{1,4}([A-Za-z0-9]{32})", `"MISTRAL_API_KEY" in:file`},
-		{"cohere", "COHERE_API_KEY", `[A-Za-z0-9]{40}`, `"COHERE_API_KEY" in:file`},
-		{"groq", "gsk_", `gsk_[A-Za-z0-9]{52}`, `"gsk_" in:file`},
-		{"deepseek", "DEEPSEEK_API_KEY", `sk-[a-f0-9]{32}`, `"DEEPSEEK_API_KEY" "sk-"`},
-		{"huggingface", "hf_", `hf_[A-Za-z0-9]{34}`, `"hf_" in:file`},
-		{"replicate", "r8_", `r8_[A-Za-z0-9]{40}`, `"r8_" in:file`},
-		{"together", "TOGETHER_API_KEY", `[A-Za-z0-9]{64}`, `"TOGETHER_API_KEY" in:file`},
-		{"fireworks", "fw_", `fw_[A-Za-z0-9]{40,}`, `"fw_" in:file`},
-		{"perplexity", "pplx-", `pplx-[a-f0-9]{48}`, `"pplx-" in:file`},
-		{"voyage", "pa-", `pa-[A-Za-z0-9_-]{40,}`, `"VOYAGE_API_KEY" "pa-"`},
-		{"ai21", "AI21_API_KEY", "AI21_API_KEY[=: \"']{1,4}([A-Za-z0-9]{40,})", `"AI21_API_KEY" in:file`},
-		{"xai", "xai-", `xai-[A-Za-z0-9]{40,}`, `"xai-" in:file`},
-		{"openrouter", "sk-or-v1-", `sk-or-v1-[a-f0-9]{64}`, `"sk-or-v1-" in:file`},
-		{"llm7", "LLM7_API_KEY", "LLM7_API_KEY[=: \"']{1,4}([A-Za-z0-9+/]{100,}={0,2})", `"LLM7_API_KEY" in:file`},
-		{"nvidia", "nvapi-", `nvapi-[A-Za-z0-9_-]{40,}`, `"nvapi-" in:file`},
-		{"cerebras", "csk-", `csk-[A-Za-z0-9]{40,}`, `"csk-" in:file`},
-		{"sambanova", "SAMBANOVA_API_KEY", "SAMBANOVA_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{36,})", `"SAMBANOVA_API_KEY" in:file`},
-		{"github", "ghp_", `ghp_[A-Za-z0-9]{36}`, `"ghp_" in:file`},
-		{"lambda", "LAMBDA_API_KEY", "LAMBDA_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{40,})", `"LAMBDA_API_KEY" in:file`},
-		{"zhipu", "ZHIPU_API_KEY", "ZHIPU_API_KEY[=: \"']{1,4}([A-Za-z0-9_.-]{40,})", `"ZHIPU_API_KEY" in:file`},
-		{"moonshot", "MOONSHOT_API_KEY", `sk-[A-Za-z0-9]{40,}`, `"MOONSHOT_API_KEY" "sk-"`},
-		{"dashscope", "DASHSCOPE_API_KEY", `sk-[A-Za-z0-9]{32,}`, `"DASHSCOPE_API_KEY" "sk-"`},
-		{"baidu_ernie", "ERNIE_API_KEY", "(?:ERNIE|QIANFAN)_API_KEY[=: \"']{1,4}([A-Za-z0-9]{24,})", `"ERNIE_API_KEY" OR "QIANFAN_API_KEY" in:file`},
-		{"minimax", "MINIMAX_API_KEY", "MINIMAX_API_KEY[=: \"']{1,4}([A-Za-z0-9]{40,})", `"MINIMAX_API_KEY" in:file`},
-		{"yi", "YI_API_KEY", "YI_API_KEY[=: \"']{1,4}([A-Za-z0-9]{32,})", `"YI_API_KEY" in:file`},
-		{"baichuan", "BAICHUAN_API_KEY", "BAICHUAN_API_KEY[=: \"']{1,4}([A-Za-z0-9]{32,})", `"BAICHUAN_API_KEY" in:file`},
-		{"siliconflow", "SILICONFLOW_API_KEY", `sk-[A-Za-z0-9]{40,}`, `"SILICONFLOW_API_KEY" "sk-"`},
-		{"stepfun", "STEPFUN_API_KEY", "STEPFUN_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", `"STEPFUN_API_KEY" in:file`},
-		{"reka", "REKA_API_KEY", "REKA_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", `"REKA_API_KEY" in:file`},
-		{"writer", "WRITER_API_KEY", "WRITER_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", `"WRITER_API_KEY" in:file`},
-		{"upstage", "UPSTAGE_API_KEY", "UPSTAGE_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", `"UPSTAGE_API_KEY" in:file`},
-		{"clarifai", "pat-", `pat-[A-Za-z0-9]{32,}`, `"pat-" "clarifai" in:file`},
-		{"baseten", "BASETEN_API_KEY", "BASETEN_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", `"BASETEN_API_KEY" in:file`},
-		{"tencent_hunyuan", "HUNYUAN_API_KEY", "(?:HUNYUAN_API_KEY|TENCENT_SECRET_KEY)[=: \"']{1,4}([A-Za-z0-9]{32,})", `"HUNYUAN_API_KEY" OR "TENCENT_SECRET_KEY" in:file`},
-		{"volcengine", "VOLC_API_KEY", "(?:VOLC|ARK)_API_KEY[=: \"']{1,4}([A-Za-z0-9_-]{32,})", `"VOLC_API_KEY" OR "ARK_API_KEY" in:file`},
-	}
-	for _, p := range patterns {
-		d.Exec(`INSERT OR IGNORE INTO scanner_key_patterns (provider, prefix, regex, search_term) VALUES (?, ?, ?, ?)`,
-			p.provider, p.prefix, p.regex, p.searchTerm)
-	}
-
-	// Remove key patterns for providers no longer in the seed list.
-	provNames := make([]any, len(patterns))
-	for i, p := range patterns {
-		provNames[i] = p.provider
-	}
-	ph := ""
-	for i := range provNames {
-		if i > 0 {
-			ph += ","
+	// Seed scanner key patterns from provider definitions.
+	for _, p := range providers {
+		if p.scanPrefix == "" {
+			continue
 		}
-		ph += "?"
+		d.Exec(`INSERT OR IGNORE INTO scanner_key_patterns (provider, prefix, regex, search_term) VALUES (?, ?, ?, ?)`,
+			p.name, p.scanPrefix, p.scanRegex, p.scanSearchTerm)
 	}
-	d.Exec(`DELETE FROM scanner_key_patterns WHERE provider NOT IN (`+ph+`)`, provNames...)
+	d.Exec(`DELETE FROM scanner_key_patterns WHERE provider NOT IN (`+placeholders+`)`, names...)
+
+	// Seed default supported metrics per provider (only if not already set by admin).
+	for _, p := range providers {
+		if p.defaultMetrics == "" {
+			continue
+		}
+		key := "ratelimit_metrics:" + p.name
+		existing, _ := d.GetSetting(key)
+		if existing == "" {
+			d.SetSetting(key, p.defaultMetrics)
+		}
+	}
 }

@@ -22,6 +22,18 @@ type Embedding struct {
 	Embedding []float64 `json:"embedding"`
 }
 
+// InputCount returns the number of input texts in the request.
+func (r EmbeddingRequest) InputCount() int {
+	switch v := r.Input.(type) {
+	case string:
+		return 1
+	case []any:
+		return len(v)
+	default:
+		return 1
+	}
+}
+
 func ParseEmbeddingRequest(data []byte) (EmbeddingRequest, error) {
 	var req EmbeddingRequest
 	err := json.Unmarshal(data, &req)
