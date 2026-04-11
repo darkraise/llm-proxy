@@ -145,8 +145,6 @@ func ParseProviderModelList(providerName string, body []byte) []string {
 		return parseGoogleModelList(body)
 	case "huggingface":
 		return nil
-	case "stability":
-		return parseEngineList(body)
 	case "replicate":
 		return parseReplicateModels(body)
 	case "ai21":
@@ -185,21 +183,6 @@ func parseGoogleModelList(body []byte) []string {
 	models := make([]string, 0, len(resp.Models))
 	for _, m := range resp.Models {
 		models = append(models, m.Name)
-	}
-	sort.Strings(models)
-	return models
-}
-
-func parseEngineList(body []byte) []string {
-	var engines []struct {
-		ID string `json:"id"`
-	}
-	if json.Unmarshal(body, &engines) != nil || len(engines) == 0 {
-		return nil
-	}
-	models := make([]string, 0, len(engines))
-	for _, e := range engines {
-		models = append(models, e.ID)
 	}
 	sort.Strings(models)
 	return models
