@@ -21,7 +21,7 @@ var validAuthTypes = map[string]bool{
 func (h *AdminHandler) HandleListProviders(w http.ResponseWriter, r *http.Request) {
 	providers, err := h.db.ListProviders()
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to list providers"})
+		writeJSONError(w, 500, "failed to list providers")
 		return
 	}
 	if providers == nil {
@@ -34,7 +34,7 @@ func (h *AdminHandler) HandleGetProvider(w http.ResponseWriter, r *http.Request)
 	name := r.PathValue("name")
 	p, err := h.db.GetProvider(name)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "provider not found"})
+		writeJSONError(w, 404, "provider not found")
 		return
 	}
 	writeJSON(w, 200, p)
@@ -54,31 +54,31 @@ func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Reque
 		Enabled         *bool           `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		writeJSONError(w, 400, "invalid request body")
 		return
 	}
 
 	input.Name = strings.TrimSpace(strings.ToLower(input.Name))
 	if !validProviderName.MatchString(input.Name) {
-		writeJSON(w, 400, map[string]string{"error": "name must be lowercase alphanumeric with hyphens or underscores"})
+		writeJSONError(w, 400, "name must be lowercase alphanumeric with hyphens or underscores")
 		return
 	}
 	if input.DisplayName == "" {
-		writeJSON(w, 400, map[string]string{"error": "display_name is required"})
+		writeJSONError(w, 400, "display_name is required")
 		return
 	}
 	if input.APIStandard == "" {
 		input.APIStandard = "openai"
 	}
 	if !validAPIStandards[input.APIStandard] {
-		writeJSON(w, 400, map[string]string{"error": "api_standard must be one of: openai, google, anthropic, cohere_embed"})
+		writeJSONError(w, 400, "api_standard must be one of: openai, google, anthropic, cohere_embed")
 		return
 	}
 	if input.AuthType == "" {
 		input.AuthType = "bearer"
 	}
 	if !validAuthTypes[input.AuthType] {
-		writeJSON(w, 400, map[string]string{"error": "auth_type must be one of: bearer, api-key-header, query-param, none"})
+		writeJSONError(w, 400, "auth_type must be one of: bearer, api-key-header, query-param, none")
 		return
 	}
 	if len(input.Capabilities) == 0 {
@@ -109,10 +109,10 @@ func (h *AdminHandler) HandleCreateProvider(w http.ResponseWriter, r *http.Reque
 		Enabled:         enabled,
 	}); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
-			writeJSON(w, 409, map[string]string{"error": "provider with this name already exists"})
+			writeJSONError(w, 409, "provider with this name already exists")
 			return
 		}
-		writeJSON(w, 500, map[string]string{"error": "failed to create provider"})
+		writeJSONError(w, 500, "failed to create provider")
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 	name := r.PathValue("name")
 	existing, err := h.db.GetProvider(name)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "provider not found"})
+		writeJSONError(w, 404, "provider not found")
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 		SetLimits       bool                 `json:"set_limits"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		writeJSONError(w, 400, "invalid request body")
 		return
 	}
 
@@ -170,14 +170,14 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 		}
 		if input.APIStandard != nil {
 			if !validAPIStandards[*input.APIStandard] {
-				writeJSON(w, 400, map[string]string{"error": "invalid api_standard"})
+				writeJSONError(w, 400, "invalid api_standard")
 				return
 			}
 			updated.APIStandard = *input.APIStandard
 		}
 		if input.AuthType != nil {
 			if !validAuthTypes[*input.AuthType] {
-				writeJSON(w, 400, map[string]string{"error": "invalid auth_type"})
+				writeJSONError(w, 400, "invalid auth_type")
 				return
 			}
 			updated.AuthType = *input.AuthType
@@ -192,7 +192,7 @@ func (h *AdminHandler) HandleUpdateProvider(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.db.UpdateProvider(name, updated); err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to update provider"})
+		writeJSONError(w, 500, "failed to update provider")
 		return
 	}
 
@@ -203,22 +203,22 @@ func (h *AdminHandler) HandleDeleteProvider(w http.ResponseWriter, r *http.Reque
 	name := r.PathValue("name")
 	existing, err := h.db.GetProvider(name)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "provider not found"})
+		writeJSONError(w, 404, "provider not found")
 		return
 	}
 	if existing.IsBuiltin {
-		writeJSON(w, 403, map[string]string{"error": "cannot delete builtin provider; disable it instead"})
+		writeJSONError(w, 403, "cannot delete builtin provider; disable it instead")
 		return
 	}
 
 	count, _ := h.db.CountAccountsByProvider(name)
 	if count > 0 {
-		writeJSON(w, 409, map[string]string{"error": "cannot delete provider with existing accounts; remove or reassign them first"})
+		writeJSONError(w, 409, "cannot delete provider with existing accounts; remove or reassign them first")
 		return
 	}
 
 	if err := h.db.DeleteProvider(name); err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to delete provider"})
+		writeJSONError(w, 500, "failed to delete provider")
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "deleted"})

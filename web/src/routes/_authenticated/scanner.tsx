@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
@@ -1187,13 +1187,12 @@ function ConfigDialog({
   const [githubToken, setGithubToken] = useState("")
   const [delay, setDelay] = useState<string>("")
   const [maxPages, setMaxPages] = useState<string>("")
-  const [initialized, setInitialized] = useState(false)
 
-  if (config && !initialized) {
+  useEffect(() => {
+    if (!config) return
     setDelay(String(config.delay_seconds))
     setMaxPages(String(config.max_pages))
-    setInitialized(true)
-  }
+  }, [config])
 
   function handleSaveToken() {
     if (!githubToken.trim()) return

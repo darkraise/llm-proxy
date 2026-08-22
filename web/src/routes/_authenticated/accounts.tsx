@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
@@ -39,6 +39,7 @@ import {
   useBulkDeleteAccounts,
 } from "@/hooks/use-accounts"
 import { useProviders } from "@/hooks/use-providers"
+import { useLocalStorage } from "@/hooks/use-local-storage"
 import { AccountCard } from "@/components/account-card"
 import { AccountDrawer } from "@/components/account-drawer"
 import { BulkEditModal } from "@/components/bulk-edit-modal"
@@ -46,25 +47,6 @@ import { ConfirmDialog } from "@/components/confirm-dialog"
 
 type ViewMode = "grid" | "list"
 type StatusFilter = "all" | "active" | "inactive" | "error"
-
-function useLocalStorage<T>(key: string, defaultValue: T): [T, (v: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const stored = localStorage.getItem(key)
-      return stored ? (JSON.parse(stored) as T) : defaultValue
-    } catch {
-      return defaultValue
-    }
-  })
-  const set = useCallback(
-    (v: T) => {
-      setValue(v)
-      localStorage.setItem(key, JSON.stringify(v))
-    },
-    [key],
-  )
-  return [value, set]
-}
 
 function accountStatus(a: Account): "active" | "inactive" | "error" {
   if (!a.enabled) return "inactive"

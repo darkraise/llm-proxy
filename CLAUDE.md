@@ -10,10 +10,10 @@ LLM Proxy is a multi-provider LLM gateway written in Go with a React admin dashb
 
 ```bash
 # Development — backend only (frontend runs separately)
-./start-dev-backend.sh              # Go on :4000 (proxy) + :4001 (admin)
-cd web && npm run dev               # Vite on :5173, proxies /api → :4001
+./start-dev-backend.sh              # Go on :4000 (proxy) + :4001 (admin); proxies UI to Vite on :3838
+cd web && npm run dev -- --port 3838  # Vite on :3838, proxies /api → :4001
 
-# Development — backend + frontend together
+# Development — backend + frontend together (this script starts Vite on :5173)
 ./start-dev-server.sh
 
 # Build
@@ -72,6 +72,8 @@ Key concurrency detail: `proxy.Handler` config fields (timeout, retries, fallbac
 | `crypto` | bcrypt password hashing, PBKDF2 key derivation, AES-GCM encrypt/decrypt |
 | `config` | YAML parsing/export for config import/export feature |
 | `notify` | Email/Telegram/Discord alerting with cooldown |
+| `keyval` | Multi-step API key validation pipeline (`models_fetch`, `chat_completion`) |
+| `scanner` | Scans external sources (e.g. GitHub) for leaked provider API keys |
 
 ### Encryption Chain
 
@@ -79,7 +81,7 @@ Key concurrency detail: `proxy.Handler` config fields (timeout, retries, fallbac
 
 ### Frontend
 
-React 19 + TypeScript, Vite, TailwindCSS 4, Radix UI primitives, Recharts. The typed API client (`web/src/lib/api.ts`) wraps fetch with auto-redirect on 401. Vite dev server proxies `/api` to `localhost:4001`.
+React 19 + TypeScript on Vite, with TanStack Router/Query/Form/Table, Zustand for client state, Sonner for toasts, Recharts for charts, and the `darkraise-ui` template (Tailwind 4) for primitives. The typed API client (`web/src/lib/api.ts`) wraps fetch with auto-redirect on 401 via the auth store. Vite dev server proxies `/api` to `localhost:4001`.
 
 ### Async Pipelines
 

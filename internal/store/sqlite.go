@@ -29,16 +29,28 @@ func NewDB(path string) (*DB, error) {
 	}
 
 	// modernc.org/sqlite ignores DSN pragma parameters; set them explicitly.
+	// synchronous=NORMAL is safe under WAL (durable across crash, may lose
+	// last few committed transactions on power loss, never corrupts).
+	// cache_size negative = KiB; mmap_size enables read-side mmap.
 	for _, pragma := range []string{
 		"PRAGMA journal_mode = WAL",
+		"PRAGMA synchronous = NORMAL",
 		"PRAGMA busy_timeout = 30000",
 		"PRAGMA foreign_keys = ON",
+		"PRAGMA cache_size = -65536",
+		"PRAGMA temp_store = MEMORY",
+		"PRAGMA mmap_size = 268435456",
 	} {
 		if _, err := db.Exec(pragma); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
 		}
 	}
+
+	// modernc.org/sqlite serializes writes through a single mutex anyway, and
+	// unbounded conns produce "database is locked" thrash under load. Pinning
+	// to one connection eliminates that contention without changing semantics.
+	db.SetMaxOpenConns(1)
 
 	d := &DB{db}
 	if err := d.migrate(); err != nil {
@@ -100,6 +112,10 @@ func (d *DB) migrate() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_request_logs_account ON request_logs(account_id, timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_request_logs_status_ts ON request_logs(status, timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_request_logs_account_name_ts ON request_logs(account_name, timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_request_logs_provider_type_ts ON request_logs(provider_type, timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_request_logs_model_ts ON request_logs(model, timestamp)`,
 		`CREATE TABLE IF NOT EXISTS daily_stats (
 			date          TEXT NOT NULL,
 			account_id    INTEGER REFERENCES accounts(id) ON DELETE SET NULL,

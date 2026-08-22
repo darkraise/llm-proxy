@@ -81,14 +81,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("load accounts: %w", err)
 	}
 
-	// Decrypt API keys before passing to pool
-	for i := range accounts {
-		if encryptionKey != nil {
-			if plain, err := cryptopkg.Decrypt(encryptionKey, accounts[i].APIKey); err == nil {
-				accounts[i].APIKey = plain
-			}
-		}
-	}
+	admin.DecryptAccountKeys(accounts, encryptionKey)
 
 	providerList, _ := db.ListEnabledProviders()
 	providerMap := make(map[string]store.Provider, len(providerList))
@@ -474,10 +467,8 @@ func (s *Server) logWriter() {
 	defer ticker.Stop()
 
 	flush := func() {
-		for _, entry := range batch {
-			if err := s.db.InsertRequestLog(entry); err != nil {
-				slog.Error("log insert failed", "error", err)
-			}
+		if err := s.db.InsertRequestLogs(batch); err != nil {
+			slog.Error("log batch insert failed", "count", len(batch), "error", err)
 		}
 		batch = batch[:0]
 	}
@@ -507,13 +498,7 @@ func (s *Server) reloadPool() {
 		slog.Error("rate limit propagation: failed to reload accounts", "error", err)
 		return
 	}
-	for i := range accounts {
-		if s.encryptionKey != nil {
-			if plain, err := cryptopkg.Decrypt(s.encryptionKey, accounts[i].APIKey); err == nil {
-				accounts[i].APIKey = plain
-			}
-		}
-	}
+	admin.DecryptAccountKeys(accounts, s.encryptionKey)
 	providerList, _ := s.db.ListEnabledProviders()
 	providerMap := make(map[string]store.Provider, len(providerList))
 	for _, p := range providerList {

@@ -12,6 +12,16 @@ export class ApiError extends Error {
   }
 }
 
+function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null || v === '') continue
+    qs.set(k, String(v))
+  }
+  const s = qs.toString()
+  return s ? '?' + s : ''
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -455,13 +465,8 @@ export const api = {
   // ─── Stats ───────────────────────────────────────────────────────────────
 
   stats: {
-    overview: (from?: string, to?: string) => {
-      const qs = new URLSearchParams()
-      if (from) qs.set('from', from)
-      if (to) qs.set('to', to)
-      const query = qs.toString()
-      return request<OverviewStats>('GET', `/stats/overview${query ? '?' + query : ''}`)
-    },
+    overview: (from?: string, to?: string) =>
+      request<OverviewStats>('GET', `/stats/overview${buildQuery({ from, to })}`),
     requests: (params?: {
       account?: string
       status?: string
@@ -471,44 +476,14 @@ export const api = {
       min_latency?: number
       limit?: number
       offset?: number
-    }) => {
-      const qs = new URLSearchParams()
-      if (params?.account) qs.set('account', params.account)
-      if (params?.status) qs.set('status', params.status)
-      if (params?.model) qs.set('model', params.model)
-      if (params?.from) qs.set('from', params.from)
-      if (params?.to) qs.set('to', params.to)
-      if (params?.min_latency != null) qs.set('min_latency', String(params.min_latency))
-      if (params?.limit != null) qs.set('limit', String(params.limit))
-      if (params?.offset != null) qs.set('offset', String(params.offset))
-      const query = qs.toString()
-      return request<RequestLogsResponse>(
-        'GET',
-        `/stats/requests${query ? '?' + query : ''}`,
-      )
-    },
-    accounts: (from?: string, to?: string) => {
-      const qs = new URLSearchParams()
-      if (from) qs.set('from', from)
-      if (to) qs.set('to', to)
-      const query = qs.toString()
-      return request<AccountStats[]>('GET', `/stats/accounts${query ? '?' + query : ''}`)
-    },
-    providers: (from?: string, to?: string) => {
-      const qs = new URLSearchParams()
-      if (from) qs.set('from', from)
-      if (to) qs.set('to', to)
-      const query = qs.toString()
-      return request<ProviderStats[]>('GET', `/stats/providers${query ? '?' + query : ''}`)
-    },
-    models: (provider?: string, from?: string, to?: string) => {
-      const qs = new URLSearchParams()
-      if (provider) qs.set('provider', provider)
-      if (from) qs.set('from', from)
-      if (to) qs.set('to', to)
-      const query = qs.toString()
-      return request<ModelStats[]>('GET', `/stats/models${query ? '?' + query : ''}`)
-    },
+    }) =>
+      request<RequestLogsResponse>('GET', `/stats/requests${buildQuery(params ?? {})}`),
+    accounts: (from?: string, to?: string) =>
+      request<AccountStats[]>('GET', `/stats/accounts${buildQuery({ from, to })}`),
+    providers: (from?: string, to?: string) =>
+      request<ProviderStats[]>('GET', `/stats/providers${buildQuery({ from, to })}`),
+    models: (provider?: string, from?: string, to?: string) =>
+      request<ModelStats[]>('GET', `/stats/models${buildQuery({ provider, from, to })}`),
   },
 
   // ─── Settings ────────────────────────────────────────────────────────────
@@ -564,17 +539,8 @@ export const api = {
     start: (source?: string) =>
       request<{ status: string }>('POST', '/scanner/start', source ? { source } : {}),
     stop: () => request<{ status: string }>('POST', '/scanner/stop'),
-    keys: (params?: { provider?: string; source?: string; valid?: string; imported?: string; limit?: number; offset?: number }) => {
-      const qs = new URLSearchParams()
-      if (params?.provider) qs.set('provider', params.provider)
-      if (params?.source) qs.set('source', params.source)
-      if (params?.valid) qs.set('valid', params.valid)
-      if (params?.imported) qs.set('imported', params.imported)
-      if (params?.limit) qs.set('limit', String(params.limit))
-      if (params?.offset) qs.set('offset', String(params.offset))
-      const q = qs.toString()
-      return request<{ data: DiscoveredKey[]; total: number }>('GET', `/scanner/keys${q ? '?' + q : ''}`)
-    },
+    keys: (params?: { provider?: string; source?: string; valid?: string; imported?: string; limit?: number; offset?: number }) =>
+      request<{ data: DiscoveredKey[]; total: number }>('GET', `/scanner/keys${buildQuery(params ?? {})}`),
     validateKey: (id: number) =>
       request<DiscoveredKey>('POST', `/scanner/keys/${id}/validate`),
     discoverModels: (id: number) =>
@@ -589,28 +555,19 @@ export const api = {
       request<{ status: string }>('DELETE', `/scanner/keys/${id}`),
     bulkDelete: (ids: number[]) =>
       request<{ deleted: number }>('POST', '/scanner/keys/delete', { ids }),
-    history: (limit?: number) => {
-      const qs = limit ? `?limit=${limit}` : ''
-      return request<ScanHistory[]>('GET', `/scanner/history${qs}`)
-    },
+    history: (limit?: number) =>
+      request<ScanHistory[]>('GET', `/scanner/history${buildQuery({ limit })}`),
     config: () => request<ScannerConfigResponse>('GET', '/scanner/config'),
     updateConfig: (data: {
       github_token?: string; delay_seconds?: number; max_pages?: number;
     }) => request<{ status: string }>('PUT', '/scanner/config', data),
-    patterns: (provider?: string) => {
-      const qs = provider ? `?provider=${provider}` : ''
-      return request<ScanKeyPattern[]>('GET', `/scanner/patterns${qs}`)
-    },
+    patterns: (provider?: string) =>
+      request<ScanKeyPattern[]>('GET', `/scanner/patterns${buildQuery({ provider })}`),
     upsertPattern: (p: Omit<ScanKeyPattern, 'id'> & { id?: number }) =>
       request<{ status: string }>('PUT', '/scanner/patterns', p),
     deletePattern: (id: number) =>
       request<{ status: string }>('DELETE', `/scanner/patterns/${id}`),
-    exportUrl: (params?: { provider?: string; valid?: string }) => {
-      const qs = new URLSearchParams()
-      if (params?.provider) qs.set('provider', params.provider)
-      if (params?.valid) qs.set('valid', params.valid)
-      const q = qs.toString()
-      return `${BASE}/scanner/export${q ? '?' + q : ''}`
-    },
+    exportUrl: (params?: { provider?: string; valid?: string }) =>
+      `${BASE}/scanner/export${buildQuery(params ?? {})}`,
   },
 }

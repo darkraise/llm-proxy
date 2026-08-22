@@ -115,6 +115,9 @@ func (d *DB) FillAccountLimitsFromDiscovered(providerType string, defs []RateLim
 		return false, nil
 	}
 
+	// Materialize the account list and explicitly close the cursor before
+	// running the inner inserts. Holding the outer rows open blocks the
+	// connection pool and can deadlock under SetMaxOpenConns(1).
 	rows, err := d.Query(
 		`SELECT id, models FROM accounts WHERE type = ? AND enabled = 1`,
 		providerType,
@@ -122,8 +125,6 @@ func (d *DB) FillAccountLimitsFromDiscovered(providerType string, defs []RateLim
 	if err != nil {
 		return false, fmt.Errorf("list accounts for provider %s: %w", providerType, err)
 	}
-	defer rows.Close()
-
 	type acct struct {
 		id     int64
 		models map[string]bool
@@ -133,6 +134,7 @@ func (d *DB) FillAccountLimitsFromDiscovered(providerType string, defs []RateLim
 		var a acct
 		var modelsStr string
 		if err := rows.Scan(&a.id, &modelsStr); err != nil {
+			rows.Close()
 			return false, err
 		}
 		parsed := ParseCategorizedModels(modelsStr)
@@ -144,37 +146,47 @@ func (d *DB) FillAccountLimitsFromDiscovered(providerType string, defs []RateLim
 		accounts = append(accounts, a)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		return false, err
 	}
+	rows.Close()
+
+	if len(accounts) == 0 {
+		return false, nil
+	}
+
+	tx, err := d.Begin()
+	if err != nil {
+		return false, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(
+		`INSERT OR IGNORE INTO account_limits
+		 (account_id, model, metric, max_value, window_secs) VALUES (?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return false, fmt.Errorf("prepare insert: %w", err)
+	}
+	defer stmt.Close()
 
 	for _, a := range accounts {
 		for _, def := range defs {
 			if !a.models[def.Model] {
 				continue
 			}
-
-			var exists int
-			err := d.QueryRow(
-				`SELECT COUNT(*) FROM account_limits WHERE account_id = ? AND model = ? AND metric = ?`,
-				a.id, def.Model, def.Metric,
-			).Scan(&exists)
-			if err != nil {
-				return modified, fmt.Errorf("check existing limit: %w", err)
-			}
-			if exists > 0 {
-				continue
-			}
-
-			_, err = d.Exec(
-				`INSERT INTO account_limits (account_id, model, metric, max_value, window_secs) VALUES (?, ?, ?, ?, ?)`,
-				a.id, def.Model, def.Metric, def.MaxValue, def.WindowSecs,
-			)
+			res, err := stmt.Exec(a.id, def.Model, def.Metric, def.MaxValue, def.WindowSecs)
 			if err != nil {
 				return modified, fmt.Errorf("insert discovered limit: %w", err)
 			}
-			modified = true
+			if n, _ := res.RowsAffected(); n > 0 {
+				modified = true
+			}
 		}
 	}
 
+	if err := tx.Commit(); err != nil {
+		return modified, fmt.Errorf("commit: %w", err)
+	}
 	return modified, nil
 }

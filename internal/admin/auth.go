@@ -94,7 +94,18 @@ func (a *Auth) ValidateSession(r *http.Request) bool {
 	sess, ok := a.sessions[cookie.Value]
 	a.mu.RUnlock()
 
-	return ok && time.Now().Before(sess.expiresAt)
+	if !ok {
+		return false
+	}
+	if time.Now().Before(sess.expiresAt) {
+		return true
+	}
+	// Expired: drop it so the sessions map can't grow without bound across
+	// long-running deployments where users log in and out repeatedly.
+	a.mu.Lock()
+	delete(a.sessions, cookie.Value)
+	a.mu.Unlock()
+	return false
 }
 
 func generateToken() string {

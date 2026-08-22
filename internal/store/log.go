@@ -76,6 +76,40 @@ func (d *DB) InsertRequestLog(l RequestLog) error {
 	return err
 }
 
+// InsertRequestLogs writes a batch in a single transaction with one prepared
+// statement. With synchronous=NORMAL the per-row fsync overhead disappears and
+// the whole batch commits with a single disk sync, yielding ~10-50x throughput
+// over per-row InsertRequestLog calls under modernc.org/sqlite.
+func (d *DB) InsertRequestLogs(batch []RequestLog) error {
+	if len(batch) == 0 {
+		return nil
+	}
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(
+		`INSERT INTO request_logs (account_id, account_name, provider_type, model, endpoint, status, latency_ms, prompt_tokens, completion_tokens, status_code, error_message)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare insert: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, l := range batch {
+		if _, err := stmt.Exec(
+			l.AccountID, l.AccountName, l.ProviderType, l.Model, l.Endpoint, l.Status,
+			l.LatencyMs, l.PromptTokens, l.CompletionTokens, l.StatusCode, l.ErrorMessage,
+		); err != nil {
+			return fmt.Errorf("insert log: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 func (d *DB) QueryRequestLogs(f RequestLogFilter) ([]RequestLog, int, error) {
 	where := []string{"1=1"}
 	args := []any{}

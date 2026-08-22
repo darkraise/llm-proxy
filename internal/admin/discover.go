@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,11 +26,11 @@ type discoverRequest struct {
 func (h *AdminHandler) HandleDiscoverModels(w http.ResponseWriter, r *http.Request) {
 	var req discoverRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 	if req.Type == "" {
-		writeJSON(w, 400, map[string]string{"error": "type is required"})
+		writeJSONError(w, 400, "type is required")
 		return
 	}
 
@@ -50,7 +49,7 @@ func (h *AdminHandler) HandleDiscoverModels(w http.ResponseWriter, r *http.Reque
 		if last.StatusCode == 401 || last.StatusCode == 403 {
 			status = 401
 		}
-		writeJSON(w, status, map[string]string{"error": last.Error})
+		writeJSONError(w, status, last.Error)
 		return
 	}
 
@@ -78,19 +77,18 @@ func (h *AdminHandler) HandleDiscoverModels(w http.ResponseWriter, r *http.Reque
 //
 // POST /admin/api/accounts/{id}/discover
 func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 	account, err := h.db.GetAccount(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "account not found"})
+		writeJSONError(w, 404, "account not found")
 		return
 	}
 	apiKey, err := h.decryptAccountKey(account)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to decrypt API key"})
+		writeJSONError(w, 500, "failed to decrypt API key")
 		return
 	}
 
@@ -99,7 +97,7 @@ func (h *AdminHandler) HandleDiscoverByAccount(w http.ResponseWriter, r *http.Re
 	last := results[len(results)-1]
 
 	if !last.Success {
-		writeJSON(w, 502, map[string]string{"error": last.Error})
+		writeJSONError(w, 502, last.Error)
 		return
 	}
 
@@ -119,7 +117,7 @@ func (h *AdminHandler) HandleDiscoverOllama(w http.ResponseWriter, r *http.Reque
 		URL string `json:"url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
-		writeJSON(w, 400, map[string]string{"error": "url is required"})
+		writeJSONError(w, 400, "url is required")
 		return
 	}
 
@@ -130,27 +128,27 @@ func (h *AdminHandler) HandleDiscoverOllama(w http.ResponseWriter, r *http.Reque
 	client := &http.Client{Timeout: 7 * time.Second}
 	httpReq, err := http.NewRequestWithContext(r.Context(), "GET", fetchURL, nil)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to build request"})
+		writeJSONError(w, 500, "failed to build request")
 		return
 	}
 
 	slog.Debug("egress", "method", "GET", "url", fetchURL, "target", "ollama")
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to reach Ollama: " + err.Error()})
+		writeJSONError(w, 502, "failed to reach Ollama: " + err.Error())
 		return
 	}
 	defer resp.Body.Close()
 	slog.Debug("egress response", "url", fetchURL, "status", resp.StatusCode)
 
 	if resp.StatusCode >= 400 {
-		writeJSON(w, 502, map[string]string{"error": fmt.Sprintf("Ollama returned status %d", resp.StatusCode)})
+		writeJSONError(w, 502, fmt.Sprintf("Ollama returned status %d", resp.StatusCode))
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": "failed to read response"})
+		writeJSONError(w, 502, "failed to read response")
 		return
 	}
 
@@ -164,7 +162,7 @@ func (h *AdminHandler) HandleDiscoverOllama(w http.ResponseWriter, r *http.Reque
 		} `json:"models"`
 	}
 	if err := json.Unmarshal(body, &tagsResp); err != nil || len(tagsResp.Models) == 0 {
-		writeJSON(w, 502, map[string]string{"error": "no models found"})
+		writeJSONError(w, 502, "no models found")
 		return
 	}
 

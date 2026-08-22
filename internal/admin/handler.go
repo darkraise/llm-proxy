@@ -47,7 +47,7 @@ func (h *AdminHandler) SetOnSettingsChange(fn func()) {
 
 func (h *AdminHandler) HandleTestNotification(w http.ResponseWriter, r *http.Request) {
 	if h.notifier == nil {
-		writeJSON(w, 500, map[string]string{"error": "notifier not configured"})
+		writeJSONError(w, 500, "notifier not configured")
 		return
 	}
 	if err := h.notifier.SendTest(); err != nil {
@@ -72,7 +72,7 @@ type accountRequest struct {
 func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request) {
 	accounts, err := h.db.ListAccounts()
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *AdminHandler) HandleListAccounts(w http.ResponseWriter, r *http.Request
 func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	var req accountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
@@ -114,7 +114,7 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 	if h.encryptionKey != nil {
 		enc, err := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
 		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "encryption failed"})
+			writeJSONError(w, 500, "encryption failed")
 			return
 		}
 		apiKeyEnc = enc
@@ -141,10 +141,10 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 	id, err := h.db.CreateAccount(p)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") && strings.Contains(err.Error(), "api_key_hash") {
-			writeJSON(w, 409, map[string]string{"error": "API key already exists in another account"})
+			writeJSONError(w, 409, "API key already exists in another account")
 			return
 		}
-		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		writeJSONError(w, 400, err.Error())
 		return
 	}
 
@@ -171,15 +171,14 @@ func (h *AdminHandler) HandleCreateAccount(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	var req accountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
@@ -190,7 +189,7 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 		if h.encryptionKey != nil {
 			enc, err := crypto.Encrypt(h.encryptionKey, []byte(req.APIKey))
 			if err != nil {
-				writeJSON(w, 500, map[string]string{"error": "encryption failed"})
+				writeJSONError(w, 500, "encryption failed")
 				return
 			}
 			apiKeyEnc = enc
@@ -198,7 +197,7 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 	} else {
 		existing, err := h.db.GetAccount(id)
 		if err != nil {
-			writeJSON(w, 404, map[string]string{"error": "account not found"})
+			writeJSONError(w, 404, "account not found")
 			return
 		}
 		apiKeyEnc = existing.APIKey
@@ -222,7 +221,7 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.db.UpdateAccount(id, p); err != nil {
-		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		writeJSONError(w, 400, err.Error())
 		return
 	}
 
@@ -231,14 +230,13 @@ func (h *AdminHandler) HandleUpdateAccount(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *AdminHandler) HandleDeleteAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	if err := h.db.DeleteAccount(id); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -254,11 +252,11 @@ func (h *AdminHandler) HandleBulkUpdateAccounts(w http.ResponseWriter, r *http.R
 		Enabled *bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 	if req.Enabled == nil {
-		writeJSON(w, 400, map[string]string{"error": "enabled field is required"})
+		writeJSONError(w, 400, "enabled field is required")
 		return
 	}
 
@@ -269,20 +267,20 @@ func (h *AdminHandler) HandleBulkUpdateAccounts(w http.ResponseWriter, r *http.R
 
 	tx, err := h.db.Begin()
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	defer tx.Rollback()
 
 	for _, id := range req.IDs {
 		if _, err := tx.Exec("UPDATE accounts SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", enabled, id); err != nil {
-			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			writeJSONError(w, 500, err.Error())
 			return
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -295,7 +293,7 @@ func (h *AdminHandler) HandleBulkDeleteAccounts(w http.ResponseWriter, r *http.R
 		IDs []int64 `json:"ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
@@ -318,11 +316,11 @@ func (h *AdminHandler) HandleBulkEditAccounts(w http.ResponseWriter, r *http.Req
 		Limits        *[]store.AccountLimit `json:"limits"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 	if len(req.IDs) == 0 {
-		writeJSON(w, 400, map[string]string{"error": "ids is required"})
+		writeJSONError(w, 400, "ids is required")
 		return
 	}
 
@@ -340,7 +338,7 @@ func (h *AdminHandler) HandleBulkEditAccounts(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := h.db.BulkEditAccounts(req.IDs, fields); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -349,14 +347,13 @@ func (h *AdminHandler) HandleBulkEditAccounts(w http.ResponseWriter, r *http.Req
 }
 
 func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 	p, err := h.db.GetAccount(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "account not found"})
+		writeJSONError(w, 404, "account not found")
 		return
 	}
 	apiKey, err := h.decryptAccountKey(p)
@@ -385,15 +382,14 @@ func (h *AdminHandler) HandleTestAccount(w http.ResponseWriter, r *http.Request)
 //
 // GET /api/accounts/{id}/key
 func (h *AdminHandler) HandleGetAccountKey(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	p, err := h.db.GetAccount(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "account not found"})
+		writeJSONError(w, 404, "account not found")
 		return
 	}
 
@@ -401,7 +397,7 @@ func (h *AdminHandler) HandleGetAccountKey(w http.ResponseWriter, r *http.Reques
 	if h.encryptionKey != nil {
 		plain, err := crypto.Decrypt(h.encryptionKey, p.APIKey)
 		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "failed to decrypt"})
+			writeJSONError(w, 500, "failed to decrypt")
 			return
 		}
 		apiKey = strings.TrimSpace(string(plain))
@@ -413,9 +409,8 @@ func (h *AdminHandler) HandleGetAccountKey(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *AdminHandler) HandleChatTestAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -423,11 +418,11 @@ func (h *AdminHandler) HandleChatTestAccount(w http.ResponseWriter, r *http.Requ
 		Message string `json:"message"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		writeJSONError(w, 400, "invalid request body")
 		return
 	}
 	if req.Model == "" {
-		writeJSON(w, 400, map[string]string{"error": "model is required"})
+		writeJSONError(w, 400, "model is required")
 		return
 	}
 	if req.Message == "" {
@@ -436,7 +431,7 @@ func (h *AdminHandler) HandleChatTestAccount(w http.ResponseWriter, r *http.Requ
 
 	p, err := h.db.GetAccount(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "account not found"})
+		writeJSONError(w, 404, "account not found")
 		return
 	}
 	apiKey, err := h.decryptAccountKey(p)
@@ -495,7 +490,7 @@ func (h *AdminHandler) HandleStatsOverview(w http.ResponseWriter, r *http.Reques
 
 	stats, err := h.db.GetOverviewStats(from, to)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -553,7 +548,7 @@ func (h *AdminHandler) HandleStatsRequests(w http.ResponseWriter, r *http.Reques
 
 	logs, total, err := h.db.QueryRequestLogs(filter)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -565,7 +560,7 @@ func (h *AdminHandler) HandleStatsAccounts(w http.ResponseWriter, r *http.Reques
 
 	stats, err := h.db.GetAccountStats(from, to)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -576,7 +571,7 @@ func (h *AdminHandler) HandleStatsProviders(w http.ResponseWriter, r *http.Reque
 	from, to := parseTimeRange(r)
 	stats, err := h.db.GetProviderStats(from, to)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, 200, stats)
@@ -587,7 +582,7 @@ func (h *AdminHandler) HandleStatsModels(w http.ResponseWriter, r *http.Request)
 	from, to := parseTimeRange(r)
 	stats, err := h.db.GetModelStats(from, to, provider)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, 200, stats)
@@ -596,7 +591,7 @@ func (h *AdminHandler) HandleStatsModels(w http.ResponseWriter, r *http.Request)
 func (h *AdminHandler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 	all, err := h.db.GetAllSettings()
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -628,7 +623,7 @@ var allowedSettings = map[string]bool{
 func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var settings map[string]string
 	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
@@ -637,24 +632,18 @@ func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 		if k == "proxy_api_key" {
-			// Hash the API key before storing
 			if v == "" {
 				h.db.SetSetting("proxy_api_key_hash", "")
 			} else {
-				hash, err := crypto.HashPassword(v)
-				if err != nil {
-					writeJSON(w, 500, map[string]string{"error": "failed to hash API key"})
-					return
-				}
-				if err := h.db.SetSetting("proxy_api_key_hash", hash); err != nil {
-					writeJSON(w, 500, map[string]string{"error": err.Error()})
+				if err := h.db.SetSetting("proxy_api_key_hash", crypto.HashToken(v)); err != nil {
+					writeJSONError(w, 500, err.Error())
 					return
 				}
 			}
 			continue
 		}
 		if err := h.db.SetSetting(k, v); err != nil {
-			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			writeJSONError(w, 500, err.Error())
 			return
 		}
 	}
@@ -669,17 +658,17 @@ func (h *AdminHandler) HandleUpdateSettings(w http.ResponseWriter, r *http.Reque
 func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "failed to read body"})
+		writeJSONError(w, 400, "failed to read body")
 		return
 	}
 
 	accountsCfg, err := config.ParseAccountsYAML(body)
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err.Error()})
+		writeJSONError(w, 400, "invalid YAML: " + err.Error())
 		return
 	}
 	if len(accountsCfg.Accounts) == 0 {
-		writeJSON(w, 400, map[string]string{"error": "no accounts found in YAML"})
+		writeJSONError(w, 400, "no accounts found in YAML")
 		return
 	}
 
@@ -708,21 +697,15 @@ func (h *AdminHandler) HandleConfigImport(w http.ResponseWriter, r *http.Request
 func (h *AdminHandler) HandleConfigExport(w http.ResponseWriter, r *http.Request) {
 	accounts, err := h.db.ListAccounts()
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
-	for i := range accounts {
-		if h.encryptionKey != nil {
-			if plain, err := crypto.Decrypt(h.encryptionKey, accounts[i].APIKey); err == nil {
-				accounts[i].APIKey = plain
-			}
-		}
-	}
+	DecryptAccountKeys(accounts, h.encryptionKey)
 
 	data, err := config.ExportAccountsYAML(accounts)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -735,7 +718,7 @@ func (h *AdminHandler) HandleSettingsExport(w http.ResponseWriter, r *http.Reque
 	settings, _ := h.db.GetAllSettings()
 	data, err := config.ExportSettingsYAML(settings)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -747,13 +730,13 @@ func (h *AdminHandler) HandleSettingsExport(w http.ResponseWriter, r *http.Reque
 func (h *AdminHandler) HandleSettingsImport(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "failed to read body"})
+		writeJSONError(w, 400, "failed to read body")
 		return
 	}
 
 	cfg, err := config.ParseSettingsYAML(body)
 	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid YAML: " + err.Error()})
+		writeJSONError(w, 400, "invalid YAML: " + err.Error())
 		return
 	}
 
@@ -783,14 +766,7 @@ func (h *AdminHandler) reloadPool() {
 		slog.Error("failed to reload accounts", "error", err)
 		return
 	}
-	// Decrypt API keys before reloading the pool
-	for i := range accounts {
-		if h.encryptionKey != nil {
-			if plain, err := crypto.Decrypt(h.encryptionKey, accounts[i].APIKey); err == nil {
-				accounts[i].APIKey = plain
-			}
-		}
-	}
+	DecryptAccountKeys(accounts, h.encryptionKey)
 	providerList, _ := h.db.ListEnabledProviders()
 	providerMap := make(map[string]store.Provider, len(providerList))
 	for _, p := range providerList {
@@ -829,8 +805,42 @@ func (h *AdminHandler) decryptAccountKey(p store.Account) (string, error) {
 	return strings.TrimSpace(string(p.APIKey)), nil
 }
 
+// DecryptAccountKeys decrypts the APIKey field of each account in place using
+// the supplied key. On per-account decrypt error the APIKey is set to nil so
+// downstream consumers (e.g. the provider pool) can detect and skip the account
+// instead of forwarding ciphertext as a bearer token to the upstream provider.
+// One bad row must not block the rest of the pool from coming up.
+func DecryptAccountKeys(accounts []store.Account, key []byte) {
+	if key == nil {
+		return
+	}
+	for i := range accounts {
+		plain, err := crypto.Decrypt(key, accounts[i].APIKey)
+		if err != nil {
+			slog.Warn("account decrypt failed; skipping",
+				"account", accounts[i].Name, "error", err)
+			accounts[i].APIKey = nil
+			continue
+		}
+		accounts[i].APIKey = plain
+	}
+}
+
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(v)
+}
+
+func writeJSONError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+func parsePathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeJSONError(w, 400, "invalid id")
+		return 0, false
+	}
+	return id, true
 }

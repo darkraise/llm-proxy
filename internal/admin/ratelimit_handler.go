@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/darkraise/llm-proxy/internal/store"
 )
@@ -14,13 +13,13 @@ import (
 func (h *AdminHandler) HandleListRateLimitDefs(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 	if provider == "" {
-		writeJSON(w, 400, map[string]string{"error": "provider is required"})
+		writeJSONError(w, 400, "provider is required")
 		return
 	}
 
 	defs, err := h.db.ListRateLimitDefs(provider)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -36,17 +35,17 @@ func (h *AdminHandler) HandleListRateLimitDefs(w http.ResponseWriter, r *http.Re
 func (h *AdminHandler) HandleSetRateLimitDef(w http.ResponseWriter, r *http.Request) {
 	var def store.RateLimitDef
 	if err := json.NewDecoder(r.Body).Decode(&def); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
 	if def.Provider == "" || def.Metric == "" {
-		writeJSON(w, 400, map[string]string{"error": "provider and metric are required"})
+		writeJSONError(w, 400, "provider and metric are required")
 		return
 	}
 
 	if err := h.db.SetRateLimitDef(def); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -57,14 +56,13 @@ func (h *AdminHandler) HandleSetRateLimitDef(w http.ResponseWriter, r *http.Requ
 //
 // DELETE /admin/api/ratelimits/{id}
 func (h *AdminHandler) HandleDeleteRateLimitDef(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	if err := h.db.DeleteRateLimitDef(id); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -96,12 +94,12 @@ func (h *AdminHandler) HandleSetProviderMetrics(w http.ResponseWriter, r *http.R
 	provider := r.PathValue("provider")
 	var metrics []string
 	if err := json.NewDecoder(r.Body).Decode(&metrics); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 	data, _ := json.Marshal(metrics)
 	if err := h.db.SetSetting("ratelimit_metrics:"+provider, string(data)); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "ok"})
@@ -114,13 +112,13 @@ func (h *AdminHandler) HandleSetProviderMetrics(w http.ResponseWriter, r *http.R
 func (h *AdminHandler) HandleGetDefaultLimits(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 	if provider == "" {
-		writeJSON(w, 400, map[string]string{"error": "provider is required"})
+		writeJSONError(w, 400, "provider is required")
 		return
 	}
 
 	limits, err := h.db.GetDefaultLimits(provider)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 

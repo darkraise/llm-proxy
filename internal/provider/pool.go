@@ -34,6 +34,13 @@ func NewPool(accounts []store.Account, providers map[string]store.Provider) *Poo
 			continue
 		}
 
+		// APIKey is nil when DecryptAccountKeys hit a decrypt failure for this
+		// row. Sending ciphertext as a bearer token would just trigger 401s and
+		// pollute provider stability metrics, so drop the account from the pool.
+		if p.APIKey == nil {
+			continue
+		}
+
 		prov, ok := providers[p.Type]
 		if ok && !prov.Enabled {
 			continue
@@ -92,7 +99,13 @@ func (p *Pool) SelectExcluding(model string, category string, maxRetries int, sk
 
 func (p *Pool) selectAutoExcluding(category string, maxRetries int, skipProviders map[string]bool) (*AccountInfo, error) {
 	n := len(p.accounts)
-	for i := 0; i < min(maxRetries, n); i++ {
+	if n == 0 {
+		return nil, fmt.Errorf("no accounts configured")
+	}
+	// Iterate up to n accounts so eligible candidates are still reached even
+	// when many are skipped (wrong category, rate-limited, excluded provider).
+	// The per-request retry budget is enforced by the outer handler loop, not here.
+	for i := 0; i < n; i++ {
 		account := &p.accounts[p.index%n]
 		p.index = (p.index + 1) % n
 
@@ -136,7 +149,8 @@ func (p *Pool) selectByModelExcluding(model string, maxRetries int, skipProvider
 		return nil, fmt.Errorf("no account found for model %q", model)
 	}
 
-	for i := 0; i < min(maxRetries, len(candidates)); i++ {
+	// Examine every candidate; per-request retry budget is enforced by the caller.
+	for i := 0; i < len(candidates); i++ {
 		c := candidates[i%len(candidates)]
 		if p.rateLimiter.AllowForModel(c.Name, model) {
 			return c, nil

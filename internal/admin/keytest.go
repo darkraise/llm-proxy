@@ -16,11 +16,11 @@ func (h *AdminHandler) HandleTestKey(w http.ResponseWriter, r *http.Request) {
 		Key      string `json:"key"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		writeJSONError(w, 400, "invalid request body")
 		return
 	}
 	if req.Provider == "" || req.Key == "" {
-		writeJSON(w, 400, map[string]string{"error": "provider and key are required"})
+		writeJSONError(w, 400, "provider and key are required")
 		return
 	}
 
@@ -56,11 +56,11 @@ func (h *AdminHandler) HandleChatTestKey(w http.ResponseWriter, r *http.Request)
 		Message  string `json:"message"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		writeJSONError(w, 400, "invalid request body")
 		return
 	}
 	if req.Provider == "" || req.Key == "" || req.Model == "" {
-		writeJSON(w, 400, map[string]string{"error": "provider, key, and model are required"})
+		writeJSONError(w, 400, "provider, key, and model are required")
 		return
 	}
 	if req.Message == "" {

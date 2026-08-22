@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,13 +26,17 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		return
 	}
 
+	ctx := r.Context()
 	maxRetries, _, _, fallback := h.config()
 
 	req.Stream = true
 	logEntry := store.RequestLog{Model: req.Model, Endpoint: endpoint, Status: "error"}
 
+	providerFailures := make(map[string]int)
+	skipProviders := make(map[string]bool)
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		prov, err := h.pool.SelectExcluding(req.Model, category, maxRetries, nil)
+		prov, err := h.pool.SelectExcluding(req.Model, category, maxRetries, skipProviders)
 		if err != nil {
 			break
 		}
@@ -45,20 +50,28 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		var streamResp *http.Response
 		switch prov.APIStandard {
 		case "google":
-			streamResp, err = h.openGoogleStream(prov, req)
+			streamResp, err = h.openGoogleStream(ctx, prov, req)
 		default:
-			streamResp, err = h.openOpenAIStream(prov, req)
+			streamResp, err = h.openOpenAIStream(ctx, prov, req)
 		}
 
 		if err != nil {
 			slog.Warn("stream connect error", "provider", prov.Name, "error", err)
 			h.pool.RecordError(prov.Name, 15*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
 		if streamResp.StatusCode == 429 {
 			streamResp.Body.Close()
 			h.pool.RecordRateLimit(prov.Name, 60*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
@@ -68,6 +81,10 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 			}
 			streamResp.Body.Close()
 			h.pool.RecordError(prov.Name, 10*time.Second)
+			providerFailures[prov.Type]++
+			if providerFailures[prov.Type] >= 3 {
+				skipProviders[prov.Type] = true
+			}
 			continue
 		}
 
@@ -83,25 +100,36 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 			}
 		}
 
-		// Stream to client
+		// Stream to client. Once headers are written we can no longer retry; if the
+		// upstream stream truncates we surface a final error event so the client
+		// can detect incomplete output instead of treating it as a clean response.
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 
 		var totalTokens int
+		var completed bool
 		if prov.APIStandard == "google" {
-			totalTokens = h.pipeGoogleStream(w, flusher, streamResp.Body, prov, endpoint)
+			totalTokens, completed = h.pipeGoogleStream(w, flusher, streamResp.Body, prov, endpoint)
 		} else {
-			totalTokens = h.pipeOpenAIStream(w, flusher, streamResp.Body, endpoint)
+			totalTokens, completed = h.pipeOpenAIStream(w, flusher, streamResp.Body, endpoint)
 		}
 		streamResp.Body.Close()
 
 		latency := time.Since(t0)
 		logEntry.LatencyMs = int(latency.Milliseconds())
-		logEntry.Status = "success"
 		logEntry.StatusCode = 200
 		logEntry.CompletionTokens = totalTokens
 		h.pool.RecordSuccessForModel(prov.Name, logEntry.Model, totalTokens)
+
+		if completed {
+			logEntry.Status = "success"
+		} else {
+			logEntry.Status = "error"
+			logEntry.ErrorMessage = "upstream stream truncated"
+			writeStreamErrorEvent(w, flusher, endpoint, "upstream stream truncated")
+			h.pool.RecordError(prov.Name, 10*time.Second)
+		}
 
 		if h.logFunc != nil {
 			h.logFunc(logEntry)
@@ -117,21 +145,18 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 		req.Stream = true
 		data, _ := adapter.FormatOpenAIRequest(req)
 
-		fallbackURL := strings.TrimRight(fallback.BaseURL, "/")
-		if !strings.HasSuffix(fallbackURL, "/v1") {
-			fallbackURL += "/v1"
-		}
-		httpReq, err := http.NewRequest("POST", fallbackURL+"/chat/completions", bytes.NewReader(data))
+		fallbackURL := normalizeOllamaURL(fallback.BaseURL)
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", fallbackURL+"/chat/completions", bytes.NewReader(data))
 		if err == nil {
 			httpReq.Header.Set("Content-Type", "application/json")
-			fallbackClient := &http.Client{Timeout: fallback.Timeout}
+			fallbackClient := newUpstreamClient(fallback.Timeout)
 			streamResp, err := fallbackClient.Do(httpReq)
 			if err == nil && streamResp.StatusCode == 200 {
 				w.Header().Set("Content-Type", "text/event-stream")
 				w.Header().Set("Cache-Control", "no-cache")
 				w.Header().Set("Connection", "keep-alive")
 
-				totalTokens := h.pipeOpenAIStream(w, flusher, streamResp.Body, endpoint)
+				totalTokens, _ := h.pipeOpenAIStream(w, flusher, streamResp.Body, endpoint)
 				streamResp.Body.Close()
 
 				logEntry.Status = "success"
@@ -164,7 +189,7 @@ func (h *Handler) handleStreaming(w http.ResponseWriter, r *http.Request, req ad
 	writeError(w, 503, "all providers exhausted")
 }
 
-func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
+func (h *Handler) openOpenAIStream(ctx context.Context, prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
 	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
@@ -172,7 +197,7 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 	}
 
 	baseURL := resolveBaseURL(prov)
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +209,7 @@ func (h *Handler) openOpenAIStream(prov *provider.AccountInfo, req adapter.ChatC
 	return h.httpClient().Do(httpReq)
 }
 
-func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
+func (h *Handler) openGoogleStream(ctx context.Context, prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*http.Response, error) {
 	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	url := adapter.GoogleStreamURL(req.Model, prov.DecryptedKey)
 
@@ -193,7 +218,7 @@ func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatC
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -203,10 +228,11 @@ func (h *Handler) openGoogleStream(prov *provider.AccountInfo, req adapter.ChatC
 	return h.httpClient().Do(httpReq)
 }
 
-func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, endpoint string) int {
+func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, endpoint string) (int, bool) {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 256*1024), 256*1024)
 	var totalTokens int
+	completed := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -222,6 +248,7 @@ func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, 
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
 			}
+			completed = true
 			break
 		}
 
@@ -238,14 +265,15 @@ func (h *Handler) pipeOpenAIStream(w http.ResponseWriter, flusher http.Flusher, 
 			totalTokens = chunk.Usage.TotalTokens
 		}
 	}
-	return totalTokens
+	return totalTokens, completed
 }
 
-func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, prov *provider.AccountInfo, endpoint string) int {
+func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, body io.Reader, prov *provider.AccountInfo, endpoint string) (int, bool) {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 256*1024), 256*1024)
 	var totalTokens int
 	chunkIdx := 0
+	sawFinish := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -261,18 +289,26 @@ func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, 
 			continue
 		}
 
-		// Extract text from Google format
+		// Extract text from Google format. Every nested access uses comma-ok
+		// because Google can return null fields or unexpected shapes that would
+		// otherwise panic the streaming goroutine.
 		candidates, _ := googleChunk["candidates"].([]any)
 		if len(candidates) == 0 {
 			continue
 		}
-		candidate := candidates[0].(map[string]any)
+		candidate, ok := candidates[0].(map[string]any)
+		if !ok {
+			continue
+		}
 		content, _ := candidate["content"].(map[string]any)
 		parts, _ := content["parts"].([]any)
 
 		text := ""
 		for _, p := range parts {
-			part := p.(map[string]any)
+			part, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
 			if t, ok := part["text"].(string); ok {
 				text += t
 			}
@@ -302,6 +338,7 @@ func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, 
 				reason = "length"
 			}
 			openaiChunk.Choices[0].FinishReason = &reason
+			sawFinish = true
 		}
 
 		// Extract usage
@@ -334,7 +371,30 @@ func (h *Handler) pipeGoogleStream(w http.ResponseWriter, flusher http.Flusher, 
 		flusher.Flush()
 	}
 
-	return totalTokens
+	return totalTokens, sawFinish
+}
+
+// writeStreamErrorEvent emits a final SSE event signaling truncation. Headers
+// have already been committed by the caller, so we cannot change the HTTP
+// status; this is the only way to surface the failure to the client.
+func writeStreamErrorEvent(w http.ResponseWriter, flusher http.Flusher, endpoint string, msg string) {
+	if endpoint == "anthropic" {
+		event := map[string]any{
+			"type":  "error",
+			"error": map[string]any{"type": "overloaded_error", "message": msg},
+		}
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", data)
+		flusher.Flush()
+		return
+	}
+	chunk := map[string]any{
+		"error": map[string]any{"message": msg, "type": "upstream_error"},
+	}
+	data, _ := json.Marshal(chunk)
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 // Anthropic streaming helpers

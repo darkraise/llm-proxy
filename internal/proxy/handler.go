@@ -2,10 +2,12 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,6 +21,29 @@ import (
 	"github.com/darkraise/llm-proxy/internal/ratelimit"
 	"github.com/darkraise/llm-proxy/internal/store"
 )
+
+// upstreamTransport is shared across all upstream HTTP calls so connection
+// pools (and HTTP/2 sessions) are reused across requests and across config
+// reloads. The default http.Transport caps idle conns per host at 2, which
+// kills keep-alive under any meaningful concurrency to provider hosts.
+var upstreamTransport = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	ForceAttemptHTTP2:     true,
+	MaxIdleConns:          200,
+	MaxIdleConnsPerHost:   100,
+	MaxConnsPerHost:       200,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
+func newUpstreamClient(timeout time.Duration) *http.Client {
+	return &http.Client{Transport: upstreamTransport, Timeout: timeout}
+}
 
 type LogFunc func(entry store.RequestLog)
 
@@ -59,7 +84,7 @@ func NewHandler(pool *provider.Pool, db *store.DB, logFunc LogFunc) *Handler {
 		pool:       pool,
 		db:         db,
 		logFunc:    logFunc,
-		client:     &http.Client{Timeout: 15 * time.Second},
+		client:     newUpstreamClient(15 * time.Second),
 		maxRetries: 12,
 		timeout:    15 * time.Second,
 	}
@@ -82,7 +107,7 @@ func (h *Handler) SetConfig(maxRetries int, timeout time.Duration) {
 	defer h.configMu.Unlock()
 	h.maxRetries = maxRetries
 	h.timeout = timeout
-	h.client = &http.Client{Timeout: timeout}
+	h.client = newUpstreamClient(timeout)
 }
 
 func (h *Handler) SetNotifier(n *notify.Notifier) {
@@ -120,7 +145,7 @@ func (h *Handler) HandleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.handleNonStreaming(w, req, "openai", store.CategoryChat)
+	h.handleNonStreaming(w, r, req, "openai", store.CategoryChat)
 }
 
 func (h *Handler) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +166,7 @@ func (h *Handler) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resp, logEntry := h.forwardNonStreaming(req, store.CategoryChat)
+	resp, logEntry := h.forwardNonStreaming(r.Context(), req, store.CategoryChat)
 	logEntry.Endpoint = "anthropic"
 
 	if resp == nil {
@@ -167,8 +192,8 @@ func (h *Handler) HandleAnthropicMessages(w http.ResponseWriter, r *http.Request
 	w.Write(anthropicData)
 }
 
-func (h *Handler) handleNonStreaming(w http.ResponseWriter, req adapter.ChatCompletionRequest, endpoint string, category string) {
-	resp, logEntry := h.forwardNonStreaming(req, category)
+func (h *Handler) handleNonStreaming(w http.ResponseWriter, r *http.Request, req adapter.ChatCompletionRequest, endpoint string, category string) {
+	resp, logEntry := h.forwardNonStreaming(r.Context(), req, category)
 	logEntry.Endpoint = endpoint
 
 	if h.logFunc != nil {
@@ -205,7 +230,7 @@ func (h *Handler) HandleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, logEntry := h.forwardEmbedding(req)
+	resp, logEntry := h.forwardEmbedding(r.Context(), req)
 	logEntry.Endpoint = "embeddings"
 
 	if h.logFunc != nil {
@@ -222,7 +247,7 @@ func (h *Handler) HandleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, store.RequestLog) {
+func (h *Handler) forwardEmbedding(ctx context.Context, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, store.RequestLog) {
 	maxRetries, timeout, _, fallback := h.config()
 
 	logEntry := store.RequestLog{
@@ -250,9 +275,9 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 
 		switch prov.Type {
 		case "cohere":
-			resp, statusCode, err = h.callCohereEmbedding(prov, req)
+			resp, statusCode, err = h.callCohereEmbedding(ctx, prov, req)
 		default:
-			resp, statusCode, err = h.callOpenAIEmbedding(prov, req)
+			resp, statusCode, err = h.callOpenAIEmbedding(ctx, prov, req)
 		}
 
 		latency := time.Since(t0)
@@ -327,15 +352,12 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 	// All providers exhausted — try Ollama fallback for embeddings
 	if fallback != nil && fallback.Enabled && fallback.EmbeddingModel != "" {
 		slog.Warn("all embedding providers exhausted, trying Ollama fallback")
-		fallbackClient := &http.Client{Timeout: fallback.Timeout}
+		fallbackClient := newUpstreamClient(fallback.Timeout)
 		req.Model = fallback.EmbeddingModel
 
 		data, _ := json.Marshal(req)
-		fallbackURL := strings.TrimRight(fallback.BaseURL, "/")
-		if !strings.HasSuffix(fallbackURL, "/v1") {
-			fallbackURL += "/v1"
-		}
-		httpReq, err := http.NewRequest("POST", fallbackURL+"/embeddings", bytes.NewReader(data))
+		fallbackURL := normalizeOllamaURL(fallback.BaseURL)
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", fallbackURL+"/embeddings", bytes.NewReader(data))
 		if err == nil {
 			httpReq.Header.Set("Content-Type", "application/json")
 			resp, err := fallbackClient.Do(httpReq)
@@ -364,7 +386,7 @@ func (h *Handler) forwardEmbedding(req adapter.EmbeddingRequest) (*adapter.Embed
 	return nil, logEntry
 }
 
-func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
+func (h *Handler) callOpenAIEmbedding(ctx context.Context, prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
 	req.Model = firstModel(prov, req.Model, store.CategoryEmbedding)
 	data, err := adapter.FormatEmbeddingRequest(req)
 	if err != nil {
@@ -372,7 +394,7 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 	}
 
 	baseURL := resolveBaseURL(prov)
-	httpReq, err := http.NewRequest("POST", baseURL+"/embeddings", bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/embeddings", bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -401,7 +423,7 @@ func (h *Handler) callOpenAIEmbedding(prov *provider.AccountInfo, req adapter.Em
 	return &parsed, 200, err
 }
 
-func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
+func (h *Handler) callCohereEmbedding(ctx context.Context, prov *provider.AccountInfo, req adapter.EmbeddingRequest) (*adapter.EmbeddingResponse, int, error) {
 	req.Model = firstModel(prov, req.Model, store.CategoryEmbedding)
 	data, err := adapter.OpenAIToCohereEmbed(req)
 	if err != nil {
@@ -409,7 +431,7 @@ func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.Em
 	}
 
 	// Cohere native embed endpoint: https://api.cohere.ai/v2/embed
-	httpReq, err := http.NewRequest("POST", "https://api.cohere.ai/v2/embed", bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://api.cohere.ai/v2/embed", bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -440,7 +462,7 @@ func (h *Handler) callCohereEmbedding(prov *provider.AccountInfo, req adapter.Em
 
 // ─── Chat Completions ────────────────────────────────────────────────────────
 
-func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, category string) (*adapter.ChatCompletionResponse, store.RequestLog) {
+func (h *Handler) forwardNonStreaming(ctx context.Context, req adapter.ChatCompletionRequest, category string) (*adapter.ChatCompletionResponse, store.RequestLog) {
 	maxRetries, timeout, _, fallback := h.config()
 
 	logEntry := store.RequestLog{
@@ -472,9 +494,9 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 
 		switch prov.APIStandard {
 		case "google":
-			resp, statusCode, err = h.callGoogle(prov, req)
+			resp, statusCode, err = h.callGoogle(ctx, prov, req)
 		default:
-			resp, statusCode, respHeaders, err = h.callOpenAI(prov, req)
+			resp, statusCode, respHeaders, err = h.callOpenAI(ctx, prov, req)
 		}
 
 		latency := time.Since(t0)
@@ -581,16 +603,13 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 	// All cloud providers exhausted — try Ollama fallback
 	if fallback != nil && fallback.Enabled && fallback.ChatModel != "" {
 		slog.Warn("all cloud providers exhausted, trying Ollama fallback")
-		fallbackClient := &http.Client{Timeout: fallback.Timeout}
+		fallbackClient := newUpstreamClient(fallback.Timeout)
 		req.Model = fallback.ChatModel
 		req.Stream = false
 		data, _ := adapter.FormatOpenAIRequest(req)
 
-		fallbackURL := strings.TrimRight(fallback.BaseURL, "/")
-		if !strings.HasSuffix(fallbackURL, "/v1") {
-			fallbackURL += "/v1"
-		}
-		httpReq, err := http.NewRequest("POST", fallbackURL+"/chat/completions", bytes.NewReader(data))
+		fallbackURL := normalizeOllamaURL(fallback.BaseURL)
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", fallbackURL+"/chat/completions", bytes.NewReader(data))
 		if err == nil {
 			httpReq.Header.Set("Content-Type", "application/json")
 			resp, err := fallbackClient.Do(httpReq)
@@ -621,7 +640,7 @@ func (h *Handler) forwardNonStreaming(req adapter.ChatCompletionRequest, categor
 	return nil, logEntry
 }
 
-func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, http.Header, error) {
+func (h *Handler) callOpenAI(ctx context.Context, prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, http.Header, error) {
 	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	data, err := adapter.FormatOpenAIRequest(req)
 	if err != nil {
@@ -629,7 +648,7 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 	}
 
 	baseURL := resolveBaseURL(prov)
-	httpReq, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(data))
 	if err != nil {
 		return nil, 0, nil, err
 	}
@@ -658,14 +677,14 @@ func (h *Handler) callOpenAI(prov *provider.AccountInfo, req adapter.ChatComplet
 	return &parsed, 200, resp.Header, err
 }
 
-func (h *Handler) callGoogle(prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
+func (h *Handler) callGoogle(ctx context.Context, prov *provider.AccountInfo, req adapter.ChatCompletionRequest) (*adapter.ChatCompletionResponse, int, error) {
 	req.Model = firstModel(prov, req.Model, store.CategoryChat)
 	url, body, err := adapter.OpenAIToGoogle(req, prov.DecryptedKey)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -714,6 +733,16 @@ func isTimeoutError(err error) bool {
 
 func resolveBaseURL(prov *provider.AccountInfo) string {
 	return prov.ProviderURL
+}
+
+// normalizeOllamaURL trims a trailing slash and ensures the URL ends in /v1
+// so OpenAI-compatible endpoints can be appended directly.
+func normalizeOllamaURL(base string) string {
+	u := strings.TrimRight(base, "/")
+	if !strings.HasSuffix(u, "/v1") {
+		u += "/v1"
+	}
+	return u
 }
 
 func setProviderAuth(httpReq *http.Request, prov *provider.AccountInfo) {
@@ -772,7 +801,7 @@ func ProxyAuthMiddleware(db *store.DB) func(http.Handler) http.Handler {
 			}
 			token := strings.TrimPrefix(auth, "Bearer ")
 
-			if !crypto.VerifyPassword(expectedHash, token) {
+			if !crypto.VerifyToken(expectedHash, token) {
 				writeError(w, 401, "invalid API key")
 				return
 			}

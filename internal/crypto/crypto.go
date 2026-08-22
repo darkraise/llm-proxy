@@ -5,8 +5,11 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"strings"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
@@ -86,4 +89,23 @@ func HashPassword(password string) (string, error) {
 
 func VerifyPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+// HashToken returns a SHA-256 hex digest of the input. Use for API tokens that
+// are verified on every request — bcrypt is too slow on the hot path and gives
+// an attacker a CPU-amplification DoS via random-token requests.
+func HashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+// VerifyToken constant-time compares a stored token hash against a presented
+// token. Accepts either a SHA-256 hex digest (preferred, fast) or a legacy
+// bcrypt hash for backwards compatibility with previously-stored tokens.
+func VerifyToken(storedHash, token string) bool {
+	if strings.HasPrefix(storedHash, "$2") {
+		return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(token)) == nil
+	}
+	got := HashToken(token)
+	return subtle.ConstantTimeCompare([]byte(storedHash), []byte(got)) == 1
 }

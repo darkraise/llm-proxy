@@ -84,6 +84,9 @@ func (d *DB) GetAccount(id int64) (Account, error) {
 }
 
 func (d *DB) ListAccounts() ([]Account, error) {
+	// Materialize accounts before fetching limits. Holding the outer rows
+	// cursor open while issuing per-account limit queries deadlocks under
+	// SetMaxOpenConns(1) and was an N+1 against the connection pool anyway.
 	rows, err := d.Query(
 		`SELECT id, name, type, base_url, api_key_enc, models, priority, enabled, default_models, created_at, updated_at
 		 FROM accounts ORDER BY priority, name`,
@@ -91,24 +94,59 @@ func (d *DB) ListAccounts() ([]Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var accounts []Account
 	for rows.Next() {
 		var p Account
 		var enabled int
 		if err := rows.Scan(&p.ID, &p.Name, &p.Type, &p.BaseURL, &p.APIKey, &p.Models, &p.Priority, &enabled, &p.DefaultModels, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		p.Enabled = enabled == 1
-		limits, err := d.getAccountLimits(p.ID)
-		if err != nil {
-			return nil, err
-		}
-		p.Limits = limits
 		accounts = append(accounts, p)
 	}
-	return accounts, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	if len(accounts) == 0 {
+		return accounts, nil
+	}
+
+	// Fetch all limits in a single query, then attach by account_id.
+	limitsByAccount, err := d.listAllAccountLimits()
+	if err != nil {
+		return nil, err
+	}
+	for i := range accounts {
+		accounts[i].Limits = limitsByAccount[accounts[i].ID]
+	}
+	return accounts, nil
+}
+
+func (d *DB) listAllAccountLimits() (map[int64][]AccountLimit, error) {
+	rows, err := d.Query(
+		`SELECT account_id, model, metric, max_value, window_secs
+		 FROM account_limits ORDER BY account_id, model, metric`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[int64][]AccountLimit)
+	for rows.Next() {
+		var accountID int64
+		var l AccountLimit
+		if err := rows.Scan(&accountID, &l.Model, &l.Metric, &l.MaxValue, &l.WindowSecs); err != nil {
+			return nil, err
+		}
+		out[accountID] = append(out[accountID], l)
+	}
+	return out, rows.Err()
 }
 
 func (d *DB) UpdateAccount(id int64, p Account) error {

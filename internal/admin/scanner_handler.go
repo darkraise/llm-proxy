@@ -45,7 +45,7 @@ func maskKey(key string) string {
 
 func (h *AdminHandler) HandleGetScannerStatus(w http.ResponseWriter, r *http.Request) {
 	if h.scanner == nil {
-		writeJSON(w, 503, map[string]string{"error": "scanner not configured"})
+		writeJSONError(w, 503, "scanner not configured")
 		return
 	}
 	status := h.scanner.Status()
@@ -70,7 +70,7 @@ func (h *AdminHandler) HandleGetScannerStatus(w http.ResponseWriter, r *http.Req
 
 func (h *AdminHandler) HandleStartScan(w http.ResponseWriter, r *http.Request) {
 	if h.scanner == nil {
-		writeJSON(w, 503, map[string]string{"error": "scanner not configured"})
+		writeJSONError(w, 503, "scanner not configured")
 		return
 	}
 	var req struct {
@@ -78,7 +78,7 @@ func (h *AdminHandler) HandleStartScan(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 	if err := h.scanner.Start(req.Source); err != nil {
-		writeJSON(w, 409, map[string]string{"error": err.Error()})
+		writeJSONError(w, 409, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "started"})
@@ -86,7 +86,7 @@ func (h *AdminHandler) HandleStartScan(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) HandleStopScan(w http.ResponseWriter, r *http.Request) {
 	if h.scanner == nil {
-		writeJSON(w, 503, map[string]string{"error": "scanner not configured"})
+		writeJSONError(w, 503, "scanner not configured")
 		return
 	}
 	h.scanner.Stop()
@@ -133,7 +133,7 @@ func (h *AdminHandler) HandleListDiscoveredKeys(w http.ResponseWriter, r *http.R
 
 	keys, total, err := h.db.ListDiscoveredKeys(providerFilter, sourceFilter, validFilter, importedFilter, limit, offset)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -152,21 +152,20 @@ func (h *AdminHandler) HandleListDiscoveredKeys(w http.ResponseWriter, r *http.R
 }
 
 func (h *AdminHandler) HandleValidateDiscoveredKey(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	dk, err := h.db.GetDiscoveredKey(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "key not found"})
+		writeJSONError(w, 404, "key not found")
 		return
 	}
 
 	plainKey, err := crypto.Decrypt(h.encryptionKey, dk.KeyEnc)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to decrypt key"})
+		writeJSONError(w, 500, "failed to decrypt key")
 		return
 	}
 
@@ -177,13 +176,13 @@ func (h *AdminHandler) HandleValidateDiscoveredKey(w http.ResponseWriter, r *htt
 	}
 
 	if err := h.db.UpdateDiscoveredKeyValidity(id, valid); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
 	updated, err := h.db.GetDiscoveredKey(id)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -203,13 +202,13 @@ func (h *AdminHandler) HandleBulkValidateKeys(w http.ResponseWriter, r *http.Req
 		IDs []int64 `json:"ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
-		writeJSON(w, 400, map[string]string{"error": "ids array is required"})
+		writeJSONError(w, 400, "ids array is required")
 		return
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, 500, map[string]string{"error": "streaming not supported"})
+		writeJSONError(w, 500, "streaming not supported")
 		return
 	}
 
@@ -218,7 +217,12 @@ func (h *AdminHandler) HandleBulkValidateKeys(w http.ResponseWriter, r *http.Req
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(200)
 
+	ctx := r.Context()
 	for _, id := range req.IDs {
+		if ctx.Err() != nil {
+			return
+		}
+
 		dk, err := h.db.GetDiscoveredKey(id)
 		if err != nil {
 			continue
@@ -247,9 +251,8 @@ func (h *AdminHandler) HandleBulkValidateKeys(w http.ResponseWriter, r *http.Req
 }
 
 func (h *AdminHandler) HandleImportDiscoveredKey(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
@@ -259,30 +262,30 @@ func (h *AdminHandler) HandleImportDiscoveredKey(w http.ResponseWriter, r *http.
 		Limits []store.AccountLimit `json:"limits"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
 	dk, err := h.db.GetDiscoveredKey(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "key not found"})
+		writeJSONError(w, 404, "key not found")
 		return
 	}
 
 	if dk.Imported {
-		writeJSON(w, 409, map[string]string{"error": "key already imported"})
+		writeJSONError(w, 409, "key already imported")
 		return
 	}
 
 	plainKey, err := crypto.Decrypt(h.encryptionKey, dk.KeyEnc)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to decrypt key"})
+		writeJSONError(w, 500, "failed to decrypt key")
 		return
 	}
 
 	apiKeyEnc, err := crypto.Encrypt(h.encryptionKey, plainKey)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "encryption failed"})
+		writeJSONError(w, 500, "encryption failed")
 		return
 	}
 
@@ -305,15 +308,15 @@ func (h *AdminHandler) HandleImportDiscoveredKey(w http.ResponseWriter, r *http.
 	accountID, err := h.db.CreateAccount(account)
 	if err != nil {
 		if strings.Contains(err.Error(), "api_key_hash") {
-			writeJSON(w, 409, map[string]string{"error": "API key already exists in another account"})
+			writeJSONError(w, 409, "API key already exists in another account")
 			return
 		}
-		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		writeJSONError(w, 400, err.Error())
 		return
 	}
 
 	if err := h.db.MarkDiscoveredKeyImported(id, accountID); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -329,7 +332,7 @@ func (h *AdminHandler) HandleBulkImportKeys(w http.ResponseWriter, r *http.Reque
 		Limits []store.AccountLimit `json:"limits"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
@@ -339,7 +342,7 @@ func (h *AdminHandler) HandleBulkImportKeys(w http.ResponseWriter, r *http.Reque
 		importedFalse := false
 		keys, _, err := h.db.ListDiscoveredKeys("", "", &validTrue, &importedFalse, 100000, 0)
 		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			writeJSONError(w, 500, err.Error())
 			return
 		}
 		ids = make([]int64, 0, len(keys))
@@ -396,21 +399,20 @@ func (h *AdminHandler) HandleBulkImportKeys(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *AdminHandler) HandleDiscoverByDiscoveredKey(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	dk, err := h.db.GetDiscoveredKey(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "key not found"})
+		writeJSONError(w, 404, "key not found")
 		return
 	}
 
 	plainKey, err := crypto.Decrypt(h.encryptionKey, dk.KeyEnc)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to decrypt key"})
+		writeJSONError(w, 500, "failed to decrypt key")
 		return
 	}
 
@@ -419,7 +421,7 @@ func (h *AdminHandler) HandleDiscoverByDiscoveredKey(w http.ResponseWriter, r *h
 	last := results[len(results)-1]
 
 	if !last.Success {
-		writeJSON(w, 502, map[string]string{"error": last.Error})
+		writeJSONError(w, 502, last.Error)
 		return
 	}
 
@@ -431,9 +433,8 @@ func (h *AdminHandler) HandleDiscoverByDiscoveredKey(w http.ResponseWriter, r *h
 }
 
 func (h *AdminHandler) HandleChatTestByDiscoveredKey(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
@@ -442,11 +443,11 @@ func (h *AdminHandler) HandleChatTestByDiscoveredKey(w http.ResponseWriter, r *h
 		Message string `json:"message"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request body"})
+		writeJSONError(w, 400, "invalid request body")
 		return
 	}
 	if req.Model == "" {
-		writeJSON(w, 400, map[string]string{"error": "model is required"})
+		writeJSONError(w, 400, "model is required")
 		return
 	}
 	if req.Message == "" {
@@ -455,13 +456,13 @@ func (h *AdminHandler) HandleChatTestByDiscoveredKey(w http.ResponseWriter, r *h
 
 	dk, err := h.db.GetDiscoveredKey(id)
 	if err != nil {
-		writeJSON(w, 404, map[string]string{"error": "key not found"})
+		writeJSONError(w, 404, "key not found")
 		return
 	}
 
 	plainKey, err := crypto.Decrypt(h.encryptionKey, dk.KeyEnc)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to decrypt key"})
+		writeJSONError(w, 500, "failed to decrypt key")
 		return
 	}
 
@@ -487,26 +488,25 @@ func (h *AdminHandler) HandleBulkDeleteKeys(w http.ResponseWriter, r *http.Reque
 		IDs []int64 `json:"ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 	deleted, err := h.db.DeleteDiscoveredKeys(req.IDs)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]any{"deleted": deleted})
 }
 
 func (h *AdminHandler) HandleDeleteDiscoveredKey(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 
 	if err := h.db.DeleteDiscoveredKey(id); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -521,7 +521,7 @@ func (h *AdminHandler) HandleListScanHistory(w http.ResponseWriter, r *http.Requ
 
 	histories, err := h.db.ListScanHistory(limit)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	if histories == nil {
@@ -572,7 +572,7 @@ func (h *AdminHandler) HandleUpdateScannerConfig(w http.ResponseWriter, r *http.
 		MaxPages    *int   `json:"max_pages"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 
@@ -589,7 +589,7 @@ func (h *AdminHandler) HandleUpdateScannerConfig(w http.ResponseWriter, r *http.
 
 	if req.GithubToken != nil {
 		if err := saveEncrypted("scanner_github_token", *req.GithubToken); err != nil {
-			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			writeJSONError(w, 500, err.Error())
 			return
 		}
 		if h.scanner != nil {
@@ -629,7 +629,7 @@ func (h *AdminHandler) HandleExportScanResults(w http.ResponseWriter, r *http.Re
 
 	keys, _, err := h.db.ListDiscoveredKeys(providerFilter, sourceFilter, validFilter, nil, 100000, 0)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 
@@ -674,7 +674,7 @@ func (h *AdminHandler) HandleExportScanResults(w http.ResponseWriter, r *http.Re
 
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": "failed to marshal JSON"})
+		writeJSONError(w, 500, "failed to marshal JSON")
 		return
 	}
 
@@ -687,7 +687,7 @@ func (h *AdminHandler) HandleListKeyPatterns(w http.ResponseWriter, r *http.Requ
 	providerFilter := r.URL.Query().Get("provider")
 	patterns, err := h.db.ListKeyPatterns(providerFilter)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	if patterns == nil {
@@ -699,24 +699,23 @@ func (h *AdminHandler) HandleListKeyPatterns(w http.ResponseWriter, r *http.Requ
 func (h *AdminHandler) HandleUpsertKeyPattern(w http.ResponseWriter, r *http.Request) {
 	var req store.KeyPattern
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		writeJSONError(w, 400, "invalid request")
 		return
 	}
 	if err := h.db.UpsertKeyPattern(req); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
 func (h *AdminHandler) HandleDeleteKeyPattern(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+	id, ok := parsePathID(w, r)
+	if !ok {
 		return
 	}
 	if err := h.db.DeleteKeyPattern(id); err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		writeJSONError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "ok"})
